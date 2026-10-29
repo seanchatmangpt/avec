@@ -1,0 +1,13 @@
+[package]
+name = "avec-parquet"
+version.workspace = true
+edition.workspace = true
+description = "Branchless Parquet persistence kernels: bit-unpacking, SWAR RLE, page-to-buffer decode (no_std, zero dependencies)."
+license.workspace = true
+publish = true
+
+[features]
+default = []
+std = []
+
+[dependencies]

@@ -1,0 +1,11 @@
+[project]
+name = "avec"
+
+[ontology]
+source = "ontology/avec.ttl"
+
+[packs]
+avec-pack = { path = "../ggen-marketplace/packs/avec-pack" }
+
+[templates]
+dir = "gen-templates"

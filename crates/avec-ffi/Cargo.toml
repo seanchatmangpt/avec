@@ -1,0 +1,13 @@
+[package]
+name = "avec-ffi"
+version.workspace = true
+edition.workspace = true
+description = "C Data Interface cdylib membrane for avec (Gate 3 wire-parity exports)."
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+avec-arrow = { path = "../avec-arrow" }

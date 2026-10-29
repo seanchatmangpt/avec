@@ -1,0 +1,11 @@
+[package]
+name = "bench"
+version.workspace = true
+edition.workspace = true
+description = "Gate 2 harness: line-rate benches, alloc interception, branch audit driver."
+license.workspace = true
+publish = false
+
+[dependencies]
+avec-arrow = { path = "../avec-arrow" }
+avec-parquet = { path = "../avec-parquet" }

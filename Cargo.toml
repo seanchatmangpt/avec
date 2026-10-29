@@ -1,0 +1,19 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/avec-arrow",
+    "crates/avec-ffi",
+    "crates/avec-beam",
+    "crates/bench",
+]
+
+[workspace.package]
+version = "26.10.29"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/seanchatmangpt/avec"
+authors = ["Sean Chatman <info@chatmangpt.com>"]
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

@@ -1,0 +1,20 @@
+# avec.ttl - project-level graph for the avec consumer repo.
+#
+# Carries project identity + release facts. The Arrow domain graph lives
+# canonically in avec-pack (ggen-marketplace); this file carries no duplicated
+# domain facts (one graph, one source of truth - no N-implementations drift).
+#
+# Regenerate consequences: ggen sync run
+
+@prefix av:   <urn:avec:> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+av:project a av:Project ;
+    rdfs:label "avec" ;
+    av:version "26.10.29" ;
+    av:releaseDate "2026-10-29" ;
+    av:ctq1 "SWAR bitmap masking throughput >= 9.0 GiB/s" ;
+    av:ctq2 "CC=1 branch audit gate" ;
+    av:ctq3 "0 segfaults - mutation court" ;
+    av:ctq4 "wasm footprint <= 250 KiB stripped wasm32-wasip1" ;
+    av:ctq5 "100% C Data Interface ABI compliance - Gate 3 bitwise parity" .

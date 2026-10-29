@@ -1,0 +1,13 @@
+[package]
+name = "avec-beam"
+version.workspace = true
+edition.workspace = true
+description = "BEAM/AtomVM NIF membrane for avec (off-heap resource handles)."
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+avec-arrow = { path = "../avec-arrow" }
