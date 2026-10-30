@@ -107,8 +107,8 @@ KERNEL_CALLEES = [
     (r"10avec_arrow6bitmap11count_valid$", "count_valid", (2, 0, 3)),
     (r"10avec_arrow7silicon15mask_words_neon$", "mask_words_neon", (3, 0, 4)),
     (r"10avec_arrow6bitmapNtB2_6Bitmap12is_all_valid$",
-     "is_all_valid", (1, 2, 5)),
-    (r"10avec_arrow6bitmap14count_one_bits$", "count_one_bits", (1, 2, 5)),
+     "is_all_valid", (1, 2, 4)),
+    (r"10avec_arrow6bitmap14count_one_bits$", "count_one_bits", (1, 2, 4)),
     (r"12avec_parquet6unpack11unpack_1bit$", "unpack_1bit", (4, 3, 1)),
     (r"12avec_parquet6unpack11unpack_2bit$", "unpack_2bit", (4, 3, 1)),
     (r"12avec_parquet6unpack11unpack_4bit$", "unpack_4bit", (4, 3, 1)),
@@ -354,8 +354,9 @@ def main():
     total_itemized = 0
     kernels_scanned = 0
     branch_free_kernels = 0
-    total_panic = 0
+    total_fail = 0
     audited_symbols = []   # (extent-name, [rust call targets])
+    covered_extents = 0
 
     for art in ARTIFACTS:
         text = disassemble(art)
@@ -365,6 +366,27 @@ def main():
             return [(n, b) for n, b in extents
                     if pred(n[1:] if n.startswith("_") else n)]
 
+        # 0) UNCOVERED law: every avec kernel-crate extent in the artifact
+        #    must be registry-covered or explicitly allowlisted; otherwise it
+        #    is an unaudited kernel body and the gate exits 1 (this silence is
+        #    exactly how the original audit gap survived).
+        uncovered = []
+        for name, _body in extents:
+            plain = name[1:] if name.startswith("_") else name
+            if not re.search(r"10avec_arrow|12avec_parquet", plain):
+                continue
+            covered = (
+                any(re.search(p, plain) for p, _, _ in KERNEL_CALLEES)
+                or any(w == plain for w in WRAPPERS)
+                or plain in UNCOVERED_ALLOWLIST
+            )
+            if not covered:
+                uncovered.append(plain)
+        if uncovered:
+            for u in uncovered:
+                fails.append(f"UNCOVERED kernel extent (name it, wrap it, or "
+                             f"allowlist it with a reason): {u}")
+
         # 1) wrappers: stubs, must be fully branch-free
         for w in WRAPPERS:
             found = find(lambda n: n == w)
@@ -372,6 +394,7 @@ def main():
                 fails.append(f"MISSING wrapper extent: {w}")
                 print(f"{w:44s} MISSING")
                 continue
+            covered_extents += 1
             for name, body in found:
                 insns = parse_insns(body)
                 ok, lines, n_cond, _n_body = audit_one(
@@ -394,14 +417,14 @@ def main():
                 insns = parse_insns(body)
                 ok, lines, n_cond, n_body = audit_one(
                     disp, insns, budgets, disp in REQUIRE_VEC_PRIMARY,
-                    PANIC_BUDGETS[disp])
+                    FAIL_BUDGETS[disp])
                 for l in lines:
                     print(l)
                 if not ok:
                     fails.append(f"{disp}: budget/class violation")
                 total_itemized += n_cond
-                total_panic += sum(
-                    1 for l in lines if l.startswith("    PANIC-PATH"))
+                total_fail += sum(
+                    1 for l in lines if l.startswith("    FAIL-PATH"))
                 kernels_scanned += 1
                 # branch-free inner loop = zero conditionals inside any loop
                 # body (the charter surface); latches/dispatch still itemized.
@@ -414,13 +437,13 @@ def main():
         #    Two accounted exceptions, both C-class with their own receipts:
         #    - intra-extent branches: target annotation is the extent's own
         #      symbol (with a +offset) — that IS the audited body;
-        #    - panic/runtime calls — accounted by the PANIC-PATH class above.
+        #    - panic/runtime calls — accounted by the FAIL-PATH class above.
         for name, targets in audited_symbols:
             plain = name[1:] if name.startswith("_") else name
             for addr, mnem, tgt in targets:
                 covered = any(re.search(p, tgt) for p, _, _ in KERNEL_CALLEES)
                 base = tgt.split("+", 1)[0]
-                if covered or base == name or PANIC_RE.search(tgt):
+                if covered or base == name or FAIL_RE.search(tgt):
                     continue
                 fails.append(
                     f"CALLEE-LINKAGE: {plain} 0x{addr:x} {mnem} -> "
@@ -432,12 +455,15 @@ def main():
         for f in fails:
             print(f"  - {f}")
         sys.exit(1)
+    print(f"\nUNCOVERED KERNELS: "
+          f"{'none — every avec kernel extent is audited' if covered_extents else 'see failures above'}")
     print(
-        f"\nBRANCH AUDIT PASS: branch-free inner loops: "
+        f"BRANCH AUDIT PASS: branch-free inner-loop bodies: "
         f"{branch_free_kernels}/{kernels_scanned} kernels; "
-        f"loop-latch/dispatch conditionals itemized: {total_itemized} total "
-        f"across {kernels_scanned} kernels (+{len(WRAPPERS)} branch-free "
-        f"wrapper shims); panic/bounds paths: {total_panic}; unaccounted: 0"
+        f"loop-latch/dispatch/bounds conditionals itemized: {total_itemized} "
+        f"total across {kernels_scanned} kernels "
+        f"(+{len(WRAPPERS)} branch-free wrapper shims); "
+        f"panic/fail paths: {total_fail}; unaccounted: 0"
     )
 
 
