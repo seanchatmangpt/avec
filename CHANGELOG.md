@@ -8,6 +8,15 @@ transcribed from the v26.10.29 receipt docs (`docs/RECEIPTS.md`,
 `docs/BENCH_FLOORS.json`); conflicts between receipt docs are listed in the
 release notes' Discrepancies section, not reconciled here.
 
+## [Unreleased]
+
+### Added
+
+- `docs/CONSUMER_REQUIREMENTS.md` — PurRDF dependency pass: publication-fit
+  facts, the T1-T4 requirement tickets (batch/table layer, typed zero-copy
+  ingest, timestamp `Scalar`, wasm32-unknown-unknown receipt), and the
+  standing table.
+
 ## [26.10.29] - 2026-10-29
 
 Initial entry: first release ledger for the avec columnar substrate.
