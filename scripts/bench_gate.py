@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Bench regression gate for the avec mask + parquet benches.
+"""Bench regression gate for the avec mask + parquet + page benches.
 
-Runs both Gate-2 bench binaries (`cargo run --release -p bench --bin bench`
-and `cargo run --release -p bench --bin parquet_bench`), parses the MIN
-throughput receipt lines, and either (a) records them as floors with
---record, writing docs/BENCH_FLOORS.json as
-{"mask_min_gbps": {...}, "parquet": {...}}, or (b) gates the fresh run
-against previously recorded floors (default mode): exit 1 when any metric
-drops more than --threshold percent (default 25%) below its floor.
+Runs all three Gate-2 bench binaries (`cargo run --release -p bench --bin
+bench|parquet_bench|page_bench`), parses the MIN throughput receipt lines,
+and either (a) records them as floors with --record, writing
+docs/BENCH_FLOORS.json as
+{"mask_min_gbps": {...}, "parquet": {...}, "page": {...}}, or (b) gates the
+fresh run against previously recorded floors (default mode): exit 1 when any
+metric drops more than --threshold percent (default 25%) below its floor.
 
 MACHINE-LOCAL: the floors in docs/BENCH_FLOORS.json are receipts of one run
 on one machine under one load profile. They are NOT portable numbers — never
@@ -62,6 +62,15 @@ MASK_MIN_RE = re.compile(
 #   parquet unpack random64 1: 38.312 GiB/s, 0 allocs
 PARQUET_RE = re.compile(
     r"^parquet\s+(?P<op>\S+)\s+(?P<shape>\S+)\s+(?P<width>\d+):\s+"
+    r"(?P<gbps>\d+(?:\.\d+)?)\s+GiB/s",
+    re.MULTILINE,
+)
+# page op line, e.g.:
+#   page decode random64 1: 38.312 GiB/s, 0 allocs
+#   page encode literal: 12.500 GiB/s
+# (optional width token before the colon; keyed with /wN only when present)
+PAGE_RE = re.compile(
+    r"^page\s+(?P<op>\S+)\s+(?P<shape>\S+)(?:\s+(?P<width>\d+))?:\s+"
     r"(?P<gbps>\d+(?:\.\d+)?)\s+GiB/s",
     re.MULTILINE,
 )
@@ -124,17 +133,37 @@ def parse_parquet_lines(stdout: str) -> dict[str, float]:
     return out
 
 
-def collect(timeout_s: int) -> tuple[dict[str, float], dict[str, float]]:
-    """Run both benches and parse both receipt families."""
+def parse_page_lines(stdout: str) -> dict[str, float]:
+    """Extract `page <op> <shape>[ <width>]: <gbps> GiB/s` lines."""
+    out = {}
+    for m in PAGE_RE.finditer(stdout):
+        key = f"{m.group('op')}/{m.group('shape')}"
+        if m.group("width"):
+            key += f"/w{m.group('width')}"
+        out[key] = float(m.group("gbps"))
+    if not out:
+        print("[bench_gate] FAIL: no `page ... GiB/s` lines found in page_bench output")
+        raise SystemExit(1)
+    return out
+
+
+def collect(timeout_s: int) -> tuple[dict[str, float], dict[str, float], dict[str, float]]:
+    """Run all three benches and parse all three receipt families."""
     mask_out = run_bench("bench", timeout_s)
     parquet_out = run_bench("parquet_bench", timeout_s)
-    return parse_mask_mins(mask_out), parse_parquet_lines(parquet_out)
+    page_out = run_bench("page_bench", timeout_s)
+    return parse_mask_mins(mask_out), parse_parquet_lines(parquet_out), parse_page_lines(page_out)
 
 
-def write_floors(path: Path, mask: dict[str, float], parquet: dict[str, float]) -> None:
+def write_floors(
+    path: Path,
+    mask: dict[str, float],
+    parquet: dict[str, float],
+    page: dict[str, float],
+) -> None:
     """Write the floors file atomically (tmp + rename)."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"mask_min_gbps": mask, "parquet": parquet}
+    payload = {"mask_min_gbps": mask, "parquet": parquet, "page": page}
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
     os.replace(tmp, path)
@@ -142,7 +171,7 @@ def write_floors(path: Path, mask: dict[str, float], parquet: dict[str, float]) 
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="mask/parquet bench regression gate")
+    ap = argparse.ArgumentParser(description="mask/parquet/page bench regression gate")
     ap.add_argument(
         "--record",
         action="store_true",
@@ -168,14 +197,17 @@ def main() -> None:
     )
     args = ap.parse_args()
 
-    mask, parquet = collect(args.timeout)
+    mask, parquet, page = collect(args.timeout)
 
     if args.record:
-        write_floors(args.floors, mask, parquet)
-        for family, vals in (("mask", mask), ("parquet", parquet)):
+        write_floors(args.floors, mask, parquet, page)
+        for family, vals in (("mask", mask), ("parquet", parquet), ("page", page)):
             for k in sorted(vals):
                 print(f"[bench_gate] floor {family}/{k} = {vals[k]:.3f} GiB/s")
-        print(f"[bench_gate] RECORD OK: {len(mask)} mask floors, {len(parquet)} parquet floors")
+        print(
+            f"[bench_gate] RECORD OK: {len(mask)} mask floors, "
+            f"{len(parquet)} parquet floors, {len(page)} page floors"
+        )
         return
 
     if not args.floors.exists():
@@ -185,15 +217,30 @@ def main() -> None:
     floors = json.loads(args.floors.read_text())
     floor_mask: dict[str, float] = floors.get("mask_min_gbps", {})
     floor_parquet: dict[str, float] = floors.get("parquet", {})
-    if not floor_mask and not floor_parquet:
-        print(f"[floor_gate] FAIL: {args.floors} has no mask_min_gbps/parquet families")
+    floor_page: dict[str, float] = floors.get("page", {})
+    missing_families = [
+        name
+        for name, fam in (
+            ("mask_min_gbps", floor_mask),
+            ("parquet", floor_parquet),
+            ("page", floor_page),
+        )
+        if not fam
+    ]
+    if missing_families:
+        print(
+            f"[bench_gate] FAIL: {args.floors} lacks non-empty family/families "
+            f"{missing_families} — stale floors file, re-run --record"
+        )
         raise SystemExit(2)
 
     breach = False
     floor_gt = {**{"mask/" + k: v for k, v in floor_mask.items()},
-                **{"parquet/" + k: v for k, v in floor_parquet.items()}}
+                **{"parquet/" + k: v for k, v in floor_parquet.items()},
+                **{"page/" + k: v for k, v in floor_page.items()}}
     observed_gt = {**{"mask/" + k: v for k, v in mask.items()},
-                   **{"parquet/" + k: v for k, v in parquet.items()}}
+                   **{"parquet/" + k: v for k, v in parquet.items()},
+                   **{"page/" + k: v for k, v in page.items()}}
 
     print(f"\n[bench_gate] floor vs observed (drop threshold {args.threshold:g}%):")
     header = f"  {'metric':44s} {'floor':>9s} {'observed':>9s} {'delta':>8s}  status"

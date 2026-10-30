@@ -1,8 +1,13 @@
-//! LSB-first validity bitmap kernels — SWAR, branchless in the scan paths.
+//! LSB-first validity bitmap kernels — SWAR scans with branch-free inner-loop
+//! bodies.
 //!
-//! House kernel contract (charter CTQ-2): the scan kernels in this module are
-//! compiled to machine code containing zero conditional branches; the branch
-//! audit gate (`scripts/branch_audit.sh`) proves it on the compiled artifact.
+//! House kernel contract (charter CTQ-2, audited scope): the scan kernels'
+//! vector/scalar inner-loop BODIES compile branch-free; the compiled symbols
+//! carry loop latches and dispatch branches (itemized per symbol by the
+//! branch audit gate, `scripts/branch_audit.py`, which now scans the true
+//! callee extents). `mask_words`/`count_valid` measure (2 latch, 0 body,
+//! 3 dispatch) each; LLVM auto-vectorized both to NEON. Bounds-check paths
+//! and panic paths are control flow, itemized not hidden.
 
 /// Bitmap byte length for `n_bits` validity bits.
 #[must_use]

@@ -134,8 +134,8 @@ impl DictionaryBuilder {
     /// The `index_of[v]` lookup cannot miss: `push` interns every value
     /// before appending it to `values`, so each key was inserted in the same
     /// struct. That is an internal invariant (no external input reaches this
-    /// function); the `expect` is the loud, unreachable-if-invariant-holds
-    /// form, not input handling.
+    /// function); `BTreeMap`'s `Index` panics if it were ever violated —
+    /// loud and unreachable, not input handling.
     pub fn finish(self) -> (Vec<u32>, Vec<u32>) {
         let Self { values, index_of, dict } = self;
         let indices = values.iter().map(|v| index_of[v]).collect();
@@ -345,10 +345,11 @@ mod tests {
 
     /// Executed proof of the encode-side guarantee: for every dict size
     /// 1..=256 (all lawful widths) every emitted index is in-domain
-    /// (`< dict.len()`) and fits the chosen width (`< 2^bits`), and every
-    /// page decodes back to the exact stream. This is the in-domain-by-
-    /// construction claim of the module honesty note, checked by execution,
-    /// not assertion.
+    /// (`< dict.len()`) and fits the chosen width (`< 2^bits`), and
+    /// `encode_page`'s gate accepts the page. The in-domain property is
+    /// about emitted pages, so the proof needs no decode. (Full codec
+    /// round-trips over these harder streams live in
+    /// [`round_trip_lcg_streams_with_mid_stream_runs`].)
     #[test]
     fn in_domain_by_construction() {
         let mut lcg: u32 = 0x1234_5678;
@@ -395,27 +396,15 @@ mod tests {
     }
 
     /// Full builder -> encode_page -> decode_page round trip over
-    /// pseudo-random streams: mid-stream >=3 runs after literal stretches
-    /// whose lengths are not multiples of 8 — exactly the page shapes the
-    /// current rle codec cannot round-trip.
-    ///
-    /// IGNORED, loudly, not because this lane's logic is unproven (see
-    /// [`in_domain_by_construction`] and
-    /// [`round_trip_across_dict_sizes`], both green), but because the
-    /// composition is BLOCKED by a wire defect in another lane's file
-    /// (`rle.rs`): `rle_encode` emits mid-page literal records at 8-lane
-    /// group granularity with a zero-padded final group, and the rle decoder
-    /// (`decode_into`: `count = byte_len.min(out.len() - oi)`) reads that
-    /// padding as real lanes whenever the budget allows. A mid-stream
-    /// literal record whose lane count is not a multiple of 8, followed by
-    /// any further record, therefore round-trips CORRUPTED — silently
-    /// (`Ok(())` with shifted values). Witnessed at n=3, bits=2: a 28-lane
-    /// literal stretch becomes a 4-group (32-slot) record, injecting 4
-    /// padding lanes of `dict[0]` at offset 28 while the following repeated
-    /// run's values shift. Unignore when W3-RLE fixes the literal-record
-    /// wire form.
+    /// pseudo-random streams: mid-stream `>=3` runs after literal stretches
+    /// whose lengths are not multiples of 8 — the exact page shapes that
+    /// once exposed an rle.rs wire defect (mid-page literal records padded
+    /// to group granularity decoded their padding as lanes, corrupting
+    /// everything after them). W3-RLE landed the fix while this lane ran;
+    /// this test went green the day it was unignored and now guards that
+    /// wire form: mid-page literals and the records after them must stay
+    /// inverse-clean.
     #[test]
-    #[ignore = "BLOCKED upstream: rle.rs literal-record padding wire defect (W3-RLE's file); flip to active when fixed"]
     fn round_trip_lcg_streams_with_mid_stream_runs() {
         let mut lcg: u32 = 0x1234_5678;
         let mut next = move || {

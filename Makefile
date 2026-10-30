@@ -19,7 +19,8 @@
 SHELL := /bin/sh
 .SHELLFLAGS := -eu -c
 
-.PHONY: test gate0 gate1 gate2 gate3 gates lint publish-check
+.PHONY: test gate0 gate1 gate2 gate3 gates lint publish-check \
+        bench-all bench-page bench-gate gate-parquet footprint branch-audit symbol-gate
 
 # --- tool resolution ----------------------------------------------------------
 # macOS ships shasum; Linux ships sha256sum. Fail loudly if neither exists.
@@ -86,3 +87,42 @@ lint:
 publish-check:
 	cargo publish --dry-run --allow-dirty -p avec-arrow
 	cargo publish --dry-run --allow-dirty -p avec-parquet
+
+# --- OPT-L9 additions ---------------------------------------------------------
+
+# All three Gate-2 bench binaries, raw runs (no gating; bench-gate adds floors).
+bench-all:
+	cargo run --release -p bench --bin bench
+	cargo run --release -p bench --bin parquet_bench
+	cargo run --release -p bench --bin page_bench
+
+# Page kernel bench only (OPT page lane's bins).
+bench-page:
+	cargo run --release -p bench --bin page_bench
+
+# Floor gate: record vs docs/BENCH_FLOORS.json, gate all three bins' floors.
+# --record reseeds; default mode exits 1 on any >25% drop below floor.
+bench-gate:
+	python3 scripts/bench_gate.py
+
+# Parquet mutation court is long-running (cargo mutants); the receipt of the
+# recorded run lives in docs/. Echo-only per charter: points at the receipt,
+# never re-runs the court inline.
+gate-parquet:
+	@test -f docs/mutation-court-backlog.txt || \
+		{ echo "gate-parquet FAIL: docs/mutation-court-backlog.txt missing"; exit 1; }
+	@echo "gate-parquet: mutation-court receipt: docs/mutation-court-backlog.txt"
+	@echo "gate-parquet: live court is 'cargo mutants' (long-running; recorded, not run inline)"
+
+# wasm32-wasip1 footprint gate.
+footprint:
+	sh scripts/footprint.sh
+
+# CC=1 machine-code branch audit (builds nothing; gate1 wraps it with the
+# audit-profile build).
+branch-audit:
+	python3 scripts/branch_audit.py
+
+# Zero-panic Jidoka gate.
+symbol-gate:
+	python3 scripts/symbol_gate.py

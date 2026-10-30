@@ -4,6 +4,7 @@
 //! so the branch audit inspects the REAL compiled kernel machine code.
 
 use avec_arrow::bitmap;
+use avec_arrow::silicon;
 use avec_arrow::views::is_inline;
 use avec_parquet::unpack;
 
@@ -19,6 +20,34 @@ pub unsafe extern "C" fn audit_mask_words(valid: *const u64, pred: *const u64, o
         )
     };
     bitmap::mask_words(v, p, o);
+}
+
+/// NEON silicon kernel export: `out[i] = valid[i] & pred[i]` through
+/// `avec_arrow::silicon::mask_words_neon`. On aarch64 this dispatches to the
+/// 4-word-stride NEON kernel (branch-free inner body; loop control and the
+/// scalar tail carry the extent's conditionals — see the disclosure on
+/// `mask_words_neon` in crates/avec-arrow/src/silicon.rs, audited by the
+/// extent-scoped rule in scripts/branch_audit.py). On other targets the same
+/// export dispatches to the portable SWAR kernel with the identical output
+/// contract, so the audit surface exists on every host.
+///
+/// # Safety
+/// n must bound the readable words at each pointer.
+#[no_mangle]
+pub unsafe extern "C" fn audit_mask_words_neon(
+    valid: *const u64,
+    pred: *const u64,
+    out: *mut u64,
+    n: usize,
+) {
+    let (v, p, o) = unsafe {
+        (
+            core::slice::from_raw_parts(valid, n),
+            core::slice::from_raw_parts(pred, n),
+            core::slice::from_raw_parts_mut(out, n),
+        )
+    };
+    silicon::mask_words_neon(v, p, o);
 }
 
 /// # Safety
@@ -100,4 +129,29 @@ pub unsafe extern "C" fn audit_unpack_8bit(src: *const u64, out: *mut u64, n: us
 #[no_mangle]
 pub unsafe extern "C" fn audit_is_inline(len: u32) -> u64 {
     is_inline(len)
+}
+
+/// Whole-bitmap validity scan kernel export (`Bitmap::is_all_valid`).
+///
+/// The pointer is opaque: the audit cdylib never constructs a `Bitmap`, it
+/// only forces the kernel into the artifact so scripts/branch_audit.py can
+/// inspect the REAL compiled machine code. (Audit-vacuity receipt 2026-10-29:
+/// this kernel previously had no audit-crate caller and was GC'd out of the
+/// audit dylib entirely — unaudited and unnamed. The wrapper closes that.)
+///
+/// # Safety
+/// bm must point to a valid Bitmap.
+#[no_mangle]
+pub unsafe extern "C" fn audit_is_all_valid(bm: *const bitmap::Bitmap) -> u64 {
+    unsafe { u64::from((*bm).is_all_valid()) }
+}
+
+/// Popcount kernel export (`bitmap::count_one_bits`). Opaque-pointer export
+/// for the same reason as `audit_is_all_valid` — see that receipt.
+///
+/// # Safety
+/// bm must point to a valid Bitmap.
+#[no_mangle]
+pub unsafe extern "C" fn audit_count_one_bits(bm: *const bitmap::Bitmap) -> u64 {
+    unsafe { bitmap::count_one_bits(&*bm) }
 }

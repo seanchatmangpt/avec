@@ -25,9 +25,12 @@
 ///
 /// Tail: sizes not a multiple of 4 words are exact. The scalar tail loop runs
 /// OUTSIDE the vector loop over at most 3 remaining words, via raw pointer
-/// arithmetic (no bounds-check branches); it adds exactly one loop-latch
-/// conditional branch. Documented deliberately: the tail is branch-light, not
-/// branch-free, and is not part of the audited inner-loop surface.
+/// arithmetic (no bounds-check branches). COMPILED REALITY (audited): LLVM
+/// re-vectorizes this tail into a second 8-word NEON loop plus a scalar
+/// residue, so the whole function measures 3 latches + 4 dispatch branches,
+/// not the "one latch" the source shape suggests. The inner 4-word vector
+/// loop body is branch-free; latches/dispatch are itemized by the branch
+/// audit gate over the true callee extent.
 ///
 /// Safety of the pointer arithmetic (this function is safe; the `unsafe`
 /// blocks below are the intrinsic calls themselves): `n` is the minimum of

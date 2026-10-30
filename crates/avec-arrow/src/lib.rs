@@ -4,7 +4,8 @@
 //!
 //! - `no_std` + `alloc` only; zero external dependencies.
 //! - Every buffer 64-byte aligned at allocation (AVX-512 / NEON invariant).
-//! - Scan kernels compile to zero conditional branches (branch audit gate).
+//! - Scan kernels: branch-free inner-loop bodies; latches/dispatch itemized
+//!   by the branch audit gate over true callee extents.
 //! - C Data Interface (`ArrowArray` / `ArrowSchema`) zero-copy export/import
 //!   with atomic release-swap double-release control.
 //!
