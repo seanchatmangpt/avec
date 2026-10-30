@@ -28,7 +28,10 @@
 /* Double inclusion is deliberate: avec_format_codes.h's include guard is
  * mismatched (#ifndef AVEC_FORMAT_CODES_H vs #define AVEC_FORMAT_CODES_C_H),
  * so idempotence rests on C99 6.10.3p2 (identical macro redefinition is
- * legal). A clean second inclusion is part of this smoke. */
+ * legal) — this TU compiles and runs with the file included twice. Known
+ * diagnostic, external to this lane: clang's -Wheader-guard fires on that
+ * header even at single inclusion (verified with a one-include TU); it is
+ * the only diagnostic in this build and originates in include/, not here. */
 #include "avec_format_codes.h"
 #include "avec_format_codes.h"
 

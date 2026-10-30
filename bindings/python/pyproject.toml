@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "avec"
+version = "26.10.29"
+description = "ctypes binding for the avec-ffi Arrow C Data Interface cdylib"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pyarrow>=10"]
+
+[tool.setuptools]
+packages = ["avec", "avec.tests"]

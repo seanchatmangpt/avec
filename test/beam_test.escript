@@ -10,6 +10,12 @@
 -on_load(init/0).
 
 init() ->
+    Env = os:getenv("AVEC_BEAM_PROFILE"),
+    Pick = case Env of
+               {ok, "release"} -> rel;
+               _ -> dbg
+           end,
+    io:format("DBG env=~p pick=~p~n", [Env, Pick]),
     %% OTP's load_nif always appends ".so" (never tries .dylib), so expose the
     %% cargo cdylib under the name the BEAM looks for. Symlink is refreshed on
     %% every run so it always targets the current build. Build profile comes

@@ -1,0 +1,7 @@
+Metadata-Version: 2.4
+Name: avec
+Version: 26.10.29
+Summary: ctypes binding for the avec-ffi Arrow C Data Interface cdylib
+Requires-Python: >=3.9
+Provides-Extra: test
+Requires-Dist: pyarrow>=10; extra == "test"

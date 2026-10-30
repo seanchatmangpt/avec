@@ -49,7 +49,7 @@ def load_library():
     """
     global _LIB
     if _LIB is None:
-        path = os.environ.get("AVEC_LIB") or _default_package_path()
+        path = os.environ.get("AVEC_LIB") or _default_library_path()
         try:
             lib = ctypes.CDLL(path)
         except OSError as exc:
@@ -59,11 +59,11 @@ def load_library():
             ) from exc
         lib.avec_i32_batch.restype = ctypes.c_void_p
         lib.avec_i32_batch.argtypes = [ctypes.c_int64, ctypes.c_int64]
-        lib.avec_array_addr.restype = c_size_t
+        lib.avec_array_addr.restype = ctypes.c_size_t
         lib.avec_array_addr.argtypes = []
-        lib.avec_schema_addr.restype = c_size_t
+        lib.avec_schema_addr.restype = ctypes.c_size_t
         lib.avec_schema_addr.argtypes = []
-        lib.avec_batch_rows.restype = c_int64
+        lib.avec_batch_rows.restype = ctypes.c_int64
         lib.avec_batch_rows.argtypes = []
         lib.avec_version.restype = ctypes.c_char_p
         lib.avec_version.argtypes = []

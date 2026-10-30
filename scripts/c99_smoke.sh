@@ -2,7 +2,10 @@
 # scripts/c99_smoke.sh — REL-L2 (v26.10.29): build + run the freestanding C99
 # consumer against the ggen-generated avec headers. Header-only: no avec
 # library is linked; the headers are the whole product. Exit 0 only on a
-# warning-clean compile AND a fully passing run.
+# successful compile AND a fully passing run. Known diagnostic (exit stays 0):
+# clang -Wheader-guard fires on include/avec_format_codes.h:3-4 (guard
+# #ifndef/#define mismatch) even for single inclusion — defect of the
+# generated header, external to this lane; this TU contributes no warnings.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)

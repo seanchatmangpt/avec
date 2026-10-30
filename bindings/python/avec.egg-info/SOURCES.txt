@@ -1,0 +1,9 @@
+pyproject.toml
+avec/__init__.py
+avec.egg-info/PKG-INFO
+avec.egg-info/SOURCES.txt
+avec.egg-info/dependency_links.txt
+avec.egg-info/requires.txt
+avec.egg-info/top_level.txt
+avec/tests/__init__.py
+avec/tests/test_cdata.py

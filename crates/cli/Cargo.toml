@@ -19,10 +19,5 @@ lto = "thin"
 codegen-units = 1
 panic = "abort"
 
-# Standalone manifest, deliberately NOT a member of the root workspace (the
-# coordinator owns the root Cargo.toml). The empty [workspace] table makes this
-# crate its own workspace root, so a build from inside this directory is
-# self-contained: crate-local Cargo.lock and crate-local target/ dir. Same
-# pattern as crates/wasm-footprint. Adding it to the root members list is a
-# one-line coordinator edit: `crates/cli`, after `crates/integration`.
-[workspace]
+# Root-workspace member (folded by the coordinator at integration).
+

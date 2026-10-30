@@ -22,6 +22,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "avec-cli"
+version = "26.10.29"
+dependencies = [
+ "avec-arrow",
+ "avec-parquet",
+]
+
+[[package]]
 name = "avec-ffi"
 version = "26.10.29"
 dependencies = [
