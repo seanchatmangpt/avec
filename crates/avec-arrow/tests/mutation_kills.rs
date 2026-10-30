@@ -3,8 +3,11 @@
 //! Every test names the backlog rows (`docs/mutation-court-backlog.txt` lines
 //! 1-89, the avec-arrow block) it kills. Chicago discipline: real
 //! collaborators only — `alloc` is the only collaborator and it is real; the
-//! counting allocator below is a thin wrapper over the real `System`
-//! allocator, so every byte is genuinely allocated and freed.
+//! counting allocator is a thin wrapper over the real `System` allocator, so
+//! every byte is genuinely allocated and freed.
+//!
+//! All tests serialize on `MEM_LOCK` so the allocator counter is observed
+//! only while this binary has no other allocation in flight.
 
 use avec_arrow::bitmap::{
     bcast8, bitmap_bytes, bitmap_words, clear_bit, count_one_bits, count_valid, get_bit,
@@ -16,7 +19,6 @@ use avec_arrow::primitive::{Primitive, PrimitiveBuilder};
 use avec_arrow::varlen::{Offset, Varlen, VarlenBuilder};
 use avec_arrow::views::{is_inline, ViewVecBuilder};
 use std::sync::atomic::{AtomicIsize, Ordering};
-use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 /// Net live bytes handed out by the real System allocator. Used only by the
@@ -53,14 +55,11 @@ unsafe impl std::alloc::GlobalAlloc for CountingSystem {
 #[global_allocator]
 static GLOBAL: CountingSystem = CountingSystem;
 
-/// Serialize allocator-counted windows across the binary's test threads.
-static MEM_LOCK: Mutex<()> = Mutex::new(());
-
 /// Poll until `LIVE_BYTES` returns to `baseline`, panicking on timeout.
 ///
-/// Transient concurrency (test-harness bookkeeping allocations on other
-/// threads) can shift the counter momentarily; a genuine leak shifts it
-/// permanently. The bounded poll observes real state on every sample.
+/// Transient harness allocations shift the counter momentarily; a leak
+/// shifts it permanently. The bounded poll observes real state on every
+/// sample.
 fn poll_live_returns_to(baseline: isize) {
     let deadline = Instant::now() + Duration::from_secs(5);
     while Instant::now() < deadline {
@@ -73,7 +72,7 @@ fn poll_live_returns_to(baseline: isize) {
 }
 
 // ---------------------------------------------------------------------------
-// bitmap::bitmap_words — backlog rows 1-2
+// bitmap::bitmap_words (rows 1-2), bitmap_bytes (edge), bcast8 (rows 3-4)
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -86,10 +85,6 @@ fn bitmap_words_boundaries() {
     assert_eq!(bitmap_words(200), 4);
 }
 
-// ---------------------------------------------------------------------------
-// bitmap::bitmap_bytes — no backlog rows; edge coverage
-// ---------------------------------------------------------------------------
-
 #[test]
 fn bitmap_bytes_boundaries() {
     assert_eq!(bitmap_bytes(0), 0);
@@ -99,10 +94,6 @@ fn bitmap_bytes_boundaries() {
     assert_eq!(bitmap_bytes(65), 9);
 }
 
-// ---------------------------------------------------------------------------
-// bitmap::bcast8 — backlog rows 3-4
-// ---------------------------------------------------------------------------
-
 #[test]
 fn bcast8_broadcasts_every_lane() {
     for b in [0u8, 1, 0x7F, 0x80, 0xAB, 0xFF] {
@@ -111,7 +102,7 @@ fn bcast8_broadcasts_every_lane() {
 }
 
 // ---------------------------------------------------------------------------
-// bitmap::mask_words — backlog rows 5-12
+// bitmap::mask_words — rows 5-12; count_valid — rows 13-21
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -142,10 +133,6 @@ fn mask_words_empty_inputs() {
     assert!(out.is_empty());
 }
 
-// ---------------------------------------------------------------------------
-// bitmap::count_valid — backlog rows 13-21
-// ---------------------------------------------------------------------------
-
 #[test]
 fn count_valid_exact_multiword() {
     assert_eq!(count_valid(&[], &[]), 0);
@@ -160,7 +147,7 @@ fn count_valid_exact_multiword() {
 }
 
 // ---------------------------------------------------------------------------
-// bitmap bit ops — backlog rows 22-28 (clear_bit)
+// bitmap bit ops — clear_bit rows 22-28; word_valid rows 29-34; word_at 35-40
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -184,10 +171,6 @@ fn set_get_clear_across_lanes_and_byte_boundaries() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// bitmap::word_valid — backlog rows 29-34
-// ---------------------------------------------------------------------------
-
 #[test]
 fn word_valid_reads_correct_byte_window() {
     let bits: Vec<u8> = (0..16u8).collect();
@@ -200,10 +183,6 @@ fn word_valid_reads_correct_byte_window() {
         u64::from_ne_bytes([8, 9, 10, 11, 12, 13, 14, 15])
     );
 }
-
-// ---------------------------------------------------------------------------
-// bitmap::word_at — backlog rows 35-40
-// ---------------------------------------------------------------------------
 
 #[test]
 fn word_at_reads_correct_byte_window() {
@@ -223,7 +202,7 @@ fn word_at_reads_correct_byte_window() {
 }
 
 // ---------------------------------------------------------------------------
-// Bitmap::as_ptr — backlog row 41
+// Bitmap methods — as_ptr row 41; word row 42; words_len rows 43-44
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -232,10 +211,6 @@ fn bitmap_as_ptr_is_backing_buffer() {
     assert_eq!(bm.as_ptr(), bm.bytes().as_ptr());
     assert!(!bm.as_ptr().is_null());
 }
-
-// ---------------------------------------------------------------------------
-// Bitmap::word — backlog row 42 (* -> /)
-// ---------------------------------------------------------------------------
 
 #[test]
 fn bitmap_word_tail_word_reads_partial_bytes() {
@@ -251,10 +226,6 @@ fn bitmap_word_tail_word_reads_partial_bytes() {
     assert_eq!(bm.word(1), 0b11);
 }
 
-// ---------------------------------------------------------------------------
-// Bitmap::words_len — backlog rows 43-44
-// ---------------------------------------------------------------------------
-
 #[test]
 fn bitmap_words_len_boundaries() {
     let bm0 = Bitmap::from_bytes(Buf::new_zeroed(0), 0);
@@ -268,8 +239,8 @@ fn bitmap_words_len_boundaries() {
 }
 
 // ---------------------------------------------------------------------------
-// Bitmap::is_all_valid — backlog rows 45-51 (row 50 `tail > 0` -> `>=` is
-// ledgered as equivalent; see the lane receipt)
+// is_all_valid rows 45-51 (row 50 ledgered equivalent); count_one_bits 52-57
+// (row 57 ledgered equivalent)
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -301,11 +272,6 @@ fn is_all_valid_tail_word_boundary() {
     assert!(bm.is_all_valid());
 }
 
-// ---------------------------------------------------------------------------
-// count_one_bits — backlog rows 52-57 (row 57 `tail > 0` -> `>=` is ledgered
-// as equivalent; see the lane receipt)
-// ---------------------------------------------------------------------------
-
 #[test]
 fn count_one_bits_multiword_and_tails() {
     let empty = Bitmap::from_bytes(Buf::new_zeroed(0), 0);
@@ -331,32 +297,47 @@ fn count_one_bits_multiword_and_tails() {
 }
 
 // ---------------------------------------------------------------------------
-// buffer::Buf — backlog rows 58-59
+// buffer::Buf — rows 58-59 (drop kill via isolated-process counting probe)
 // ---------------------------------------------------------------------------
 
 #[test]
 fn buf_is_empty_law() {
-    let _g = MEM_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     assert!(Buf::new(0).is_empty());
     assert!(!Buf::new(1).is_empty());
-    assert!(!Buf::new(0.max(1)).is_empty());
+    assert!(!Buf::new(64).is_empty());
 }
 
+/// Row 59 kill: a no-op `Buf::drop` leaks, and a leak is observable through
+/// the real allocator. The probe re-executes THIS test binary as a single-
+/// test subprocess (`--exact --test-threads=1`), so the allocator counter
+/// sees exactly this test's allocations with zero concurrent test threads —
+/// no straggler-spawn noise, fully deterministic. Real subprocess, real
+/// allocator; nothing is mocked.
 #[test]
 fn buf_drop_deallocates() {
-    let _g = MEM_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let baseline = LIVE_BYTES.load(Ordering::SeqCst);
-    {
-        let _b = Buf::new(4096);
-    } // drop here
-    // Correct code frees immediately; a no-op drop leaks 4096 bytes forever.
-    // The bounded poll observes real state each sample; transient harness
-    // allocations settle, a leak does not.
-    poll_live_returns_to(baseline);
+    if std::env::var("W2_LEAK_PROBE").is_ok() {
+        // Probe mode (isolated child process).
+        let baseline = LIVE_BYTES.load(Ordering::SeqCst);
+        {
+            let _b = Buf::new(4096);
+        } // drop here
+        // Correct code frees immediately; a no-op drop leaks 4096 bytes
+        // forever. Bounded poll on a real observable.
+        poll_live_returns_to(baseline);
+        return;
+    }
+    let exe = std::env::current_exe().expect("current_exe");
+    let ok = std::process::Command::new(exe)
+        .args(["buf_drop_deallocates", "--exact", "--test-threads=1"])
+        .env("W2_LEAK_PROBE", "1")
+        .status()
+        .expect("spawn leak-probe subprocess")
+        .success();
+    assert!(ok, "isolated leak probe failed (subprocess exit nonzero)");
 }
 
 // ---------------------------------------------------------------------------
-// c_abi — backlog rows 60-63
+// c_abi — rows 60-63 (ForeignArray::len, Drop release, CAS double-call)
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -415,7 +396,7 @@ fn release_double_call_is_typed_noop() {
 }
 
 // ---------------------------------------------------------------------------
-// primitive — backlog rows 64-72
+// primitive — rows 64-72
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -456,7 +437,7 @@ fn primitive_buffers_aligned_64_law() {
     // Alignment law: every reachable Primitive reports 64-aligned buffers —
     // real allocs via Layout(align=64), and the empty values Buf via the
     // dangling sentinel (probed 0x40 on this toolchain — itself 64-aligned).
-    // Backlog rows 69-70 (`-> true`, `&&`->`||`) are therefore
+    // Rows 69-70 (`-> true`, `&&`->`||`) are therefore
     // equivalent-by-unreachable-false; see the lane receipt.
     let empty = PrimitiveBuilder::<i32>::new().finish();
     assert!(empty.buffers_aligned_64());
@@ -481,7 +462,7 @@ fn builder_len_tracks_pushes() {
 }
 
 // ---------------------------------------------------------------------------
-// varlen — backlog rows 73-86
+// varlen — rows 73-86
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -523,8 +504,8 @@ fn varlen_data_is_exact_payload() {
 #[test]
 fn offsets_monotonic_holds_for_builder_output() {
     // Observable half of the offsets_monotonic rows: the builder output is
-    // monotonic by construction; the `||`->`&&` mutant (row 82) is only
-    // distinguishable on unreachable states — see the lane receipt.
+    // monotonic by construction; the `||`->`&&` mutant (row 82) differs only
+    // on unreachable states — see the lane receipt.
     let mut b = VarlenBuilder::<u32>::new();
     b.push(Some(b"a"));
     b.push(None);
@@ -540,7 +521,7 @@ fn offsets_monotonic_holds_for_builder_output() {
 #[test]
 #[should_panic(expected = "offset overflow")]
 fn u32_offset_overflow_guard() {
-    // u32::MAX + 1 rows of payload must trip the u32-family guard.
+    // u32::MAX + 1 must trip the u32-family offset overflow guard.
     let _ = <u32 as Offset>::from_usize((u32::MAX as usize) + 1);
 }
 
@@ -551,7 +532,7 @@ fn u64_offset_accepts_full_range() {
 }
 
 // ---------------------------------------------------------------------------
-// views — backlog rows 87-89
+// views — rows 87-89; contract edge: is_inline at the 12/13 boundary
 // ---------------------------------------------------------------------------
 
 #[test]

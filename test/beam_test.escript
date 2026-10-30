@@ -90,6 +90,47 @@ main(_Args) ->
     expect(avec_get(IdBig, 16383), 16390, "avec_get(dirty, 16383)"),
     ok = avec_free(IdBig),
 
+    %% --- i64 path -----------------------------------------------------------
+    Id64 = avec_new_i64(3, 4000000000),
+    io:format("avec_new_i64(3, 4000000000) => ~p~n", [Id64]),
+    true = is_integer(Id64),
+    expect(avec_len(Id64), 3, "avec_len(i64 3 rows)"),
+    expect(avec_get_i64(Id64, 0), 4000000000, "avec_get_i64(0) exact"),
+    expect(avec_get_i64(Id64, 1), 4000000001, "avec_get_i64(1) exact"),
+    expect(avec_get_i64(Id64, 2), 4000000002, "avec_get_i64(2) exact"),
+    expect(avec_get(Id64, 0), error, "avec_get on i64 batch is error"),
+    expect(avec_stats(Id64), {3, 64}, "avec_stats(i64)"),
+    ok = avec_free(Id64),
+    expect(avec_free(Id64), error, "avec_free(i64 id, second)"),
+    expect(avec_get_i64(Id64, 0), error, "avec_get_i64(freed i64 id)"),
+
+    %% i64 beyond-i32 reach, negative direction
+    IdNeg = avec_new_i64(2, -4000000000),
+    expect(avec_get_i64(IdNeg, 1), -3999999999, "avec_get_i64(negative fill, 1)"),
+    expect(avec_stats(IdNeg), {2, 64}, "avec_stats(negative i64)"),
+    ok = avec_free(IdNeg),
+
+    %% ramp must not wrap: fill + (n-1) overflows i64 -> refused
+    expect(avec_new_i64(2, 9223372036854775807), error,
+           "avec_new_i64(overflow ramp) refused"),
+
+    %% --- mixed workload: i32 and i64 alive simultaneously --------------------
+    IdA = avec_new(2, 10),
+    IdB = avec_new_i64(2, 4000000000),
+    true = is_integer(IdA) andalso is_integer(IdB),
+    expect(IdA =/= IdB, true, "mixed ids independent"),
+    expect(avec_len(IdA), 2, "avec_len(mixed i32)"),
+    expect(avec_len(IdB), 2, "avec_len(mixed i64)"),
+    expect(avec_get(IdA, 1), 11, "avec_get(mixed i32, 1)"),
+    expect(avec_get_i64(IdB, 1), 4000000001, "avec_get_i64(mixed i64, 1)"),
+    expect(avec_get_i64(IdA, 0), error, "avec_get_i64 on i32 batch is error"),
+    expect(avec_stats(IdA), {2, 32}, "avec_stats(mixed i32)"),
+    expect(avec_stats(IdB), {2, 64}, "avec_stats(mixed i64)"),
+    ok = avec_free(IdA),
+    ok = avec_free(IdB),
+    expect(avec_len(IdA), error, "avec_len(mixed i32 freed)"),
+    expect(avec_len(IdB), error, "avec_len(mixed i64 freed)"),
+
     io:format("ALL BEAM ASSERTS PASSED~n").
 
 %% --- NIF stubs (replaced at load_nif time) ---------------------------------
@@ -103,4 +144,10 @@ avec_get(_Id, _I) ->
 avec_free(_Id) ->
     erlang:nif_error(nif_library_not_loaded).
 avec_version() ->
+    erlang:nif_error(nif_library_not_loaded).
+avec_new_i64(_N, _Fill) ->
+    erlang:nif_error(nif_library_not_loaded).
+avec_get_i64(_Id, _I) ->
+    erlang:nif_error(nif_library_not_loaded).
+avec_stats(_Id) ->
     erlang:nif_error(nif_library_not_loaded).

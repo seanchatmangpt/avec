@@ -23,8 +23,11 @@ extern crate alloc;
 pub mod bitmap;
 pub mod buffer;
 pub mod c_abi;
+pub mod c_abi_nested;
 pub mod primitive;
+pub mod runend;
 pub mod silicon;
+pub mod slice;
 pub mod varlen;
 pub mod views;
 

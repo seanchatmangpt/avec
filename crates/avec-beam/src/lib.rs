@@ -147,17 +147,46 @@ extern "C" {
     fn enif_alloc_binary(size: usize, bin: *mut ErlNifBinary) -> c_int;
     /// `ERL_NIF_TERM enif_make_binary(ErlNifEnv* env, ErlNifBinary* bin);`
     fn enif_make_binary(env: *mut ErlNifEnv, bin: *mut ErlNifBinary) -> ErlNifTerm;
+    /// `ERL_NIF_TERM enif_make_tuple(ErlNifEnv* env, unsigned cnt, ...);`
+    /// (erl_nif_api_funcs.h:59; the `enif_make_tuple2..9` forms are macros
+    /// over this one, so the variadic is what the BEAM actually exports —
+    /// verified `nm -gU beam.smp` shows `_enif_make_tuple`.)
+    fn enif_make_tuple(env: *mut ErlNifEnv, cnt: u32, ...) -> ErlNifTerm;
     /// `ERL_NIF_TERM enif_make_badarg(ErlNifEnv* env);`
     fn enif_make_badarg(env: *mut ErlNifEnv) -> ErlNifTerm;
 }
 
 // ---------------------------------------------------------------------------
-// Batch: avec-arrow primitive i32 batch behind an integer handle
+// Batch: avec-arrow primitive i32|i64 batch behind an integer handle
 // ---------------------------------------------------------------------------
 
-/// Wraps an `avec_arrow::Primitive<i32>` whose value buffer is a `Buf`
-/// allocated 64-byte aligned (charter M-03 invariant).
-struct Batch(Primitive<i32>);
+/// A registered `avec_arrow::Primitive` whose value buffer is a `Buf`
+/// allocated 64-byte aligned (charter M-03 invariant). The variant is the
+/// registry's type tag: `avec_get/2` answers i32 batches and `avec_get_i64/2`
+/// answers i64 batches; a getter against the wrong variant is the atom
+/// `error`, never a reinterpret of the bytes.
+enum Batch {
+    I32(Primitive<i32>),
+    I64(Primitive<i64>),
+}
+
+impl Batch {
+    /// Row count, type-agnostic.
+    fn len(&self) -> usize {
+        match self {
+            Batch::I32(a) => a.len(),
+            Batch::I64(a) => a.len(),
+        }
+    }
+
+    /// Element bit width — the integer type tag `avec_stats/1` reports.
+    fn bit_width(&self) -> u32 {
+        match self {
+            Batch::I32(_) => 32,
+            Batch::I64(_) => 64,
+        }
+    }
+}
 
 // SAFETY: Batch owns its aligned buffer allocation outright; moving it to
 // another thread moves the allocation with it, and the registry mutex is the
@@ -180,7 +209,7 @@ fn lock_registry() -> std::sync::MutexGuard<'static, Vec<Option<Batch>>> {
 }
 
 /// Row-count cap: a hostile or typo'd `n` cannot OOM-kill the VM
-/// (1 << 28 rows x 4 bytes = 1 GiB value buffer max).
+/// (1 << 28 rows: 1 GiB value buffer at i32, 2 GiB at i64).
 const MAX_N: i64 = 1 << 28;
 
 /// ASCII-only helper: byte length == char length for our atom names.
@@ -220,7 +249,39 @@ extern "C" fn avec_new(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNifTerm
     debug_assert!(arr.buffers_aligned_64(), "avec-arrow violated M-03 alignment");
     let mut reg = lock_registry();
     let id = reg.len() as i64;
-    reg.push(Some(Batch(arr)));
+    reg.push(Some(Batch::I32(arr)));
+    unsafe { enif_make_long(env, id) }
+}
+
+/// `avec_new_i64(n, fill) -> Id :: integer() | error`
+///
+/// i64 twin of `avec_new/2`: row `i` holds `fill + i`, and `fill` spans the
+/// full i64 range. The ramp must not wrap, so `fill + (n - 1)` is
+/// overflow-checked here — the i32 gate needs no such check because its
+/// `fill` is already clamped to the i32 range. Same dirty-CPU class as
+/// `avec_new/2` (see NIF_FUNCS).
+extern "C" fn avec_new_i64(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNifTerm) -> ErlNifTerm {
+    let args = unsafe { std::slice::from_raw_parts(argv, argc.max(0) as usize) };
+    let (mut n, mut fill) = (0i64, 0i64);
+    if argc != 2
+        || unsafe { enif_get_long(env, args[0], &mut n) } == 0
+        || unsafe { enif_get_long(env, args[1], &mut fill) } == 0
+        || !(0..=MAX_N).contains(&n)
+        || (n > 0 && fill.checked_add(n - 1).is_none())
+    {
+        return make_atom(env, "error");
+    }
+    let mut builder = PrimitiveBuilder::<i64>::new();
+    let mut i: i64 = 0;
+    while i < n {
+        builder.push(Some(fill + i));
+        i += 1;
+    }
+    let arr = builder.finish();
+    debug_assert!(arr.buffers_aligned_64(), "avec-arrow violated M-03 alignment");
+    let mut reg = lock_registry();
+    let id = reg.len() as i64;
+    reg.push(Some(Batch::I64(arr)));
     unsafe { enif_make_long(env, id) }
 }
 
@@ -233,15 +294,40 @@ extern "C" fn avec_len(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNifTerm
     }
     let reg = lock_registry();
     match reg.get(id as usize) {
-        Some(Some(batch)) => unsafe { enif_make_uint(env, batch.0.len() as u32) },
+        Some(Some(batch)) => unsafe { enif_make_uint(env, batch.len() as u32) },
+        _ => make_atom(env, "error"),
+    }
+}
+
+/// `avec_stats(id) -> {Len :: non_neg_integer(), BitWidth :: 32 | 64} | error`
+///
+/// Length plus element bit width as two integers in a 2-tuple: the API stays
+/// integer-based and the type tag is the element width, not an atom.
+extern "C" fn avec_stats(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNifTerm) -> ErlNifTerm {
+    let args = unsafe { std::slice::from_raw_parts(argv, argc.max(0) as usize) };
+    let mut id = 0i64;
+    if argc != 1 || unsafe { enif_get_long(env, args[0], &mut id) } == 0 || id < 0 {
+        return make_atom(env, "error");
+    }
+    let reg = lock_registry();
+    match reg.get(id as usize) {
+        Some(Some(batch)) => unsafe {
+            enif_make_tuple(
+                env,
+                2,
+                enif_make_uint(env, batch.len() as u32),
+                enif_make_long(env, i64::from(batch.bit_width())),
+            )
+        },
         _ => make_atom(env, "error"),
     }
 }
 
 /// `avec_get(id, i) -> Value :: integer() | error`
 ///
-/// Non-integer arguments are `badarg`; unknown handle or out-of-range index
-/// is the atom `error`.
+/// Non-integer arguments are `badarg`; unknown handle, out-of-range index,
+/// or an i64-registered batch is the atom `error` (type-tagged dispatch:
+/// use `avec_get_i64/2` for those).
 extern "C" fn avec_get(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNifTerm) -> ErlNifTerm {
     let args = unsafe { std::slice::from_raw_parts(argv, argc.max(0) as usize) };
     let (mut id, mut idx) = (0i64, 0i64);
@@ -253,8 +339,31 @@ extern "C" fn avec_get(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNifTerm
     }
     let reg = lock_registry();
     match reg.get(id as usize) {
-        Some(Some(batch)) if idx >= 0 && (idx as usize) < batch.0.len() => unsafe {
-            enif_make_long(env, batch.0.values()[idx as usize] as i64)
+        Some(Some(Batch::I32(batch))) if idx >= 0 && (idx as usize) < batch.len() => unsafe {
+            enif_make_long(env, batch.values()[idx as usize] as i64)
+        },
+        _ => make_atom(env, "error"),
+    }
+}
+
+/// `avec_get_i64(id, i) -> Value :: integer() | error`
+///
+/// i64 twin of `avec_get/2`, same error split (badarg for non-integer
+/// arguments; `error` for unknown handle, out-of-range index, or an
+/// i32-registered batch).
+extern "C" fn avec_get_i64(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNifTerm) -> ErlNifTerm {
+    let args = unsafe { std::slice::from_raw_parts(argv, argc.max(0) as usize) };
+    let (mut id, mut idx) = (0i64, 0i64);
+    if argc != 2
+        || unsafe { enif_get_long(env, args[0], &mut id) } == 0
+        || unsafe { enif_get_long(env, args[1], &mut idx) } == 0
+    {
+        return unsafe { enif_make_badarg(env) };
+    }
+    let reg = lock_registry();
+    match reg.get(id as usize) {
+        Some(Some(Batch::I64(batch))) if idx >= 0 && (idx as usize) < batch.len() => unsafe {
+            enif_make_long(env, batch.values()[idx as usize])
         },
         _ => make_atom(env, "error"),
     }
@@ -305,7 +414,7 @@ extern "C" fn avec_version(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNif
 /// `ERL_NIF_DIRTY_JOB_CPU_BOUND` (erl_drv_nif.h:50: `= 1`), i.e. 0x01.
 const ERL_NIF_DIRTY_JOB_CPU_BOUND: u32 = 0x01;
 
-static NIF_FUNCS: [ErlNifFunc; 5] = [
+static NIF_FUNCS: [ErlNifFunc; 8] = [
     // n >= 16384 fills build a >= 64 KiB aligned buffer; run it dirty.
     ErlNifFunc {
         name: b"avec_new\0".as_ptr() as *const c_char,
@@ -337,6 +446,25 @@ static NIF_FUNCS: [ErlNifFunc; 5] = [
         fptr: avec_version,
         flags: 0,
     },
+    // avec_new_i64 builds the same aligned-buffer class; dirty like avec_new.
+    ErlNifFunc {
+        name: b"avec_new_i64\0".as_ptr() as *const c_char,
+        arity: 2,
+        fptr: avec_new_i64,
+        flags: ERL_NIF_DIRTY_JOB_CPU_BOUND,
+    },
+    ErlNifFunc {
+        name: b"avec_get_i64\0".as_ptr() as *const c_char,
+        arity: 2,
+        fptr: avec_get_i64,
+        flags: 0,
+    },
+    ErlNifFunc {
+        name: b"avec_stats\0".as_ptr() as *const c_char,
+        arity: 1,
+        fptr: avec_stats,
+        flags: 0,
+    },
 ];
 
 /// OTP 26+ no-argument entry point. The BEAM resolves this symbol when
@@ -351,7 +479,7 @@ static NIF_ENTRY: ErlNifEntry = ErlNifEntry {
     major: ERL_NIF_MAJOR_VERSION,
     minor: ERL_NIF_MINOR_VERSION,
     name: b"avec_beam\0".as_ptr() as *const c_char,
-    num_of_funcs: 5,
+    num_of_funcs: 8,
     funcs: NIF_FUNCS.as_ptr() as *mut ErlNifFunc,
     load: None,
     reload: None,
