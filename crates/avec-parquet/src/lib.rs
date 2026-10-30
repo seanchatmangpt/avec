@@ -12,8 +12,10 @@
 
 extern crate alloc;
 
+pub mod compiled_manifest;
 pub mod dictionary;
 pub mod encode_fast;
+pub mod ffor;
 pub mod packing;
 pub mod page;
 pub mod page_aligned;
