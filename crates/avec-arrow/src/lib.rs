@@ -32,6 +32,7 @@ pub mod primitive;
 pub mod runend;
 pub mod silicon;
 pub mod slice;
+pub mod timestamps;
 pub mod varlen;
 pub mod views;
 
@@ -47,5 +48,6 @@ pub const VERSION: &str = generated_version::VERSION;
 pub use buffer::Buf;
 pub use c_abi::{export, ArrowArray, ArrowSchema, AVEC_FLAG_NULLABLE};
 pub use primitive::{Primitive, PrimitiveBuilder};
+pub use timestamps::{TimestampMicro, TimestampMilli, TimestampNano, TimestampSecond};
 pub use varlen::{Varlen, VarlenBuilder};
 pub use views::{ViewVec, ViewVecBuilder};

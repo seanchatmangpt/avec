@@ -153,6 +153,18 @@ impl<O: Offset> VarlenBuilder<O> {
         }
     }
 
+    /// Rows appended so far.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.validity.len()
+    }
+
+    /// True when no rows appended yet.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.validity.is_empty()
+    }
+
     /// Append a row (None = null row, empty payload slot).
     pub fn push(&mut self, row: Option<&[u8]>) {
         match row {

@@ -16,8 +16,10 @@ pub mod dictionary;
 pub mod encode_fast;
 pub mod packing;
 pub mod page;
+pub mod page_aligned;
 pub mod rle;
 pub mod thrift;
 pub mod unpack;
+pub mod unpack_filter;
 
 pub use rle::{rle_decode, rle_encode, ParquetError};
