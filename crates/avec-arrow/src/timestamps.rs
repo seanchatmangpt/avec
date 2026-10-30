@@ -91,7 +91,11 @@ mod tests {
             plain.push(Some(v));
         }
         let (ts_arr, plain_arr) = (ts.finish(), plain.finish());
-        assert_eq!(ts_arr.values(), plain_arr.values());
-        assert_eq!(ts_arr.values().len(), 5);
+        assert_eq!(ts_arr.values().len(), plain_arr.values().len());
+        assert!(ts_arr
+            .values()
+            .iter()
+            .zip(plain_arr.values())
+            .all(|(t, p)| t.0 == *p));
     }
 }

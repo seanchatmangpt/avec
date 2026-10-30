@@ -274,6 +274,107 @@ impl ColumnBuilder {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Three typed columns built through the batch builder; the frozen
+    /// batch preserves names, insertion order, format codes, and values.
+    #[test]
+    fn named_batch_round_trip() {
+        let mut b = BatchBuilder::new();
+        b = b
+            .with_column("id", ColumnBuilder::Int32(PrimitiveBuilder::new()))
+            .with_column("score", ColumnBuilder::Float64(PrimitiveBuilder::new()))
+            .with_column("name", ColumnBuilder::Utf8(VarlenBuilder::new()));
+        if let Some(ColumnBuilder::Int32(ids)) = b.column_mut("id") {
+            ids.push(Some(1));
+            ids.push(Some(2));
+        }
+        if let Some(ColumnBuilder::Float64(scores)) = b.column_mut("score") {
+            scores.push(Some(0.5));
+            scores.push(None);
+        }
+        if let Some(ColumnBuilder::Utf8(names)) = b.column_mut("name") {
+            names.push(Some(b"ada"));
+            names.push(Some(b"grace"));
+        }
+        let batch = b.finish().unwrap();
+        assert_eq!(batch.row_count(), 2);
+        let names: Vec<&str> = batch.columns().iter().map(|(n, _)| *n).collect();
+        assert_eq!(names, ["id", "score", "name"]);
+        match batch.get("id") {
+            Some(Column::Int32(v)) => assert_eq!(v.values(), &[1, 2]),
+            other => panic!("expected i32 column, got {other:?}"),
+        }
+        assert!(matches!(batch.get("score"), Some(Column::Float64(_))));
+        match batch.get("name") {
+            Some(Column::Utf8(v)) => {
+                assert_eq!(v.row(0), b"ada");
+                assert_eq!(v.row(1), b"grace");
+            }
+            other => panic!("expected utf8 column, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn ragged_columns_are_refused() {
+        let mut b = BatchBuilder::new();
+        b = b
+            .with_column("a", ColumnBuilder::Int32(PrimitiveBuilder::new()))
+            .with_column("b", ColumnBuilder::Int64(PrimitiveBuilder::new()));
+        if let Some(ColumnBuilder::Int32(a)) = b.column_mut("a") {
+            a.push(Some(1));
+        }
+        if let Some(ColumnBuilder::Int64(bs)) = b.column_mut("b") {
+            bs.push(Some(1));
+            bs.push(Some(2));
+        }
+        match b.finish() {
+            Err(BatchError::LengthMismatch { column, expected, got }) => {
+                assert_eq!(column, "b");
+                assert_eq!((expected, got), (1, 2));
+            }
+            other => panic!("expected length mismatch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn duplicate_names_are_refused() {
+        let batch = Batch::try_new(vec![
+            ("x", Column::Int32(PrimitiveBuilder::<i32>::new().finish())),
+            ("x", Column::Int64(PrimitiveBuilder::<i64>::new().finish())),
+        ]);
+        match batch {
+            Err(BatchError::DuplicateColumn { name }) => assert_eq!(name, "x"),
+            other => panic!("expected duplicate refusal, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn format_codes_round_trip() {
+        let batch = Batch::try_new(vec![
+            ("i", Column::Int32(PrimitiveBuilder::<i32>::new().finish())),
+            ("u", Column::Utf8(VarlenBuilder::<i32>::new().finish())),
+            (
+                "vu",
+                Column::Utf8View(ViewVecBuilder::new().finish()),
+            ),
+            (
+                "+r",
+                Column::RunEnd(RunEndEncodedBuilder::<i32>::new().finish()),
+            ),
+        ])
+        .unwrap();
+        let codes: Vec<&'static str> = batch
+            .columns()
+            .iter()
+            .map(|(_, c)| c.format_code())
+            .collect();
+        assert_eq!(codes, ["i", "u", "vu", "+r"]);
+    }
+}
+
 impl BatchBuilder {
     /// An empty builder.
     #[must_use]

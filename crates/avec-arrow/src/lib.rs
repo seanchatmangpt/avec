@@ -28,6 +28,7 @@ pub mod buffer;
 pub mod c_abi;
 pub mod c_abi_nested;
 pub mod digest;
+pub mod foreign;
 pub mod primitive;
 pub mod runend;
 pub mod silicon;
@@ -47,6 +48,7 @@ pub const VERSION: &str = generated_version::VERSION;
 /// collaborator and it is real.
 pub use buffer::Buf;
 pub use c_abi::{export, ArrowArray, ArrowSchema, AVEC_FLAG_NULLABLE};
+pub use foreign::{format_of, primitive_view, is_valid, ForeignError};
 pub use primitive::{Primitive, PrimitiveBuilder};
 pub use timestamps::{TimestampMicro, TimestampMilli, TimestampNano, TimestampSecond};
 pub use varlen::{Varlen, VarlenBuilder};

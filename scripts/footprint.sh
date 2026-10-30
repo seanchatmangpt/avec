@@ -38,7 +38,9 @@ set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WASM_CRATE="$ROOT/crates/wasm-footprint"
-TARGET="wasm32-wasip1"
+# Overridable for receipts on sibling targets (e.g. the PurRDF consumer's
+# wasm32-unknown-unknown); the charter subject stays wasip1.
+TARGET="${WASM_TARGET:-wasm32-wasip1}"
 OPT_BIN="/opt/homebrew/bin/wasm-opt"
 OBJDUMP_BIN="wasm-objdump"
 TARGET_BYTES=102400   # 100 KiB charter target (CTQ-4)
