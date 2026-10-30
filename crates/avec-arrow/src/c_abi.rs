@@ -49,6 +49,19 @@ pub struct ArrowArray {
     pub private_data: *mut c_void,
 }
 
+/// Schema release: CAS swap-to-NULL then free the boxed schema shell
+/// (private_data aliases the boxed struct itself).
+unsafe fn release_schema(schema: *mut ArrowSchema) {
+    let slot: &AtomicPtr<c_void> =
+        unsafe { &*(core::ptr::addr_of_mut!((*schema).release) as *mut AtomicPtr<c_void>) };
+    let prev = slot.swap(core::ptr::null_mut(), Ordering::AcqRel);
+    if prev.is_null() {
+        return;
+    }
+    // SAFETY: first-release winner; the box was created in `export`.
+    unsafe { drop(Box::from_raw(schema)) };
+}
+
 /// Owned batch: the release callback drops exactly this.
 struct OwnedPrimitive<T: Scalar> {
     validity: Option<Bitmap>,
@@ -119,7 +132,7 @@ pub fn export<T: Scalar>(
         release: Some(release_array::<T>),
         private_data: owned as *mut c_void,
     };
-    let schema = ArrowSchema {
+    let boxed_schema = Box::into_raw(Box::new(ArrowSchema {
         format,
         name: core::ptr::null(),
         metadata: core::ptr::null(),
@@ -127,9 +140,16 @@ pub fn export<T: Scalar>(
         n_children: 0,
         children: core::ptr::null_mut(),
         dictionary: core::ptr::null_mut(),
-        release: None,
+        release: Some(release_schema),
         private_data: core::ptr::null_mut(),
-    };
+    }));
+    // SAFETY: boxed_schema is live; private_data aliases the box itself so
+    // release_schema can free the shell.
+    unsafe {
+        (*boxed_schema).private_data = boxed_schema as *mut c_void;
+    }
+    // SAFETY: read back the finalized box value.
+    let schema = unsafe { core::ptr::read(boxed_schema) };
     (array, schema)
 }
 

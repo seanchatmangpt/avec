@@ -2,4 +2,4 @@
 
 [packs.avec-pack]
 source = "path:../ggen-marketplace/packs/avec-pack"
-content_hash = "blake3:2e9ce34bfa06f8c87af7da4fdd3f44b536148dbc3ccdddebacd48dd8c55c6de3"
+content_hash = "blake3:3e5357379e80de0c57e5ee2aede54a1f8ea1154ff6197e1007ecbd09d019ae7e"

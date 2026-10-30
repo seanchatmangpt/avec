@@ -5,6 +5,7 @@ members = [
     "crates/avec-ffi",
     "crates/avec-beam",
     "crates/bench",
+    "crates/audit",
 ]
 
 [workspace.package]
@@ -17,3 +18,9 @@ authors = ["Sean Chatman <info@chatmangpt.com>"]
 [profile.release]
 lto = "thin"
 codegen-units = 1
+
+[profile.audit]
+inherits = "release"
+lto = false
+codegen-units = 16
+strip = false

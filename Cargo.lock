@@ -7,6 +7,14 @@ name = "avec-arrow"
 version = "26.10.29"
 
 [[package]]
+name = "avec-audit"
+version = "26.10.29"
+dependencies = [
+ "avec-arrow",
+ "avec-parquet",
+]
+
+[[package]]
 name = "avec-beam"
 version = "26.10.29"
 dependencies = [

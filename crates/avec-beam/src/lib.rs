@@ -1,1 +1,1 @@
-//! avec-beam: raw erl_nif membrane. Resource wrappers land in M4.
+//! avec-beam: raw erl_nif membrane. Owned by lane BEAM; full NIF lands here.
