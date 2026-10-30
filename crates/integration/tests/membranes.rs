@@ -33,9 +33,7 @@ use avec_arrow::c_abi_nested::export_struct;
 use avec_arrow::primitive::Scalar;
 use avec_arrow::silicon::mask_words_neon;
 use avec_arrow::varlen::Offset;
-use avec_arrow::{
-    export, ArrowSchema, PrimitiveBuilder, Scalar, VarlenBuilder, AVEC_FLAG_NULLABLE,
-};
+use avec_arrow::{export, ArrowSchema, PrimitiveBuilder, VarlenBuilder, AVEC_FLAG_NULLABLE};
 
 /// Importer duty for the schema half of a pair: `export` boxes the schema
 /// shell and aliases `private_data` to it, so the house release frees exactly
@@ -105,7 +103,7 @@ fn c_abi_roundtrip_i64_u64_f32_f64_bitwise_and_double_release() {
 /// shell drop + schema release.
 fn roundtrip_bitwise<T: Scalar>(rows: &[Option<T>], fmt: &CStr)
 where
-    T: Scalar,
+    T: Scalar + PartialEq + core::fmt::Debug,
 {
     let n = rows.len();
     let nulls = rows.iter().filter(|r| r.is_none()).count();
