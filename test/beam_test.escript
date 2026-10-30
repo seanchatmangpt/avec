@@ -6,7 +6,12 @@
 %% the canonical load_nif context.
 
 -module(avec_beam).
--export([main/1]).
+%% load_nif requires every NIF the library exports to have an EXPORTED
+%% Erlang function in the loading module (local-only stubs fail with
+%% bad_lib "Function not found" — witnessed on OTP 28.3.1, lane BEAM-L1).
+-export([main/1, avec_new/2, avec_len/1, avec_get/2, avec_free/1,
+         avec_version/0, avec_new_i64/2, avec_get_i64/2, avec_stats/1,
+         avec_envelope_new/1, avec_envelope_len/1]).
 -on_load(init/0).
 
 init() ->
@@ -162,4 +167,12 @@ avec_new_i64(_N, _Fill) ->
 avec_get_i64(_Id, _I) ->
     erlang:nif_error(nif_library_not_loaded).
 avec_stats(_Id) ->
+    erlang:nif_error(nif_library_not_loaded).
+
+%% Lane BEAM-L1 (resource envelope): stubs for the two new exports —
+%% load_nif requires a stub for every NIF the library exports. No asserts
+%% touched.
+avec_envelope_new(_Id) ->
+    erlang:nif_error(nif_library_not_loaded).
+avec_envelope_len(_Env) ->
     erlang:nif_error(nif_library_not_loaded).

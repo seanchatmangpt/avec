@@ -12,6 +12,10 @@
 //! Integer-handle registry design: `static Mutex<Vec<Option<Batch>>>`; a
 //! handle is a slot index. `avec_free/1` takes the slot to `None`, so freeing
 //! a second time returns the atom `error` instead of double-dropping.
+//!
+//! Decoupled resource envelope (`resources.rs`): a VM-owned `BatchEnvelope`
+//! resource — cached metadata plus the owned `Batch`, dropped by its dtor on
+//! GC — opened via `enif_open_resource_type_x` in the load callback.
 
 #![allow(non_camel_case_types)]
 
@@ -19,20 +23,22 @@ use avec_arrow::{Primitive, PrimitiveBuilder, VERSION};
 use std::os::raw::{c_char, c_int, c_void};
 use std::sync::{Mutex, OnceLock};
 
+mod resources;
+
 // ---------------------------------------------------------------------------
 // erl_nif ABI, transcribed from erl_nif.h (OTP 28.3.1)
 // ---------------------------------------------------------------------------
 
 /// `typedef ErlNifUInt ERL_NIF_TERM;` with `ErlNifUInt` = `unsigned long`
 /// (erl_nif.h:106 + erl_drv_nif.h:133) — pointer-width on this LP64 target.
-type ErlNifTerm = usize;
+pub(crate) type ErlNifTerm = usize;
 
 /// `typedef signed long long ErlNifSInt64;` (erl_drv_nif.h:111)
 type ErlNifSInt64 = i64;
 
 /// Opaque `struct enif_environment_t` (erl_nif.h:121-122).
 #[repr(C)]
-struct ErlNifEnv {
+pub(crate) struct ErlNifEnv {
     _data: [u8; 0],
 }
 
@@ -88,27 +94,7 @@ struct ErlNifEntry {
     min_erts: *const c_char,
 }
 
-/// `ErlNifResourceTypeInit` (erl_nif.h:219-225): declared so the entry can
-/// report its true size; no resource types are used by this membrane.
-#[repr(C)]
-struct ErlNifResourceTypeInit {
-    dtor: Option<extern "C" fn(*mut ErlNifEnv, *mut c_void)>,
-    stop: Option<extern "C" fn(*mut ErlNifEnv, *mut c_void, c_int, c_int)>,
-    down: Option<extern "C" fn(*mut ErlNifEnv, *mut c_void, *mut ErlNifPid, *mut ErlNifMonitor)>,
-    members: c_int,
-    dyncall: Option<extern "C" fn(*mut ErlNifEnv, *mut c_void, *mut c_void)>,
-}
-
-/// `typedef void ErlNifResourceDtor(ErlNifEnv*, void*);` internal PIDs and
-/// monitors are opaque here (erl_nif.h:201, 208).
-#[repr(C)]
-struct ErlNifPid {
-    pid: ErlNifTerm,
-}
-#[repr(C)]
-struct ErlNifMonitor {
-    _opaque: [u8; 0],
-}
+use resources::ErlNifResourceTypeInit;
 
 /// `ErlNifBinary` (erl_nif.h:159-168): `size`, `data`, internals `ref_bin`
 /// plus two spare pointers.
@@ -136,9 +122,9 @@ extern "C" {
     // _enif_get_int64), so bind the *long names directly; ErlNifSInt64 ==
     // signed long on this ABI.
     /// `int enif_get_long(ErlNifEnv*, ERL_NIF_TERM term, long* ip);`
-    fn enif_get_long(env: *mut ErlNifEnv, term: ErlNifTerm, ip: *mut ErlNifSInt64) -> c_int;
+    pub(crate) fn enif_get_long(env: *mut ErlNifEnv, term: ErlNifTerm, ip: *mut ErlNifSInt64) -> c_int;
     /// `ERL_NIF_TERM enif_make_long(ErlNifEnv*, long);`
-    fn enif_make_long(env: *mut ErlNifEnv, value: ErlNifSInt64) -> ErlNifTerm;
+    pub(crate) fn enif_make_long(env: *mut ErlNifEnv, value: ErlNifSInt64) -> ErlNifTerm;
     /// `ERL_NIF_TERM enif_make_uint(ErlNifEnv*, unsigned i);`
     fn enif_make_uint(env: *mut ErlNifEnv, i: u32) -> ErlNifTerm;
     /// `ERL_NIF_TERM enif_make_atom_len(ErlNifEnv* env, const char* name, size_t len);`
@@ -165,14 +151,14 @@ extern "C" {
 /// registry's type tag: `avec_get/2` answers i32 batches and `avec_get_i64/2`
 /// answers i64 batches; a getter against the wrong variant is the atom
 /// `error`, never a reinterpret of the bytes.
-enum Batch {
+pub(crate) enum Batch {
     I32(Primitive<i32>),
     I64(Primitive<i64>),
 }
 
 impl Batch {
     /// Row count, type-agnostic.
-    fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         match self {
             Batch::I32(a) => a.len(),
             Batch::I64(a) => a.len(),
@@ -180,7 +166,7 @@ impl Batch {
     }
 
     /// Element bit width — the integer type tag `avec_stats/1` reports.
-    fn bit_width(&self) -> u32 {
+    pub(crate) fn bit_width(&self) -> u32 {
         match self {
             Batch::I32(_) => 32,
             Batch::I64(_) => 64,
@@ -201,7 +187,7 @@ fn registry() -> &'static Mutex<Vec<Option<Batch>>> {
     REGISTRY.get_or_init(|| Mutex::new(Vec::new()))
 }
 
-fn lock_registry() -> std::sync::MutexGuard<'static, Vec<Option<Batch>>> {
+pub(crate) fn lock_registry() -> std::sync::MutexGuard<'static, Vec<Option<Batch>>> {
     match registry().lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
@@ -213,7 +199,7 @@ fn lock_registry() -> std::sync::MutexGuard<'static, Vec<Option<Batch>>> {
 const MAX_N: i64 = 1 << 28;
 
 /// ASCII-only helper: byte length == char length for our atom names.
-fn make_atom(env: *mut ErlNifEnv, name: &str) -> ErlNifTerm {
+pub(crate) fn make_atom(env: *mut ErlNifEnv, name: &str) -> ErlNifTerm {
     unsafe { enif_make_atom_len(env, name.as_ptr() as *const c_char, name.len()) }
 }
 
@@ -414,7 +400,7 @@ extern "C" fn avec_version(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNif
 /// `ERL_NIF_DIRTY_JOB_CPU_BOUND` (erl_drv_nif.h:50: `= 1`), i.e. 0x01.
 const ERL_NIF_DIRTY_JOB_CPU_BOUND: u32 = 0x01;
 
-static NIF_FUNCS: [ErlNifFunc; 8] = [
+static NIF_FUNCS: [ErlNifFunc; 10] = [
     // n >= 16384 fills build a >= 64 KiB aligned buffer; run it dirty.
     ErlNifFunc {
         name: b"avec_new\0".as_ptr() as *const c_char,
@@ -465,6 +451,20 @@ static NIF_FUNCS: [ErlNifFunc; 8] = [
         fptr: avec_stats,
         flags: 0,
     },
+    // Test-only resource-envelope surface (resources.rs): cheap alloc + pure
+    // metadata read, normal scheduler both.
+    ErlNifFunc {
+        name: b"avec_envelope_new\0".as_ptr() as *const c_char,
+        arity: 1,
+        fptr: resources::avec_envelope_new,
+        flags: 0,
+    },
+    ErlNifFunc {
+        name: b"avec_envelope_len\0".as_ptr() as *const c_char,
+        arity: 1,
+        fptr: resources::avec_envelope_len,
+        flags: 0,
+    },
 ];
 
 /// OTP 26+ no-argument entry point. The BEAM resolves this symbol when
@@ -479,9 +479,9 @@ static NIF_ENTRY: ErlNifEntry = ErlNifEntry {
     major: ERL_NIF_MAJOR_VERSION,
     minor: ERL_NIF_MINOR_VERSION,
     name: b"avec_beam\0".as_ptr() as *const c_char,
-    num_of_funcs: 8,
+    num_of_funcs: 10,
     funcs: NIF_FUNCS.as_ptr() as *mut ErlNifFunc,
-    load: None,
+    load: Some(resources::nif_load),
     reload: None,
     upgrade: None,
     unload: None,
