@@ -294,6 +294,19 @@ node "$NODE_COURT_JS" "$OPT" "$EXPECTED_VERSION" \
 cleanup
 
 # ---------------------------------------------------------------------------
+# OPT20-L13 bench-wasm: throughput of the optimized artifact's wasm_mask_words
+# over a 4M-lane buffer (min of 5). Runs AFTER the courts above — it times the
+# same $OPT bytes the node execution court just validated and the size verdict
+# below counts. Measurement, not admission: a slow number does not fail the
+# gate, but a bench failure (unreadable artifact, trap, failed output
+# consumption check) exits 2 via fail — bench failure is script failure, the
+# same fail-closed rule as the courts.
+# ---------------------------------------------------------------------------
+echo "-- wasm bench (wasm_mask_words, 4M-lane buffer, min of 5)..."
+node scripts/wasm_bench.mjs "$OPT" \
+    || fail "wasm bench refused (artifact mis-executes under load or harness failure)"
+
+# ---------------------------------------------------------------------------
 # Size verdicts (charter CTQ-4).
 # ---------------------------------------------------------------------------
 raw=$(wc -c < "$WASM" | tr -d ' ')
