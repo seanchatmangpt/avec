@@ -266,3 +266,152 @@ Ordered by leak severity x feasibility:
   lands.
 - FFI surfaces (`c_abi.rs`, `c_abi_nested.rs`) delegate to the kernels
   above and inherit their classifications; not separately audited.
+
+## ADDENDUM — lane HWL5, 2026-10-29: two of the three named TL surfaces
+
+Standing: PARTIAL_ALIVE. Two fixed-access-pattern kernels landed in
+`crates/avec-parquet/src/oblivious.rs` (new file, 490 lines, no_std, zero
+deps): `oblivious_gather_small` and `oblivious_masked_compact`. Both are
+differentially proven and measured against their leaky originals. The
+timing numbers below are receipts of the 21:17 run on the load-bound host;
+only within-run contrasts vs the leaky same-run references are quotable.
+
+### What landed
+
+- `oblivious_gather_small(dict, codes, out)` — positional dictionary
+  gather by 64-slot broad-side select: per lane, all 64 slots are read and
+  slot-index-vs-code compared unconditionally, match flag OR-selects the
+  value. Every dictionary cache line touched every lane; trip counts =
+  `64 * codes.len()` (framing). BOUNDARY: dictionaries > 64 entries are
+  refused typed with the TRUE unclamped width (65→7, 257→9, 1000→10),
+  mirroring `required_bits`' reporting law. Out-of-domain codes are caught
+  by an oblivious branch-free OR-accumulate → typed error; the one tail
+  branch publishes nothing the return value does not already carry.
+- `oblivious_masked_compact(values, valid, out) -> usize` — O(n)
+  branch-free compaction: every input row read every cycle; store address
+  = cross-word running popcount PREFIX (the per-word prefix accumulation),
+  never WHICH rows are valid — two patterns with equal prefixes produce
+  identical store-address streams. Store COUNT still scales with validity
+  density (dirty-line coupling class, per the mask_words finding); the
+  return publishes density by definition. Budget: dense output
+  (`out.len() >= values.len()`, loud assert on the framing-only budget,
+  `packed_filter` "mask buffer too small" precedent); slots at/after the
+  returned count are transient scratch. Missing validity words mean
+  all-invalid rows; padding bits past `n` ignored. An exact-fit-out
+  contract was rejected during development: with an exact-fit budget the
+  fixed store stream writes past the last valid row and either panics or
+  needs a data-dependent bounds branch — the leak itself.
+- Wiring status: `lib.rs` is coordinator-owned (bounded-poll window); the
+  file is NOT yet `mod oblivious;`-wired. Compile-clean is proven
+  standalone: a scratch crate (/tmp/hwl5-scratch) path-includes the exact
+  bytes with a `crate::rle::ParquetError` shim; `cargo build --release`
+  exit 0, zero warnings.
+
+### Claims and non-claims
+
+Claimed: ACCESS-PATTERN constancy (addresses and trip counts are f(public
+framing) only). NOT claimed: cycle constancy — the register's mask_words
+store-coupling finding applies to compaction with more force; the spread
+tables below are the honest statement of residual coupling.
+
+### Differential evidence (all green, exit 0)
+
+`cargo test --release` in /tmp/hwl5-scratch: 7 passed, 0 failed. Gather:
+dict sizes {1,2,3,5,16,17,32,63,64} x code sizes {0,1,63,64,1000,1M} LCG
+grids + adversarial shapes (all-first/all-last/alternating/clustered/
+single-spike) at cards 1,2,64, full-output equality vs the leaky
+`dict[c]` reference. Compact: sizes {0,1,63,64,1000,1M} x {all, none,
+alternating, single x3, clustered, p10/p50/p90}, prefix+count equality vs
+the branch-per-row reference; typed-gate table (65/128/257/1000 entries →
+7/7/9/10); should_panic budget gate; padding/missing-word semantics.
+
+### Timing spread (pasted; instrument mirrors const_time_bench laws)
+
+rows=1048576, K=100 instances/class, min-of-3, splitmix64 keyed seeds,
+instance 0 of every class differential-checked untimed (0 anomalies in
+all four tables). Command: `cargo run --release` in /tmp/hwl5-scratch,
+exit 0. Leaky references measured in the same run, same methodology.
+
+```
+== oblivious gather (card=64) ==          == leaky gather (dict[c] ref) ==
+sorted               4811000 ns           sorted                789708 ns
+reverse              4812375 ns           reverse               790000 ns
+clustered            4826000 ns           clustered             814209 ns
+constant             4814583 ns           constant              778500 ns
+alternating          4812125 ns           alternating           780000 ns
+random-high-entropy  4815417 ns           random-high-entropy   784584 ns
+permuted             4833167 ns           permuted              784833 ns
+spread 1.005x (max permuted / min sorted) spread 1.046x (max clu / min const)
+
+== oblivious compact ==                   == leaky compact (branch/row) ==
+all-valid            567333 ns            all-valid             933667 ns
+none-valid           567125 ns            none-valid            560166 ns
+alternating          567834 ns            alternating           746875 ns
+clustered            569209 ns            clustered             776500 ns
+random-90            568250 ns            random-90            1612875 ns
+random-50            567625 ns            random-50            4660916 ns
+random-10            567166 ns            random-10            1366959 ns
+spread 1.004x (max clu / min none)        spread 8.321x (max p50 / min none)
+```
+
+Cost of obliviousness: gather 4.81 ms vs 0.78 ms per 1M lanes (6.1x — the
+O(n x 64) broad-side price); compact 567 us — flat at the leaky kernel's
+BEST-case floor (567 vs 560 us) and up to 8.2x cheaper than its worst
+case. The bar: REE get ~1.001x floor (bench lane). Measured: 1.004-1.005x,
+inside every noise envelope the register has measured (1.05-1.63x), and
+the residual 0.4-0.5% is directionally consistent with the store-side
+coupling the register's mask_words finding predicts for any kernel whose
+store count varies with content.
+
+First measurement of the gather cell: the register recorded the
+`decode_page` gather contrast as "NOT resolved at card 2 vs 256" (dict is
+L1-resident at every lawful size). At card 64 x 7 code-shape classes x K=100
+the coarse channel now MEASURES: 1.046x (clustered vs constant), beyond the
+varlen row-scan floor (1.004-1.005x) but far under the leaky compact's
+8.3x branch channel. The TL row stood on structure; it now has a number.
+
+### Register impact
+
+- `decode_page` gather (dictionary.rs:206-214): **BOUNDED**, not closed.
+  The primitive carries dicts <= 64 entries; `decode_page` itself still
+  gathers per `dict[ix]` at SWAR widths {1,2,4,8} (cards to 256). The row
+  closes when `decode_page` routes through the oblivious primitive (or a
+  wider broad-side select) — integration outside this lane's file
+  ownership.
+- `oblivious_masked_compact`: **NEW CAPACITY** — no register row closed;
+  it is the fixed-pattern building block a filtered materialization needs
+  (the branch-per-row shape it replaces is the 8.3x channel measured
+  above).
+- Still OPEN of the three named surfaces:
+  - **run-scan** (`rle.rs:82-84`, `rle.rs:94-103`, `encode_fast.rs:83-86`,
+    `encode_fast.rs:41-56`): the run detector's scan length IS the run
+    length. Rewrite sketch: fixed-window SWAR equality over the value
+    stream — compare every lane against its neighbor at one fixed
+    stride (the repo owns the pattern: `bitmap.rs:34-41`), never exit
+    early; per-position run-completion flags accumulate branch-free into a
+    per-word mask; record boundaries are then emitted by masked stores at
+    popcount-prefix addresses (the compact kernel's own law). Work fixed
+    at f(n) for fixed n; the wire shape stays the encoder's output, the
+    TIMING stops being a ruler for the run-length histogram.
+  - **REE binary search** (`runend.rs:113`): `partition_point`'s probe
+    path is a map of the run structure. Rewrite sketch: fixed-round
+    resolve — always `ceil(log2(num_runs))` probe iterations, each an
+    unconditional compare + masked select (cmov) of the run index, then
+    one fixed `values[run]` read; or serve `get` from a dense decode when
+    the caller sweeps rows. Constant probe count kills the per-row timing
+    map; the probed cache lines become f(num_runs) only — framing.
+
+### Honesty notes
+
+- Single run, load-bound host (concurrent lanes); within-run contrasts
+  with the same-run leaky references are the quotable numbers; absolute
+  rates are not.
+- The compact budget contract (dense out + loud assert) is a lane
+  decision, documented in the module; an exact-fit contract is
+  structurally branch-hostile — recorded so a reviewer doesn't mistake it
+  for an oversight.
+- The timing instrument lives in the scratch driver (std bin), not in the
+  kernel file, because the kernel file must compile no_std; the test
+  module carries the differential proofs, the driver carries the
+  measurement. Reconcile with the bench lane's `const_time_bench` output
+  contract when the coordinator wires the module.

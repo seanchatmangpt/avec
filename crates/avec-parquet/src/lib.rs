@@ -19,6 +19,7 @@ pub mod dictionary;
 pub mod encode_fast;
 pub mod ffor;
 pub mod packing;
+pub mod oblivious;
 pub mod page;
 pub mod page_aligned;
 pub mod packed_filter;
