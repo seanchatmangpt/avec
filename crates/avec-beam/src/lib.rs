@@ -129,10 +129,16 @@ unsafe impl Sync for ErlNifFunc {}
 // ---------------------------------------------------------------------------
 
 extern "C" {
-    /// `int enif_get_int64(ErlNifEnv*, ERL_NIF_TERM term, ErlNifSInt64* ip);`
-    fn enif_get_int64(env: *mut ErlNifEnv, term: ErlNifTerm, ip: *mut ErlNifSInt64) -> c_int;
-    /// `ERL_NIF_TERM enif_make_int64(ErlNifEnv*, ErlNifSInt64);`
-    fn enif_make_int64(env: *mut ErlNifEnv, value: ErlNifSInt64) -> ErlNifTerm;
+    // On LP64 (`SIZEOF_LONG == 8`) the header maps enif_get_int64 ->
+    // enif_get_long and enif_make_int64 -> enif_make_long
+    // (erl_nif_api_funcs.h:663-668). The BEAM exports the *long symbols
+    // (verified: nm -gU beam.smp shows _enif_get_long/_enif_make_long, no
+    // _enif_get_int64), so bind the *long names directly; ErlNifSInt64 ==
+    // signed long on this ABI.
+    /// `int enif_get_long(ErlNifEnv*, ERL_NIF_TERM term, long* ip);`
+    fn enif_get_long(env: *mut ErlNifEnv, term: ErlNifTerm, ip: *mut ErlNifSInt64) -> c_int;
+    /// `ERL_NIF_TERM enif_make_long(ErlNifEnv*, long);`
+    fn enif_make_long(env: *mut ErlNifEnv, value: ErlNifSInt64) -> ErlNifTerm;
     /// `ERL_NIF_TERM enif_make_uint(ErlNifEnv*, unsigned i);`
     fn enif_make_uint(env: *mut ErlNifEnv, i: u32) -> ErlNifTerm;
     /// `ERL_NIF_TERM enif_make_atom_len(ErlNifEnv* env, const char* name, size_t len);`
@@ -170,7 +176,7 @@ fn lock_registry() -> std::sync::MutexGuard<'static, Vec<Option<Batch>>> {
     match registry().lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
-        }
+    }
 }
 
 /// Row-count cap: a hostile or typo'd `n` cannot OOM-kill the VM
@@ -188,25 +194,26 @@ fn make_atom(env: *mut ErlNifEnv, name: &str) -> ErlNifTerm {
 
 /// `avec_new(n, fill) -> Id :: integer() | error`
 ///
-/// `n` rows of the i32 value `fill`. Runs on the dirty CPU scheduler
-/// (see NIF_FUNCS): n >= 16384 rows means a multi-hundred-KB aligned
+/// `n` rows with row `i` holding `fill + i` (ramp), so `avec_get(id, 0) ==
+/// fill` and `avec_get(id, n-1) == fill + n - 1`. Runs on the dirty CPU
+/// scheduler (see NIF_FUNCS): n >= 16384 rows means a >= 64 KiB aligned
 /// allocation, which must not block a normal scheduler.
 extern "C" fn avec_new(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNifTerm) -> ErlNifTerm {
     let args = unsafe { std::slice::from_raw_parts(argv, argc.max(0) as usize) };
     let (mut n, mut fill) = (0i64, 0i64);
     if argc != 2
-        || unsafe { enif_get_int64(env, args[0], &mut n) } == 0
-        || unsafe { enif_get_int64(env, args[1], &mut fill) } == 0
+        || unsafe { enif_get_long(env, args[0], &mut n) } == 0
+        || unsafe { enif_get_long(env, args[1], &mut fill) } == 0
         || !(0..=MAX_N).contains(&n)
-        || i32::try_from(fill).is_err()
+        || fill < i32::MIN as i64
+        || n > 0 && fill + (n - 1) > i32::MAX as i64
     {
         return make_atom(env, "error");
     }
-    let fill32 = fill as i32;
     let mut builder = PrimitiveBuilder::<i32>::new();
     let mut i: i64 = 0;
     while i < n {
-        builder.push(Some(fill32));
+        builder.push(Some((fill + i) as i32));
         i += 1;
     }
     let arr = builder.finish();
@@ -214,14 +221,14 @@ extern "C" fn avec_new(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNifTerm
     let mut reg = lock_registry();
     let id = reg.len() as i64;
     reg.push(Some(Batch(arr)));
-    unsafe { enif_make_int64(env, id) }
+    unsafe { enif_make_long(env, id) }
 }
 
 /// `avec_len(id) -> Len :: non_neg_integer() | error`
 extern "C" fn avec_len(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNifTerm) -> ErlNifTerm {
     let args = unsafe { std::slice::from_raw_parts(argv, argc.max(0) as usize) };
     let mut id = 0i64;
-    if argc != 1 || unsafe { enif_get_int64(env, args[0], &mut id) } == 0 || id < 0 {
+    if argc != 1 || unsafe { enif_get_long(env, args[0], &mut id) } == 0 || id < 0 {
         return make_atom(env, "error");
     }
     let reg = lock_registry();
@@ -239,15 +246,15 @@ extern "C" fn avec_get(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNifTerm
     let args = unsafe { std::slice::from_raw_parts(argv, argc.max(0) as usize) };
     let (mut id, mut idx) = (0i64, 0i64);
     if argc != 2
-        || unsafe { enif_get_int64(env, args[0], &mut id) } == 0
-        || unsafe { enif_get_int64(env, args[1], &mut idx) } == 0
+        || unsafe { enif_get_long(env, args[0], &mut id) } == 0
+        || unsafe { enif_get_long(env, args[1], &mut idx) } == 0
     {
         return unsafe { enif_make_badarg(env) };
     }
     let reg = lock_registry();
     match reg.get(id as usize) {
         Some(Some(batch)) if idx >= 0 && (idx as usize) < batch.0.len() => unsafe {
-            enif_make_int64(env, batch.0.values()[idx as usize] as i64)
+            enif_make_long(env, batch.0.values()[idx as usize] as i64)
         },
         _ => make_atom(env, "error"),
     }
@@ -257,7 +264,7 @@ extern "C" fn avec_get(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNifTerm
 extern "C" fn avec_free(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNifTerm) -> ErlNifTerm {
     let args = unsafe { std::slice::from_raw_parts(argv, argc.max(0) as usize) };
     let mut id = 0i64;
-    if argc != 1 || unsafe { enif_get_int64(env, args[0], &mut id) } == 0 || id < 0 {
+    if argc != 1 || unsafe { enif_get_long(env, args[0], &mut id) } == 0 || id < 0 {
         return make_atom(env, "error");
     }
     let mut reg = lock_registry();
