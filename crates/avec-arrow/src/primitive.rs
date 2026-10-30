@@ -106,8 +106,8 @@ impl<T: Scalar> Primitive<T> {
         let v_ok = self
             .validity
             .as_ref()
-            .map_or(true, |bm| bm.as_ptr() as usize % ALIGNMENT == 0);
-        v_ok && self.values.as_ptr() as usize % ALIGNMENT == 0
+            .is_none_or(|bm| (bm.as_ptr() as usize).is_multiple_of(ALIGNMENT));
+        v_ok && (self.values.as_ptr() as usize).is_multiple_of(ALIGNMENT)
     }
 
     /// Freeze a builder into the aligned vector.
@@ -164,6 +164,12 @@ impl<T: Scalar> PrimitiveBuilder<T> {
         self.values.len()
     }
 
+    /// True when no rows appended yet.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+
     /// Freeze into the aligned vector. All-valid inputs drop the validity
     /// buffer (Arrow law: null_count == 0 -> no validity buffer).
     #[must_use]
@@ -206,7 +212,7 @@ mod tests {
         let v = arr.validity().unwrap();
         assert!(!v.get(1));
         assert!(v.get(0));
-        assert_eq!(arr.buffers_aligned_64(), true);
+        assert!(arr.buffers_aligned_64());
     }
 
     #[test]
@@ -218,7 +224,7 @@ mod tests {
         assert!(arr.validity().is_none());
         assert_eq!(Primitive::<f64>::format_code(), "g");
         assert_eq!(arr.values()[0], 1.5);
-        assert_eq!(arr.buffers_aligned_64(), true);
+        assert!(arr.buffers_aligned_64());
     }
 
     #[test]

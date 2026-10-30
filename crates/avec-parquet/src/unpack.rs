@@ -13,7 +13,7 @@ pub fn unpack_1bit(src: &[u64], out: &mut [u64]) {
         let avail = (n - oi).min(64);
         let mut b = 0;
         while b < avail {
-            out[oi + b] = u64::from((packed >> b) & 1);
+            out[oi + b] = (packed >> b) & 1;
             b += 1;
         }
         si += 1;
@@ -110,7 +110,7 @@ mod tests {
 
     #[test]
     fn four_bit_lanes() {
-        let src = [0xDCBA_3210u64 as u64];
+        let src = [0xDCBA_3210u64];
         let mut out = [0u64; 8];
         unpack_4bit(&src, &mut out);
         assert_eq!(out[..8], [0x0, 0x1, 0x2, 0x3, 0xA, 0xB, 0xC, 0xD]);

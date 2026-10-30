@@ -44,6 +44,7 @@ pub fn count_valid(valid: &[u64], pred: &[u64]) -> u64 {
     let mut i = 0;
     while i < n {
         acc += u64::from((valid[i] & pred[i]).count_ones());
+        i += 1;
     }
     acc
 }
@@ -224,11 +225,11 @@ mod bitmap_tests {
     #[test]
     fn nulls_round_trip() {
         let bm = Bitmap::from_bools(&[true, false, true, true, false, true]).unwrap();
-        assert_eq!(bm.get(0), true);
-        assert_eq!(bm.get(1), false);
-        assert_eq!(bm.get(5), true);
+        assert!(bm.get(0));
+        assert!(!bm.get(1));
+        assert!(bm.get(5));
         assert_eq!(bm.null_count(), 2);
-        assert_eq!(bm.is_all_valid(), false);
+        assert!(!bm.is_all_valid());
         assert_eq!(count_one_bits(&bm), 4);
     }
 

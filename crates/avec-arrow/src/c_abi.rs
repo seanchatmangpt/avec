@@ -63,6 +63,11 @@ unsafe fn release_schema(schema: *mut ArrowSchema) {
 }
 
 /// Owned batch: the release callback drops exactly this.
+///
+/// `validity`/`values`/`len` are never read through after construction —
+/// their job is ownership: the boxed struct keeps the validity bitmap and the
+/// value buffer alive until `release_array` drops it.
+#[allow(dead_code)]
 struct OwnedPrimitive<T: Scalar> {
     validity: Option<Bitmap>,
     values: Buf,
@@ -105,12 +110,13 @@ pub fn export<T: Scalar>(
     let null_count = validity
         .as_ref()
         .map_or(0i64, |bm| bm.null_count() as i64);
-    let mut bufs: Vec<*const c_void> = Vec::with_capacity(2);
-    bufs.push(match &validity {
-        Some(bm) => bm.as_ptr() as *const c_void,
-        None => core::ptr::null(),
-    });
-    bufs.push(values.as_ptr() as *const c_void);
+    let bufs: Vec<*const c_void> = alloc::vec![
+        match &validity {
+            Some(bm) => bm.as_ptr() as *const c_void,
+            None => core::ptr::null(),
+        },
+        values.as_ptr() as *const c_void,
+    ];
     let owned = Box::into_raw(Box::new(OwnedPrimitive::<T> {
         validity,
         values,
@@ -174,6 +180,12 @@ impl ForeignArray {
         unsafe { (*self.array).length }
     }
 
+    /// True when zero rows.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// Buffer slot pointers.
     ///
     /// # Safety
@@ -211,7 +223,7 @@ mod tests {
         b.push(None);
         b.push(Some(-1));
         let arr = b.finish();
-        let format = b"i\0".as_ptr() as *const c_char;
+        let format = c"i".as_ptr();
         let (array, _schema) = export(arr, format);
         assert_eq!(array.length, 3);
         assert_eq!(array.null_count, 1);

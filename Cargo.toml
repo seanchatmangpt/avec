@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/avec-arrow",
+    "crates/avec-parquet",
     "crates/avec-ffi",
     "crates/avec-beam",
     "crates/bench",
@@ -18,9 +19,14 @@ authors = ["Sean Chatman <info@chatmangpt.com>"]
 [profile.release]
 lto = "thin"
 codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+panic = "abort"
 
 [profile.audit]
 inherits = "release"
 lto = false
 codegen-units = 16
 strip = false
+panic = "abort"
