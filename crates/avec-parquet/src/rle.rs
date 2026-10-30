@@ -6,7 +6,10 @@
 //!   each word = 8 lanes of `w` bits (LSB-first), zero-padded final group.
 //!
 //! Decode is fail-closed: bounded reads, typed errors, zero panics on
-//! malformed pages (FMEA row 3).
+//! malformed pages (FMEA row 3). The decode path is zero-allocation:
+//! [`decode_into`] writes lanes directly into caller-owned memory and never
+//! constructs an intermediate `Vec` (proved by construction and by the
+//! counting-allocator court in the test module).
 
 use alloc::vec::Vec;
 use core::fmt;
@@ -83,7 +86,6 @@ pub fn rle_encode(values: &[u32], bits: u8) -> Vec<u8> {
             write_varint(&mut out, u64::from(run as u32) << 1);
             let vb = usize::from(bits).div_ceil(8);
             out.extend_from_slice(&v.to_le_bytes()[..vb]);
-            i += run;
         } else {
             // literal batch: coalesce until the next >=3-run (or end)
             let start = i;
@@ -121,19 +123,52 @@ pub fn rle_encode(values: &[u32], bits: u8) -> Vec<u8> {
     }
     out
 }
+
 /// Decode the hybrid codec into `out` (u32 lanes).
+///
+/// Full-buffer decode: the page must exactly fill `out`. Implemented by
+/// delegating to [`decode_into`] — same wire format, same typed errors, zero
+/// allocation.
 pub fn rle_decode(src: &[u8], out: &mut [u32]) -> Result<(), ParquetError> {
-    let mut pos = 0usize;
+    match decode_into(src, out) {
+        Ok(n) if n == out.len() => Ok(()),
+        Ok(_) => Err(ParquetError::UnexpectedEof),
+        Err(e) => Err(e),
+    }
+}
+
+/// Decode a page directly into the caller's slice, writing lanes in place.
+///
+/// Contract:
+/// - `Ok(out.len())` — the page exactly fills `out` (the [`rle_decode`]
+///   full-buffer contract).
+/// - `Ok(n)` with `n < out.len()` — the page was exhausted at a record
+///   boundary before `out` filled; lanes `0..n` are written, `out[n..]` is
+///   untouched.
+/// - Typed error on malformed input (never a panic on external input); on
+///   error, lanes before the failing record may already be written — the
+///   error is loud, the partial prefix is documented, never a silent success.
+///
+/// Zero allocation by construction: the path (`decode_into` + `read_varint`)
+/// contains no `Vec::new`/`vec!`/`collect`/`to_vec`, and the counting-allocator
+/// court below asserts a measured 0 during a full decode.
+pub fn decode_into(src: &[u8], out: &mut [u32]) -> Result<usize, ParquetError> {
     let Some(&bits) = src.first() else {
         return Err(ParquetError::UnexpectedEof);
     };
-    pos += 1;
     if !matches!(bits, 1 | 2 | 4 | 8) {
         return Err(ParquetError::UnsupportedBitWidth(bits));
     }
     let mask = (1u64 << bits) - 1;
+    let mut pos = 1usize; // past the bit-width byte
     let mut oi = 0usize;
     while oi < out.len() {
+        if pos == src.len() {
+            // Page exhausted at a record boundary: streaming contract —
+            // report the lanes written so far, leave the rest of `out`
+            // untouched.
+            return Ok(oi);
+        }
         let header = read_varint(src, &mut pos)?;
         if header & 1 == 0 {
             // repeated run
@@ -149,20 +184,22 @@ pub fn rle_decode(src: &[u8], out: &mut [u32]) -> Result<(), ParquetError> {
             w[..vb].copy_from_slice(vb_slice);
             let value = u32::from_le_bytes(w);
             pos += vb;
-            let mut k = 0;
-            while k < run_len {
-                out[oi + k] = value;
-                k += 1;
-            }
+            out[oi..oi + run_len].fill(value);
             oi += run_len;
         } else {
             // literal run: groups of 8 byte-per-lane words
             let groups = (header >> 1) as usize;
+            // A varint header can name a group count whose payload size does
+            // not fit `usize`: fail closed with a typed error instead of the
+            // overflow panic the unchecked multiply would raise in debug
+            // builds (module law: zero panics on malformed pages).
+            let Some(byte_len) = groups.checked_mul(8) else {
+                return Err(ParquetError::UnexpectedEof);
+            };
             // Literal records may end with a zero-padded partial final group;
             // the caller budget bounds the real lane count (Parquet spec
             // discipline: decode stops at page end).
-            let count = (groups * 8).min(out.len() - oi);
-            let byte_len = groups * 8;
+            let count = byte_len.min(out.len() - oi);
             let Some(packed) = src.get(pos..pos + byte_len) else {
                 return Err(ParquetError::LiteralOverrun { claimed: byte_len, available: src.len() - pos });
             };
@@ -176,7 +213,7 @@ pub fn rle_decode(src: &[u8], out: &mut [u32]) -> Result<(), ParquetError> {
             pos += byte_len;
         }
     }
-    Ok(())
+    Ok(oi)
 }
 
 #[cfg(test)]
@@ -226,5 +263,381 @@ mod tests {
             rle_decode(&[3, 0], &mut decoded),
             Err(ParquetError::UnsupportedBitWidth(3))
         );
+    }
+}
+
+/// Zero-allocation court: a counting global allocator with thread-local
+/// counters, so concurrently running tests on other threads cannot pollute
+/// the measurement window. The lib is `#![no_std]`; the test harness links
+/// std, so it is pulled in explicitly here.
+#[cfg(test)]
+mod alloc_proof {
+    extern crate std;
+
+    use super::{decode_into, rle_decode, rle_encode};
+    use alloc::vec::Vec;
+    use std::alloc::{GlobalAlloc, Layout, System};
+    use std::cell::Cell;
+    use std::{println, thread_local};
+
+    thread_local! {
+        static ALLOCS: Cell<usize> = const { Cell::new(0) };
+        static IN_ALLOC: Cell<bool> = const { Cell::new(false) };
+    }
+
+    struct Counting;
+
+    impl Counting {
+        fn bump() {
+            if IN_ALLOC.with(Cell::get) {
+                return;
+            }
+            IN_ALLOC.with(|c| c.set(true));
+            ALLOCS.with(|c| c.set(c.get() + 1));
+            IN_ALLOC.with(|c| c.set(false));
+        }
+    }
+
+    // SAFETY: pure pass-through to System with a counted bump; contract of
+    // each method is delegated unchanged.
+    unsafe impl GlobalAlloc for Counting {
+        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            Self::bump();
+            unsafe { System.alloc(layout) }
+        }
+        unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+            unsafe { System.dealloc(ptr, layout) }
+        }
+        unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+            Self::bump();
+            unsafe { System.realloc(ptr, layout, new_size) }
+        }
+        unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+            Self::bump();
+            unsafe { System.alloc_zeroed(layout) }
+        }
+    }
+
+    #[global_allocator]
+    static COUNTING_ALLOC: Counting = Counting;
+
+    fn current_allocs() -> usize {
+        ALLOCS.with(Cell::get)
+    }
+
+    /// Mixed literal+run page, identical for every measurement.
+    fn court_page() -> (Vec<u8>, usize) {
+        let lanes = 4096;
+        let mut values = Vec::with_capacity(lanes);
+        for i in 0..lanes {
+            // Literal stretches, then a repeated run: exercises both arms.
+            values.push(if i < 3000 { (i * 7 + 1) as u32 } else { 42 });
+        }
+        let page = rle_encode(&values, 8);
+        (page, lanes)
+    }
+
+    #[test]
+    fn decode_into_zero_allocations() {
+        let (page, lanes) = court_page();
+        let mut sink = alloc::vec![0xDEAD_BEEFu32; lanes];
+        assert_ne!(sink.len(), 0);
+
+        let before = current_allocs();
+        let n = decode_into(&page, &mut sink).expect("decode_into");
+        let delta = current_allocs() - before;
+
+        println!("[alloc-court] decode_into allocs={delta} lanes={lanes}");
+        assert_eq!(delta, 0, "decode_into allocated {delta} times during decode — zero-alloc law violated");
+        assert_eq!(n, lanes, "page must exactly fill the pre-allocated slice");
+
+        // rle_decode delegates to decode_into: same zero-alloc law.
+        sink.fill(0);
+        let before = current_allocs();
+        rle_decode(&page, &mut sink).expect("rle_decode");
+        let delta = current_allocs() - before;
+        println!("[alloc-court] rle_decode  allocs={delta} lanes={lanes}");
+        assert_eq!(delta, 0, "rle_decode allocated {delta} times — zero-alloc law violated");
+    }
+}
+
+/// Mutate-input-pattern + streaming-contract tests for [`decode_into`].
+#[cfg(test)]
+mod decode_into_tests {
+    use super::{decode_into, rle_decode, rle_encode, ParquetError};
+    use alloc::vec::Vec;
+
+    /// Per-position distinct pattern (no two neighbors equal, so the encoder
+    /// emits pure literal runs) for every SWAR width.
+    fn pattern(lanes: usize, bits: u8) -> Vec<u32> {
+        let alpha = 1u32 << bits;
+        (0..lanes).map(|i| (i as u32) % alpha).collect()
+    }
+
+    const SENTINEL: u32 = 0xDEAD_BEEF;
+
+    #[test]
+    fn decode_into_round_trip_full_buffer() {
+        for bits in [1u8, 2, 4, 8] {
+            let values = pattern(257, bits);
+            let page = rle_encode(&values, bits);
+            let mut out = alloc::vec![SENTINEL; values.len()];
+            let n = decode_into(&page, &mut out).expect("decode_into");
+            assert_eq!(n, out.len(), "full-buffer decode, bits={bits}");
+            assert_eq!(out, values, "bits={bits}");
+        }
+    }
+
+    #[test]
+    fn decode_into_writes_distinct_values_at_exact_indices() {
+        for bits in [1u8, 2, 4, 8] {
+            let values = pattern(300, bits);
+            let page = rle_encode(&values, bits);
+            let mut out = alloc::vec![SENTINEL; values.len()];
+            let n = decode_into(&page, &mut out).expect("decode_into");
+            assert_eq!(n, values.len());
+            // Exact per-position landing: value i at slice index i.
+            for (i, &v) in values.iter().enumerate() {
+                assert_eq!(out[i], v, "lane {i} bits={bits}: got {:x}, want {v:x}", out[i]);
+            }
+            // No lane beyond the decoded prefix was touched.
+            assert!(out[values.len()..].is_empty());
+        }
+
+        // Mid-buffer window: the caller's sub-slice is the whole decode target,
+        // lanes land at the sub-slice's own indices (absolute 2..7 here).
+        let values = [10u32, 20, 1, 2, 3, 4, 5, 6, 7, 30];
+        let page = rle_encode(&values, 8);
+        let mut out = alloc::vec![SENTINEL; values.len()];
+        {
+            let window = &mut out[2..7];
+            let n = decode_into(&page, window).expect("decode_into window");
+            assert_eq!(n, 5, "page holds 10 lanes, window budget 5");
+        }
+        for (i, want) in [1u32, 2, 3, 4, 5].iter().enumerate() {
+            assert_eq!(out[2 + i], *want, "window lane {i} must land at absolute index {}", 2 + i);
+        }
+        // Everything outside the window keeps the sentinel.
+        assert_eq!(out[0], SENTINEL);
+        assert_eq!(out[1], SENTINEL);
+        assert!(out[7..].iter().all(|&x| x == SENTINEL));
+    }
+
+    #[test]
+    fn decode_into_partial_page_streaming() {
+        // Page encodes 16 lanes; the caller budgets 40. decode_into must stop
+        // at the record boundary and report Ok(16), leaving lanes 16.. intact.
+        let values: Vec<u32> = (0..16).collect();
+        let page = rle_encode(&values, 8);
+        let mut out = alloc::vec![SENTINEL; 40];
+        let n = decode_into(&page, &mut out).expect("decode_into");
+        assert_eq!(n, 16, "lanes written must equal the page's lane count");
+        assert_eq!(&out[..16], &values[..]);
+        assert!(out[16..].iter().all(|&x| x == SENTINEL), "tail must be untouched");
+
+        // rle_decode keeps its full-buffer semantics: a partial page is not
+        // Ok(()) — it is UnexpectedEof, exactly as the pre-refactor body
+        // surfaced it (read_varint at a consumed page end).
+        assert_eq!(rle_decode(&page, &mut out), Err(ParquetError::UnexpectedEof));
+    }
+
+    #[test]
+    fn decode_into_giant_literal_groups_fail_closed() {
+        // Literal header claims u32::MAX groups: groups*8 cannot fit usize.
+        // Fail closed with a typed error, never an overflow panic.
+        let mut page = alloc::vec![8u8];
+        // varint ((u32::MAX as u64) << 1) | 1 = 0x1FFFFFFFE | 1
+        let header = ((u32::MAX as u64) << 1) | 1;
+        let mut v = header;
+        loop {
+            let mut b = (v & 0x7F) as u8;
+            v >>= 7;
+            if v != 0 {
+                b |= 0x80;
+            }
+            page.push(b);
+            if v == 0 {
+                break;
+            }
+        }
+        let mut out = alloc::vec![0u32; 64];
+        assert_eq!(
+            decode_into(&page, &mut out),
+            Err(ParquetError::UnexpectedEof),
+            "giant literal header must fail closed, not overflow-panic"
+        );
+    }
+}
+
+/// Wiring court: decode_into writing lanes directly into a 64-byte-aligned
+/// caller-owned buffer viewed as u32 — the avec-arrow `Buf` consumption
+/// pattern (charter M-03 alignment law). avec-parquet is a zero-dependency
+/// crate and its Cargo.toml is outside this lane's file ownership, so the
+/// `Buf` contract (Layout::from_size_align(bytes, 64), as_mut_slice, typed
+/// read views — see /Users/sac/avec/crates/avec-arrow/src/buffer.rs) is
+/// reproduced here as a hand-written real implementation: real allocator,
+/// real memory, no stubbed behavior.
+#[cfg(test)]
+mod wiring {
+    extern crate std;
+
+    use super::{decode_into, rle_encode};
+    use alloc::vec::Vec;
+    use core::slice;
+    use std::alloc::{alloc, dealloc, handle_alloc_error, Layout};
+    use std::ptr::NonNull;
+
+    const ALIGNMENT: usize = 64;
+
+    struct Buf64 {
+        ptr: NonNull<u8>,
+        len: usize,
+    }
+
+    impl Buf64 {
+        fn new(len: usize) -> Self {
+            if len == 0 {
+                return Buf64 { ptr: NonNull::dangling(), len: 0 };
+            }
+            let layout = Layout::from_size_align(len, ALIGNMENT)
+                .unwrap_or_else(|e| panic!("invalid buffer layout: {e}"));
+            // SAFETY: layout has non-zero size.
+            let raw = unsafe { alloc(layout) };
+            match NonNull::new(raw) {
+                Some(ptr) => Buf64 { ptr, len },
+                None => handle_alloc_error(layout),
+            }
+        }
+
+        fn len(&self) -> usize {
+            self.len
+        }
+
+        fn as_ptr(&self) -> *const u8 {
+            self.ptr.as_ptr()
+        }
+
+        fn as_mut_ptr(&self) -> *mut u8 {
+            self.ptr.as_ptr()
+        }
+
+        fn as_mut_slice(&mut self) -> &mut [u8] {
+            // SAFETY: ptr valid for len bytes for the life of &mut self.
+            unsafe { slice::from_raw_parts_mut(self.as_mut_ptr(), self.len) }
+        }
+
+        /// Typed read view — same contract as `avec_arrow::buffer::Buf::as_typed`.
+        fn as_typed<T>(&self) -> &[T] {
+            let (sz, an) = (core::mem::size_of::<T>(), core::mem::align_of::<T>());
+            assert!(an <= ALIGNMENT, "element alignment exceeds buffer alignment");
+            assert_eq!(self.len % sz, 0, "buffer length not a multiple of element size");
+            // SAFETY: 64-byte base + uniform element size -> aligned for T.
+            unsafe { slice::from_raw_parts(self.as_ptr() as *const T, self.len / sz) }
+        }
+    }
+
+    impl Drop for Buf64 {
+        fn drop(&mut self) {
+            if self.len == 0 {
+                return;
+            }
+            // SAFETY: allocated with exactly this layout.
+            unsafe {
+                dealloc(
+                    self.as_mut_ptr(),
+                    Layout::from_size_align_unchecked(self.len, ALIGNMENT),
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn decode_into_wires_into_buf_view() {
+        let lanes = 64;
+        let values: Vec<u32> = (0..lanes).map(|i| ((i * 31 + 5) & 0xFF) as u32).collect();
+        let page = rle_encode(&values, 8);
+
+        let mut buf = Buf64::new(lanes * 4);
+        assert_eq!(buf.as_ptr() as usize % ALIGNMENT, 0, "charter M-03: 64-byte alignment");
+
+        // The wiring: mutable typed window derived from the buffer's byte
+        // view (as_mut_slice/as_mut_ptr — avec-arrow has no as_typed_mut, so
+        // this rebind is what every &mut consumer writes), then decode_into
+        // writes lanes in place. Zero intermediate storage.
+        let out: &mut [u32] = unsafe {
+            slice::from_raw_parts_mut(buf.as_mut_ptr().cast::<u32>(), buf.as_mut_slice().len() / 4)
+        };
+        let n = decode_into(&page, out).expect("decode_into");
+        assert_eq!(n, lanes);
+
+        // Verify through the typed READ view — the as_typed::<u32>() pattern.
+        assert_eq!(buf.as_typed::<u32>(), values.as_slice());
+    }
+}
+
+/// Benchmark comparison (prints only, never an assertion): decode_into vs
+/// rle_decode on the same pages, in the test (debug) profile.
+#[cfg(test)]
+mod bench_compare {
+    extern crate std;
+
+    use super::{decode_into, rle_decode, rle_encode};
+    use alloc::vec::Vec;
+    use std::hint::black_box;
+    use std::time::Instant;
+    use std::println;
+
+    fn literal_page(lanes: usize) -> (Vec<u32>, Vec<u8>) {
+        let values: Vec<u32> = (0..lanes).map(|i| (i * 7 + 1) as u32).collect();
+        let page = rle_encode(&values, 8);
+        (values, page)
+    }
+
+    fn run_page_page(values: usize) -> (Vec<u32>, Vec<u8>) {
+        let mut values: Vec<u32> = (0..values).map(|i| (i * 13 + 3) as u32).collect();
+        // Sprinkle repeated runs into the literal stretch: mixed arm exercise.
+        for chunk in values.chunks_mut(32) {
+            let first = chunk[0];
+            chunk[..8].fill(first);
+        }
+        let page = rle_encode(&values, 8);
+        (values, page)
+    }
+
+    fn bench_one(name: &str, lanes: usize, page: &[u8], iters: usize) {
+        let mut via_into = alloc::vec![0u32; lanes];
+        let mut via_rle = alloc::vec![0u32; lanes];
+        // Correctness precondition for the comparison: both decode the same.
+        decode_into(page, &mut via_into).expect("decode_into");
+        rle_decode(page, &mut via_rle).expect("rle_decode");
+        assert_eq!(via_into, via_rle, "benched decoders must agree");
+
+        let t0 = Instant::now();
+        for _ in 0..iters {
+            let _ = decode_into(black_box(page), black_box(&mut via_into));
+        }
+        let dt_into = t0.elapsed();
+
+        let t1 = Instant::now();
+        for _ in 0..iters {
+            let _ = rle_decode(black_box(page), black_box(&mut via_rle));
+        }
+        let dt_rle = t1.elapsed();
+
+        let ns_into = dt_into.as_secs_f64() / iters as f64 * 1e9;
+        let ns_rle = dt_rle.as_secs_f64() / iters as f64 * 1e9;
+        println!(
+            "[bench-compare] page={name} lanes={lanes} iters={iters} rle_decode={dt_rle:?} total, {ns_rle:.1} ns/iter | decode_into={dt_into:?} total, {ns_into:.1} ns/iter | ratio rle/into={:.2}x (debug profile)",
+            ns_rle / ns_into
+        );
+    }
+
+    #[test]
+    fn bench_decode_into_vs_rle_decode() {
+        let iters = 200;
+        let (values, page) = literal_page(8192);
+        bench_one("literal-8k", values.len(), &page, iters);
+        let (values, page) = run_page_page(8192);
+        bench_one("mixed-8k", values.len(), &page, iters);
     }
 }

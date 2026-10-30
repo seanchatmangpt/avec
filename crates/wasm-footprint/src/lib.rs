@@ -71,7 +71,6 @@ unsafe impl GlobalAlloc for BumpAlloc {
 impl BumpAlloc {
     fn alloc_impl(&self, layout: Layout) -> *mut u8 {
         let base = HEAP._bytes.as_ptr() as usize;
-        let end = base + HEAP_SIZE;
         let align = layout.align();
         let size = layout.size();
         let mut cur = BUMP.load(Ordering::Relaxed);

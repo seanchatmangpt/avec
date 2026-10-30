@@ -137,13 +137,14 @@ fn main() {
         .collect();
     let mut outs: Vec<Vec<u64>> = (0..16).map(|_| vec![0u64; WORDS]).collect();
     let t1 = Instant::now();
+    // 17-party barrier scopes the alloc counter to the kernel window: threads
+    // park AFTER their spawn-time allocations (thread spawn itself allocates —
+    // witnessed 51 allocs from 16 spawns), main resets COUNT and arrives last,
+    // so release happens-after the reset for every thread and only mask_words
+    // is counted. Declared outside `scope`: spawned closures borrow it for
+    // 'scope, so it must outlive the scope.
+    let barrier = Barrier::new(17);
     thread::scope(|s| {
-        // 17-party barrier scopes the alloc counter to the kernel window:
-        // threads park AFTER their spawn-time allocations (thread spawn itself
-        // allocates — witnessed 51 allocs from 16 spawns), main resets COUNT
-        // and arrives last, so release happens-after the reset for every
-        // thread and only mask_words is counted.
-        let barrier = Barrier::new(17);
         for (v, o) in lanes.iter().zip(outs.iter_mut()) {
             let p = &lanes[0];
             let b = &barrier;

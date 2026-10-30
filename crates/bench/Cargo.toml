@@ -1,4 +1,5 @@
 [package]
+default-run = "bench"
 name = "bench"
 version.workspace = true
 edition.workspace = true
