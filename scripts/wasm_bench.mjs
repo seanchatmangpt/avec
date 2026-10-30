@@ -167,4 +167,245 @@ console.log(`runs:       ${WARMUP} warmup + min of ${RUNS} timed (hrtime.bigint)
 console.log(`wasm mask: ${gibps.toFixed(2)} GiB/s`);
 console.log(`runs_ms:    [${runsMs.map((m) => m.toFixed(3)).join(', ')}] (min ${minMs.toFixed(3)})`);
 console.log(`consume:    out[0]=0x${gotHead.toString(16)} out[n-1]=0x${gotTail.toString(16)} folded=0x${folded.toString(16).padStart(16, '0')} (head+tail == valid&pred)`);
+
+// ===========================================================================
+// W=4 page-body decode: differential court + throughput bench.
+// ===========================================================================
+//
+// Subject: wasm_decode_page_body_w4 — the W=4 constant-parameter
+// specialization of avec_parquet::rle::decode_into exported by the same
+// artifact (crates/wasm-footprint/src/lib.rs): width byte admitted only if
+// exactly 4, then the record loop with the width dispatch folded away
+// (literals = 8 byte-per-lane words, lane k = byte k%8 & 0x0F; repeated
+// runs = (count<<1)|0 with one LE value byte; run fill values are NOT
+// masked — exact mirror of the general decoder's unmasked from_le_bytes
+// fill).
+//
+// Differential chain (fail-closed, before any timing):
+//   1. Fixture provenance: BODY_HEX/LANES_HEX below were minted by the
+//      Rust court `w4_courts::w4_mints_js_fixture` in
+//      crates/wasm-footprint/src/lib.rs — body bytes from the real
+//      avec_parquet::rle::rle_encode, lane values proven lane-exact
+//      against the real avec_parquet::rle::decode_into (test
+//      `w4_courts::differential_vs_decode_into`). Regenerate with
+//      `cargo test --lib w4_mints_js_fixture -- --nocapture` from
+//      crates/wasm-footprint and re-paste (minted 2026-10-29, version
+//      26.10.29).
+//   2. wasm(fixture) must equal LANES_HEX exactly — the compiled artifact
+//      agrees with the Rust decode_into oracle.
+//   3. JS reference(fixture) must equal LANES_HEX exactly — the reference
+//      below is proven against the same oracle, not just self-consistent.
+//   4. wasm(bench body) must equal reference(bench body) byte-exact over
+//      all lanes — then the reference verifies every timed decode.
+//   5. Width refusal: a width-8 body is a typed status 1 with lanes
+//      untouched.
+//
+// Timing: same method as the mask bench — 2 untimed warmups, min of 5
+// timed calls (hrtime.bigint), deterministic body, poisoned out consumed
+// after the run. Bytes moved per timed call = body bytes read + 4 B/lane
+// written.
+
+const RLE4_FIXTURE_BODY_HEX =
+    '040b01080f060d040b020900070e050c030a01080f060d040b020900070e050c030a01080f060d040b022807030102040800000000';
+const RLE4_FIXTURE_LANES_HEX =
+    '00000001000000080000000f000000060000000d000000040000000b00000002'
+    + '0000000900000000000000070000000e000000050000000c000000030000000a'
+    + '00000001000000080000000f000000060000000d000000040000000b00000002'
+    + '0000000900000000000000070000000e000000050000000c000000030000000a'
+    + '00000001000000080000000f000000060000000d000000040000000b00000002'
+    + '0000000700000007000000070000000700000007000000070000000700000007'
+    + '0000000700000007000000070000000700000007000000070000000700000007'
+    + '0000000700000007000000070000000700000001000000020000000400000008';
+
+function hexToBytes(hex) {
+    if (hex.length % 2 !== 0) fail(`fixture hex odd length: ${hex.length}`);
+    const out = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < out.length; i++) {
+        out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+        if (Number.isNaN(out[i])) fail(`fixture hex bad byte at ${i}`);
+    }
+    return out;
+}
+
+function hexToLanes(hex) {
+    if (hex.length % 8 !== 0) fail(`fixture lanes hex not u32-aligned: ${hex.length}`);
+    const out = new Uint32Array(hex.length / 8);
+    for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i * 8, i * 8 + 8), 16);
+    return out;
+}
+
+// JS reference decoder: exact w=4 mirror of decode_into (see header comment).
+function decodeIntoW4Reference(src, outLen) {
+    if (src.length === 0) throw new Error('UnexpectedEof');
+    if (src[0] !== 4) throw new Error(`UnsupportedBitWidth(${src[0]})`);
+    let pos = 1;
+    let oi = 0;
+    const out = new Uint32Array(outLen);
+    while (oi < outLen) {
+        if (pos === src.length) break; // streaming end at record boundary
+        let header = 0;
+        let shift = 0;
+        for (;;) {
+            if (pos >= src.length) throw new Error('UnexpectedEof');
+            const b = src[pos++];
+            header += (b & 0x7F) * 2 ** shift;
+            if ((b & 0x80) === 0) break;
+            shift += 7;
+            if (shift >= 64) throw new Error('UnexpectedEof (varint shift >= 64)');
+        }
+        if (header % 2 === 0) {
+            // repeated run: (count<<1)|0, one LE value byte, fill UNMASKED
+            const runLen = Math.floor(header / 2);
+            if (runLen > outLen - oi) throw new Error(`RunOverrun(run=${runLen}, budget=${outLen - oi})`);
+            if (pos >= src.length) throw new Error('UnexpectedEof (run value)');
+            const v = src[pos];
+            pos += 1; // ceil(4/8) = 1 value byte
+            out.fill(v, oi, oi + runLen);
+            oi += runLen;
+        } else {
+            // literal batch: groups 8-lane byte-per-lane words, lane & 0x0F
+            const groups = Math.floor(header / 2);
+            const byteLen = groups * 8;
+            const count = Math.min(byteLen, outLen - oi);
+            if (pos + byteLen > src.length) throw new Error(`LiteralOverrun(claimed=${byteLen}, avail=${src.length - pos})`);
+            for (let k = 0; k < count; k++) out[oi + k] = src[pos + k] & 0x0F;
+            oi += count;
+            pos += byteLen;
+        }
+    }
+    return out;
+}
+
+// --- Instantiate the w=4 surface on the same artifact ----------------------
+if (typeof e.wasm_decode_page_body_w4 !== 'function') {
+    fail('export missing: wasm_decode_page_body_w4 (w=4 court requires it)');
+}
+
+// Second memory.grow for the page-decode buffers (grow detaches old views;
+// the mask section is fully reported above, so fresh views are made here).
+const LANES4 = 96 * 41666;               // 3,999,936 lanes (96-lane cycle)
+const OUT4_BYTES = LANES4 * 4;           // 15,999,744 B out buffer
+const BODY4_CAP = Math.ceil(LANES4 * 3 / 4) + 4096; // upper bound before gen
+const PAGES4 = Math.ceil((OUT4_BYTES + BODY4_CAP + 65536) / 65536);
+let oldPages4;
+try {
+    oldPages4 = e.memory.grow(PAGES4);
+} catch (err) {
+    fail(`memory.grow(${PAGES4}) for w=4 section failed: ${err}`);
+}
+if (!Number.isInteger(oldPages4)) fail(`second memory.grow returned ${oldPages4}`);
+const u8v = new Uint8Array(e.memory.buffer);   // fresh views post-grow
+const u32v = new Uint32Array(e.memory.buffer);
+
+// --- Fixture differential (Rust-minted bytes, Rust-oracle lanes) -----------
+const fixtureBody = hexToBytes(RLE4_FIXTURE_BODY_HEX);
+const fixtureWant = hexToLanes(RLE4_FIXTURE_LANES_HEX);
+
+const fixBodyOff = alloc(fixtureBody.length);
+u8v.set(fixtureBody, fixBodyOff);
+const fixOutOff = alloc(fixtureWant.length * 4);
+for (let i = 0; i < fixtureWant.length; i++) u32v[(fixOutOff >> 2) + i] = 0xDEADBEEF;
+const fixRet = e.wasm_decode_page_body_w4(fixBodyOff, fixtureBody.length, fixOutOff, fixtureWant.length);
+if (fixRet !== 0) fail(`fixture decode returned ${fixRet}, want 0`);
+const fixGot = u32v.slice((fixOutOff >> 2), (fixOutOff >> 2) + fixtureWant.length);
+if (!fixGot.every((v, i) => v === fixtureWant[i]) ) {
+    fail(`fixture differential vs Rust decode_into FAILED at lane ${
+        fixGot.findIndex((v, i) => v !== fixtureWant[i])}`);
+}
+
+const refFixture = decodeIntoW4Reference(fixtureBody, fixtureWant.length);
+for (let i = 0; i < fixtureWant.length; i++) {
+    if (refFixture[i] !== fixtureWant[i]) {
+        fail(`JS reference vs Rust oracle MISMATCH at lane ${i}: ref=${refFixture[i]} oracle=${fixtureWant[i]}`);
+    }
+}
+console.log(`w4 court:  fixture ${fixtureBody.length} B / ${fixtureWant.length} lanes byte-exact vs Rust decode_into; JS reference agrees (5 chain steps)`);
+// Width refusal: same page footprint.sh's court uses for width 8.
+{
+    const w8 = [0x08, 0x0A, 0x2A];
+    const off = alloc(w8.length);
+    for (let i = 0; i < w8.length; i++) u8v[off + i] = w8[i];
+    const o = alloc(5 * 4);
+    for (let i = 0; i < 5; i++) u32v[(o >> 2) + i] = 0xDEADBEEF;
+    const ret = e.wasm_decode_page_body_w4(off, w8.length, o, 5);
+    if (ret !== 1) fail(`width-8 refusal returned ${ret}, want typed 1`);
+    for (let i = 0; i < 5; i++) {
+        if (u32v[(o >> 2) + i] !== 0xDEADBEEF) fail(`width-8 refusal touched lane ${i}`);
+    }
+}
+console.log('w4 court:  width-8 body refused (ret=1), lanes untouched');
+
+// --- Deterministic w=4 bench body + reference decode ------------------------
+// 96-lane cycle: 32 literal lanes (per-lane (i*7+1)&0xF, never 3-equal),
+// 32 literal lanes, then a 32-lane repeated run — both record arms, mixed.
+const body4 = new Uint8Array(BODY4_CAP);
+let body4Len = 0;
+body4[body4Len++] = 0x04; // width byte
+for (let i = 0; i < LANES4; ) {
+    const phase = (i / 32) % 3;
+    if (phase === 2) {
+        body4[body4Len++] = (32 << 1);            // run header varint(64)
+        body4[body4Len++] = (i * 7 + 1) & 0xF;    // value byte
+        i += 32;
+    } else {
+        body4[body4Len++] = (4 << 1) | 1;         // literal header, 4 groups
+        for (let k = 0; k < 32; k++) {
+            body4[body4Len++] = (i * 7 + 1) & 0xF;
+            i++;
+        }
+        // lint guard: header varint is single-byte (9), no continuation
+    }
+}
+const body4Bytes = body4.subarray(0, body4Len);
+const BYTES_MOVED4 = body4Len + OUT4_BYTES;
+
+const bodyOff = alloc(body4Len);
+u8v.set(body4Bytes, bodyOff);
+const out4Off = alloc(OUT4_BYTES);
+for (let i = 0; i < LANES4; i++) u32v[(out4Off >> 2) + i] = 0xDEADBEEF; // poison
+
+const want4 = decodeIntoW4Reference(body4Bytes, LANES4);
+
+function callDecode4() {
+    return e.wasm_decode_page_body_w4(bodyOff, body4Len, out4Off, LANES4);
+}
+for (let r = 0; r < WARMUP; r++) {
+    const ret = callDecode4();
+    if (ret !== 0) fail(`w=4 warmup ${r + 1} returned ${ret}`);
+}
+const runs4 = [];
+for (let r = 0; r < RUNS; r++) {
+    let ns;
+    try {
+        const t0 = process.hrtime.bigint();
+        const ret = callDecode4();
+        const t1 = process.hrtime.bigint();
+        ns = t1 - t0;
+        if (ret !== 0) fail(`w=4 timed call ${r + 1} returned ${ret}`);
+    } catch (err) {
+        fail(`w=4 timed call ${r + 1} trapped: ${err}`);
+    }
+    runs4.push(Number(ns) / 1e6);
+}
+const min4 = Math.min(...runs4);
+if (!(min4 > 0)) fail(`w=4 min run time is ${min4} ms — unusable measurement`);
+
+// Consume the timed output: full byte-exact compare against the reference.
+for (let i = 0; i < LANES4; i++) {
+    if (u32v[(out4Off >> 2) + i] !== want4[i]) {
+        fail(`w=4 consumption: lane ${i} got ${u32v[(out4Off >> 2) + i]} want ${want4[i]}`);
+    }
+}
+let folded4 = 0;
+for (const idx of [0, 1, LANES4 - 2, LANES4 - 1]) {
+    folded4 = (folded4 ^ want4[idx]) >>> 0;
+}
+
+console.log(`layout4:    n = ${LANES4.toLocaleString('en-US')} lanes x 4 B out; body ${body4Len.toLocaleString('en-US')} B (literal+run mix, 96-lane cycle)`);
+console.log(`bytes moved4: ${BYTES_MOVED4.toLocaleString('en-US')} B per timed call (body ${body4Len.toLocaleString('en-US')} read + ${OUT4_BYTES.toLocaleString('en-US')} written)`);
+console.log(`runs4:      ${WARMUP} warmup + min of ${RUNS} timed (hrtime.bigint)`);
+const gibps4 = BYTES_MOVED4 / (min4 / 1000) / (1024 ** 3);
+console.log(`wasm page-decode w=4: ${gibps4.toFixed(2)} GiB/s`);
+console.log(`runs4_ms:   [${runs4.map((m) => m.toFixed(3)).join(', ')}] (min ${min4.toFixed(3)})`);
+console.log(`consume4:   3,999,936 lanes byte-exact vs JS reference (fixture-proven vs Rust oracle); folded=0x${folded4.toString(16).padStart(8, '0')}`);
 process.exit(0);
