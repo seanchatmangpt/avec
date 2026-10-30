@@ -25,6 +25,7 @@ extern crate alloc;
 
 pub mod batch;
 pub mod bitmap;
+pub mod blake3;
 pub mod branchless;
 pub mod buffer;
 pub mod c_abi;

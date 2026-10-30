@@ -5,6 +5,7 @@ members = [
     "crates/avec-parquet",
     "crates/avec-ffi",
     "crates/avec-beam",
+    "crates/avec-gpu",
     "crates/bench",
     "crates/audit",
     "crates/integration",

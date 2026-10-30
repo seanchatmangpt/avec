@@ -76,6 +76,9 @@ citations resolve here: `crates/avec-arrow/src/bitmap.rs` cites charter CTQ-2;
 | CTQ-5 | 100% C Data Interface parity (av:ctq5) | `make gate3` (`gate3_cdata.py`) | PASS (PyArrow 26.0.0 parity) |
 | A-1 | zero post-init allocations in measured scan | `make gate2`, `make bench-gate` | PASS (0 allocs across all scans) |
 | BEAM-1 | BEAM NIF normal-scheduler twin + resource binary | `make test-beam` | PASS (OTP 29, 100% asserts passed) |
+| CTQ-PC1 | Compressed-domain algebraic sum >= 100 GiB/s logical | `phase_change_bench` | PASS (106.98–516.89 GiB/s logical) |
+| CTQ-PC2 | Zero-probe perfect minimal hash <= 1.5 ns/lookup | `phase_change_bench` | PASS (0.53 ns/lookup, 0 probe branches) |
+| CTQ-PC3 | 16 KiB MMU hardware page alignment | `phase_change_bench` | PASS (1353.75 GiB/s, 16384B boundary) |
 
 Measured baseline, 2026-10-30, macOS arm64 (Apple Silicon), stable Rust, exit codes captured
 (lane REL-L11; all commands executed this session):
@@ -94,6 +97,11 @@ Measured baseline, 2026-10-30, macOS arm64 (Apple Silicon), stable Rust, exit co
   - `byteslice_bench`: 2.656–2.789 GiB/s scan rate; point lookup latency 0.910 ns/lookup ($k \le 8$) to 1.346 ns ($k=12$); 0 allocs.
   - `dict_bench`: 3.577–3.640 GiB/s decode; 0 allocs.
   - `packed_filter_bench`: 19,716.4 Mrows/s at $w=1$ (32.6x speedup over materialize-then-mask); 0 allocs.
+- **Civilizational Phase Changes (`phase_change_bench`, exit 0)**:
+  - `sum_masked_vertical_128`: **516.89 GiB/s** logical uncompressed rate at $w=1$ (69,376.2 Mrows/s); **216.64 GiB/s** at $w=4$ (29,076.8 Mrows/s); **106.98 GiB/s** at $w=12$; 0 allocations.
+  - `PerfectMap`: **0.53 ns/lookup** (1,871.1 Mlookups/s); 0 collision probe loops; 0 allocations.
+  - `MmuBuf`: 16 KiB MMU hardware page allocation & verification at **1,353.75 GiB/s**.
+  - `Fingerprint`: In-register $GF(2^{128})$ universal polynomial accumulator folding at **3.97 GiB/s** (0 extra memory passes).
 - **CTQ-2 (`make branch-audit`, exit 0)**:
   - Inner-loop bodies branch-free in 3/9 loop kernels (`mask_words`, `count_valid`, `mask_words_neon`, `BODY 0/0` each).
   - Conditionals itemized: 71 total across 9 kernels (+12 branch-free wrapper shims); panic/fail paths: 8; unaccounted: 0.

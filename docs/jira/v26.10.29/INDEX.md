@@ -14,6 +14,8 @@ Derived from real repository state, compiler output, and gate verification ladde
 | [AVEC-107](AVEC-107-branchless-primitives-topology.md) | Canonical Branchless Execution Topology & Zero-Stall Primitives | Workspace | High | RESOLVED |
 | [AVEC-108](AVEC-108-in-loop-branch-elimination.md) | In-Loop Conditional Branch Elimination & Invariant Verification | `avec-arrow`, `avec-parquet` | High | RESOLVED |
 | [AVEC-109](AVEC-109-benchmark-parity-check.md) | Benchmark Parity & Performance Audit Post-Innovations | Workspace | High | RESOLVED |
+| [AVEC-110](AVEC-110-phase-change-benchmarks.md) | Dedicated Release Benchmark Suite for Civilizational Phase Changes | `bench`, Workspace | High | RESOLVED |
+| [AVEC-111](AVEC-111-metal-gpu-and-blake3.md) | Freestanding Apple Silicon Metal Unified Memory & Sovereign BLAKE3 Core | `avec-gpu`, `avec-arrow` | High | RESOLVED |
 
 ## Invariant Dependency Graph
 
