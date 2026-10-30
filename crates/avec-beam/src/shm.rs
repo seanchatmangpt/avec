@@ -864,6 +864,9 @@ mod cli {
     }
 
     fn serve_pingpong(req: &str, rsp: &str, n: u64, deadline: Instant) -> i32 {
+        // Pre-unlink both names (works on ghosts; see serve_throughput).
+        let _ = ShmRing::unlink(req);
+        let _ = ShmRing::unlink(rsp);
         let mut req_ring = match ShmRing::create(req) {
             Ok(r) => r,
             Err(e) => {
