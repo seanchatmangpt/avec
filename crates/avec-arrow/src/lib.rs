@@ -27,6 +27,7 @@ pub mod bitmap;
 pub mod buffer;
 pub mod c_abi;
 pub mod c_abi_nested;
+pub mod digest;
 pub mod primitive;
 pub mod runend;
 pub mod silicon;
