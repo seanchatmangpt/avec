@@ -28,6 +28,7 @@ pub mod bitmap;
 pub mod buffer;
 pub mod c_abi;
 pub mod c_abi_nested;
+pub mod chase_lev;
 pub mod digest;
 pub mod foreign;
 pub mod primitive;
