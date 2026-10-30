@@ -230,7 +230,7 @@ fn main() {
             consume_bytes(m);
         });
 
-        let speedup = mrows_mat / mrows_packed;
+        let speedup = mrows_packed / mrows_mat;
         println!(
             "packed_filter summary w={w}: packed-domain is {speedup:.2}x the \
              materialize-then-mask logical-rows/s"
