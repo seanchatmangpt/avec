@@ -6,7 +6,7 @@
 //! through pyarrow's `_import_from_c`.
 
 use avec_arrow::c_abi::{export, ArrowArray, ArrowSchema};
-use avec_arrow::primitive::{PrimitiveBuilder, Scalar};
+use avec_arrow::primitive::PrimitiveBuilder;
 use core::sync::atomic::{AtomicPtr, Ordering};
 
 /// Live export slots read by the foreign importer.

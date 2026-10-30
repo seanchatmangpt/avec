@@ -23,12 +23,7 @@ sparql:
 // crates/avec-parquet/src/compiled_manifest.rs.
 
 pub const SPECIALIZATION_MANIFEST: &[Spec] = &[
-{% for row in results -%}
-{%- set w = row.width | int -%}
-{%- if w <= 8 %}
-    Spec { width: {{ w }}, encoding: Enc::Rle, kernel: rle_w::<{{ w }}> },
-{% else %}
-    Spec { width: {{ w }}, encoding: Enc::Plain, kernel: plain_w::<{{ w }}> },
-{% endif -%}
-{%- endfor %}
-];
+{% for row in results %}{% set w = row.width | int %}{% if w <= 8 %}    Spec { width: {{ w }}, encoding: Enc::Rle, kernel: rle_w::<{{ w }}> },
+{% else %}    Spec { width: {{ w }}, encoding: Enc::Plain, kernel: plain_w::<{{ w }}> },
+{% endif %}{% endfor %}];
+
