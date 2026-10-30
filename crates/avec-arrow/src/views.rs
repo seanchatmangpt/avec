@@ -112,8 +112,9 @@ impl ViewVecBuilder {
                 } else {
                     let off = self.data.len() as u32;
                     self.views.extend_from_slice(&bytes[..4]);
-                    self.views.extend_from_slice(&off.to_le_bytes());
+                    // [buffer_index: u32][offset: u32] — index slot first, then offset.
                     self.views.extend_from_slice(&0u32.to_le_bytes());
+                    self.views.extend_from_slice(&off.to_le_bytes());
                     self.data.extend_from_slice(bytes);
                 }
                 self.validity.push(true);

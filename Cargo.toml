@@ -7,6 +7,7 @@ members = [
     "crates/avec-beam",
     "crates/bench",
     "crates/audit",
+    "crates/integration",
 ]
 
 [workspace.package]

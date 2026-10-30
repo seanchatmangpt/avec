@@ -1,0 +1,14 @@
+[package]
+name = "avec-integration"
+version = "26.10.29"
+edition = "2021"
+description = "Cross-crate integration tests: C-ABI roundtrip, alignment law, format-code table, varlen/views roundtrips."
+publish = false
+
+[dependencies]
+avec-arrow = { path = "../avec-arrow" }
+
+# Lane boundary note: this crate is its own workspace root so that lane
+# INTEGRATION never edits the parent members list (it owns crates/integration
+# only). To fold into the parent workspace: add "crates/integration" to the
+# root members list and delete this table.

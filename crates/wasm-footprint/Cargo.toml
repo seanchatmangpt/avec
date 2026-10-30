@@ -1,0 +1,27 @@
+[package]
+name = "wasm-footprint"
+version = "26.10.29"
+edition = "2021"
+description = "no_std cdylib wrapper supplying the wasm link glue (panic handler + global allocator) around the avec-arrow / avec-parquet kernels; the wasm32-wasip1 footprint subject measured by scripts/footprint.sh"
+license = "Apache-2.0"
+repository = "https://github.com/seanchatmangpt/avec"
+authors = ["Sean Chatman <info@chatmangpt.com>"]
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+avec-arrow = { path = "../avec-arrow" }
+avec-parquet = { path = "../avec-parquet" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+
+# Standalone manifest, deliberately NOT a member of the root workspace (the
+# coordinator owns crates root Cargo.toml). The empty [workspace] table makes
+# this crate its own workspace root, so a build from inside this directory is
+# self-contained: crate-local Cargo.lock and crate-local target/ dir.
+[workspace]

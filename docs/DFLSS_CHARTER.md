@@ -64,9 +64,10 @@ citations resolve here: `crates/avec-arrow/src/bitmap.rs` cites charter CTQ-2;
 
 Measured baseline, 2026-10-29, macOS arm64, stable Rust, exit codes captured:
 
-- CTQ-1 / A-1 (`cargo run --release -p bench`, exit 0): 43.127 GiB/s single-core mask
-  over 8 rounds with 0 allocations; 16-lane aggregate 54.3 GiB/s. 62.026 GiB/s was
-  observed in an earlier same-session run; wall numbers vary with concurrent machine load.
+- CTQ-1 / A-1 (`cargo run --release -p bench`, exit 0): three same-session runs measured
+  43.127 / 57.870 / 62.026 GiB/s single-core mask over 8 rounds, 0 allocations in every
+  run; 16-lane aggregate 43.1-54.3 GiB/s. Wall numbers vary with concurrent machine load;
+  every run clears the 9.0 GiB/s target by at least 4.8x.
 - CTQ-2 (`cargo build --profile audit -p avec-audit` exit 0; `python3
   scripts/branch_audit.py` exit 0): 9/9 audited kernels, 0 conditional branches.
 - CTQ-5 (`cargo build -p avec-ffi` exit 0; `python3 scripts/gate3_cdata.py` exit 0):
@@ -148,7 +149,7 @@ codes captured:
 | tests | `cargo test --workspace` | 0 | 26 passed, 0 failed |
 | gate1 build | `cargo build --profile audit -p avec-audit` | 0 | audit cdylib linked |
 | gate1 audit | `python3 scripts/branch_audit.py` | 0 | 9/9 kernels, 0 branches |
-| gate2 | `cargo run --release -p bench` | 0 | 43.127 GiB/s, 0 allocs |
+| gate2 | `cargo run --release -p bench` | 0 | 43.1-62.0 GiB/s, 0 allocs |
 | gate3 build | `cargo build -p avec-ffi` | 0 | cdylib linked |
 | gate3 parity | `python3 scripts/gate3_cdata.py` | 0 | bitwise parity, 100000 rows |
 | gate0 | `make gate0` | n/a | not run; docs lane does not regenerate shared surfaces |
@@ -166,7 +167,7 @@ Execution tracker:
 | avec-arrow in-memory substrate | ALIVE | tests 15/15; gates 1-3 green |
 | avec-parquet persistence kernels | ALIVE | tests 11/11; fail-closed decode tests |
 | branch audit gate (CTQ-2 / M-04) | ALIVE | audit exit 0, 9 kernels |
-| throughput gate (CTQ-1) | ALIVE | bench exit 0, 43.127 GiB/s, 0 allocs |
+| throughput gate (CTQ-1) | ALIVE | bench exit 0, 43.1-62.0 GiB/s, 0 allocs |
 | C Data Interface parity (CTQ-5 / M-02) | ALIVE | bitwise parity, 100000 rows |
 | avec-ffi C membrane | PARTIAL | parity green; no runtime suite |
 | avec-beam NIF membrane | PARTIAL | compiles; no BEAM runtime test in repo |

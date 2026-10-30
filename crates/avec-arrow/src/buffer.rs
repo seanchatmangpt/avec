@@ -27,8 +27,12 @@ impl Buf {
     /// On allocation failure.
     pub fn new(len: usize) -> Self {
         if len == 0 {
+            // 64-aligned non-null sentinel: keeps the M-03 pointer law
+            // (ptr & 63 == 0) meaningful even for empty buffers; never
+            // dereferenced (len 0, no allocation).
             return Buf {
-                ptr: NonNull::dangling(),
+                // SAFETY: address 64 is non-null and 64-byte aligned by construction.
+                ptr: unsafe { NonNull::new_unchecked(ALIGNMENT as *mut u8) },
                 len: 0,
             };
         }

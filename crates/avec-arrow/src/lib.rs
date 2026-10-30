@@ -24,6 +24,7 @@ pub mod bitmap;
 pub mod buffer;
 pub mod c_abi;
 pub mod primitive;
+pub mod silicon;
 pub mod varlen;
 pub mod views;
 

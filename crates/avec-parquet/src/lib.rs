@@ -10,6 +10,7 @@
 
 extern crate alloc;
 
+pub mod packing;
 pub mod rle;
 pub mod unpack;
 

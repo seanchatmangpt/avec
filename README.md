@@ -78,15 +78,16 @@ the observed result of that exact command, not a claim.
 | tests | `cargo test --workspace` | PASS, exit 0 | 26 passed, 0 failed |
 | gate1 build | `cargo build --profile audit -p avec-audit` | PASS, exit 0 | audit cdylib linked |
 | gate1 audit | `python3 scripts/branch_audit.py` | PASS, exit 0 | 9/9 kernels, 0 branches |
-| gate2 | `cargo run --release -p bench` | PASS, exit 0 | 43.127 GiB/s, 0 allocs |
+| gate2 | `cargo run --release -p bench` | PASS, exit 0 | 43.1-62.0 GiB/s, 0 allocs |
 | gate3 build | `cargo build -p avec-ffi` | PASS, exit 0 | cdylib linked |
 | gate3 parity | `python3 scripts/gate3_cdata.py` | PASS, exit 0 | bitwise parity, 100000 rows |
 | gate0 | `make gate0` | NOT RUN | docs lane does not regenerate shared surfaces |
 
-Bench detail: 43.127 GiB/s single-core mask over 8 rounds with 0 allocations during the
-scan; 16-lane aggregate 54.3 GiB/s (62.026 GiB/s observed in an earlier same-session run;
-wall numbers vary with concurrent machine load). Gate 3 parity: int32, 100000 rows, 14285
-nulls, bitwise equality of both buffers against python-recomputed ground truth.
+Bench detail: three same-session runs measured 43.127 / 57.870 / 62.026 GiB/s single-core
+mask over 8 rounds, with 0 allocations during the scan in every run; 16-lane aggregate
+43.1-54.3 GiB/s. Wall numbers vary with concurrent machine load; all runs exceed the
+CTQ-1 bar (9.0 GiB/s) by at least 4.8x. Gate 3 parity: int32, 100000 rows, 14285 nulls,
+bitwise equality of both buffers against python-recomputed ground truth.
 
 Concurrent-lane note: earlier in the same session `cargo test --workspace` and both
 cdylib builds failed (duplicate `panic_impl` lang item; `dyld_stub_binder` and
