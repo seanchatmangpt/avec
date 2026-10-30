@@ -1,0 +1,20 @@
+{
+  "mask_min_gbps": {
+    "0x0000000000000000": 72.873,
+    "0x1111111111111111": 77.39,
+    "0x5555555555555555": 77.135,
+    "0xffffffffffffffff": 77.75
+  },
+  "parquet": {
+    "rle_decode/literal/w4": 5.798,
+    "rle_decode/mix50/w4": 5.724,
+    "rle_decode/repeated/w4": 79.382,
+    "rle_encode/literal/w4": 0.994,
+    "rle_encode/mix50/w4": 1.242,
+    "rle_encode/repeated/w4": 10.084,
+    "unpack/random64/w1": 39.074,
+    "unpack/random64/w2": 30.735,
+    "unpack/random64/w4": 23.771,
+    "unpack/random64/w8": 19.186
+  }
+}
