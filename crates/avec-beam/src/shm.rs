@@ -37,7 +37,8 @@
 //! mechanisms never reopen by name:
 //! * same process: [`ShmRing::try_clone`] (`dup`).
 //! * cross process: a parent holds the fd and passes it to a child over
-//!   exec at a fixed fd number (`std::process::Command` + `pre_exec(dup2)`;
+//!   exec at its argv-passed fd NUMBER (`std::process::Command`; fds are
+//!   duplicated CLOEXEC-free with `fcntl(F_DUPFD)` before spawn);
 //!   see the `cli` module's `serve-*` modes driving the producer/consumer
 //!   children).
 //! `ShmRing::open` (name reopen) remains in the API because the contract
@@ -117,13 +118,6 @@ const O_EXCL: c_int = 0x80;
 const O_RDWR: c_int = 0x0002;
 const PROT_READ_WRITE: c_int = 0x1 | 0x2;
 const MAP_SHARED: c_int = 0x0001;
-
-/// Fixed child-side fd numbers: the serve parent dup2s ring fds here over
-/// exec, so children never reopen the segment by name (see platform law).
-/// (Used by the `#[cfg(not(test))]` cli module; kept at module scope for
-/// the doc comment's cross-reference.)
-#[cfg(not(test))]
-const CHILD_FD_BASE: c_int = 3;
 
 type SizeT = usize;
 type OffT = i64;
@@ -667,10 +661,11 @@ mod tests {
 
 // ---------------------------------------------------------------------------
 // Helper CLI (compile modes 2 + 3). The `serve-*` modes are the cross-process
-// surface: the serve process creates + sizes + maps the ring(s), then spawns
-// REAL child processes (std::process::Command) handing each the ring fds at
-// fixed numbers via pre_exec(dup2) — children never reopen by name, per the
-// platform law. Output is line-based KEY=VALUE so the escript can assert.
+// surface: the serve process creates + sizes + maps the ring(s), duplicates
+// each ring fd CLOEXEC-free (F_DUPFD) and spawns REAL child processes
+// (std::process::Command) that receive the fd NUMBERS in argv and map the
+// segment with from_fd — children never reopen by name, per the platform
+// law. Output is line-based KEY=VALUE so the escript can assert.
 // ---------------------------------------------------------------------------
 
 #[cfg(not(test))]
@@ -691,7 +686,8 @@ mod cli {
         eprintln!(
             "usage: shm_helper create|unlink <name> \
              | serve-throughput <name> <n> | serve-pingpong <req> <rsp> <n> \
-             | child-produce <n> | child-consume <n> | child-ping <n> | child-pong <n>"
+             | child-produce <ringfd> <n> | child-consume <ringfd> <n> \
+             | child-ping <reqfd> <rspfd> <n> | child-pong <reqfd> <rspfd> <n>"
         );
         2
     }
@@ -729,10 +725,18 @@ mod cli {
             [cmd, req, rsp, n] if cmd == "serve-pingpong" => {
                 serve_pingpong(req, rsp, parse(n), deadline)
             }
-            [cmd, n] if cmd == "child-produce" => child_produce(parse(n), deadline),
-            [cmd, n] if cmd == "child-consume" => child_consume(parse(n), deadline),
-            [cmd, n] if cmd == "child-ping" => child_ping(parse(n), deadline),
-            [cmd, n] if cmd == "child-pong" => child_pong(parse(n), deadline),
+            [cmd, fd, n] if cmd == "child-produce" => {
+                child_produce(parse(fd) as c_int, parse(n), deadline)
+            }
+            [cmd, fd, n] if cmd == "child-consume" => {
+                child_consume(parse(fd) as c_int, parse(n), deadline)
+            }
+            [cmd, req_fd, rsp_fd, n] if cmd == "child-ping" => {
+                child_ping(parse(req_fd) as c_int, parse(rsp_fd) as c_int, parse(n), deadline)
+            }
+            [cmd, req_fd, rsp_fd, n] if cmd == "child-pong" => {
+                child_pong(parse(req_fd) as c_int, parse(rsp_fd) as c_int, parse(n), deadline)
+            }
             _ => usage(),
         }
     }
@@ -799,6 +803,10 @@ mod cli {
     }
 
     fn serve_throughput(name: &str, n: u64, deadline: Instant) -> i32 {
+        // Pre-unlink: unlink is measured to work on every probed segment
+        // state (including EACCES ghosts), so a failed earlier run cannot
+        // wedge this one with AlreadyExists.
+        let _ = ShmRing::unlink(name);
         let ring = match ShmRing::create(name) {
             Ok(r) => r,
             Err(e) => {
@@ -806,21 +814,32 @@ mod cli {
                 return 1;
             }
         };
-        let fd = ring.fd;
-        let mut producer = match spawn_child("child-produce", n, &[(fd, CHILD_FD_BASE)]) {
+        let handoff = match handoff_fd(ring.fd) {
+            Ok(h) => h,
+            Err(e) => {
+                eprintln!("serve-throughput: handoff dup: {e}");
+                return 1;
+            }
+        };
+        let mut producer = match spawn_child("child-produce", &[handoff], n) {
             Ok(c) => c,
             Err(e) => {
                 eprintln!("spawn produce: {e}");
                 return 1;
             }
         };
-        let mut consumer = match spawn_child("child-consume", n, &[(fd, CHILD_FD_BASE)]) {
+        let mut consumer = match spawn_child("child-consume", &[handoff], n) {
             Ok(c) => c,
             Err(e) => {
                 eprintln!("spawn consume: {e}");
                 return 1;
             }
         };
+        unsafe {
+            // Both children have their own copy of the fd now; drop the
+            // handoff number so only the children's execs keep it alive.
+            close(handoff);
+        }
         let p_txt = drain(&mut producer);
         let c_txt = drain(&mut consumer);
         let p_txt = p_txt.join().expect("drain thread");
@@ -860,28 +879,38 @@ mod cli {
             }
         };
         let (req_fd, rsp_fd) = (req_ring.fd, rsp_ring.fd);
-        let mut ping = match spawn_child(
-            "child-ping",
-            n,
-            &[(req_fd, CHILD_FD_BASE), (rsp_fd, CHILD_FD_BASE + 1)],
-        ) {
+        let req_h = match handoff_fd(req_fd) {
+            Ok(h) => h,
+            Err(e) => {
+                eprintln!("serve-pingpong: req handoff dup: {e}");
+                return 1;
+            }
+        };
+        let rsp_h = match handoff_fd(rsp_fd) {
+            Ok(h) => h,
+            Err(e) => {
+                eprintln!("serve-pingpong: rsp handoff dup: {e}");
+                return 1;
+            }
+        };
+        let mut ping = match spawn_child("child-ping", &[req_h, rsp_h], n) {
             Ok(c) => c,
             Err(e) => {
                 eprintln!("spawn ping: {e}");
                 return 1;
             }
         };
-        let mut pong = match spawn_child(
-            "child-pong",
-            n,
-            &[(req_fd, CHILD_FD_BASE), (rsp_fd, CHILD_FD_BASE + 1)],
-        ) {
+        let mut pong = match spawn_child("child-pong", &[req_h, rsp_h], n) {
             Ok(c) => c,
             Err(e) => {
                 eprintln!("spawn pong: {e}");
                 return 1;
             }
         };
+        unsafe {
+            close(req_h);
+            close(rsp_h);
+        }
         let p_txt = drain(&mut ping);
         let g_txt = drain(&mut pong);
         let p_txt = p_txt.join().expect("drain thread");
@@ -908,17 +937,18 @@ mod cli {
         rc
     }
 
-    // ---- child modes: ring fds arrive at CHILD_FD_BASE(+1) over exec ----
+    // ---- child modes: ring fds arrive BY NUMBER in argv (CLOEXEC-cleared
+    // via F_DUPFD handoff), turned back into mappings with from_fd ----
 
-    fn child_ring(child_fd: c_int) -> io::Result<ShmRing> {
-        unsafe { ShmRing::from_fd(child_fd) }
+    fn child_ring(fd: c_int) -> io::Result<ShmRing> {
+        unsafe { ShmRing::from_fd(fd) }
     }
 
-    fn child_produce(n: u64, deadline: Instant) -> i32 {
-        let ring = match child_ring(CHILD_FD_BASE) {
+    fn child_produce(fd: c_int, n: u64, deadline: Instant) -> i32 {
+        let ring = match child_ring(fd) {
             Ok(r) => r,
             Err(e) => {
-                eprintln!("child-produce from_fd: {e}");
+                eprintln!("child-produce from_fd {fd}: {e}");
                 return 1;
             }
         };
@@ -940,11 +970,11 @@ mod cli {
         0
     }
 
-    fn child_consume(n: u64, deadline: Instant) -> i32 {
-        let ring = match child_ring(CHILD_FD_BASE) {
+    fn child_consume(fd: c_int, n: u64, deadline: Instant) -> i32 {
+        let ring = match child_ring(fd) {
             Ok(r) => r,
             Err(e) => {
-                eprintln!("child-consume from_fd: {e}");
+                eprintln!("child-consume from_fd {fd}: {e}");
                 return 1;
             }
         };
@@ -969,18 +999,18 @@ mod cli {
         0
     }
 
-    fn child_ping(n: u64, deadline: Instant) -> i32 {
-        let req_ring = match child_ring(CHILD_FD_BASE) {
+    fn child_ping(req_fd: c_int, rsp_fd: c_int, n: u64, deadline: Instant) -> i32 {
+        let req_ring = match child_ring(req_fd) {
             Ok(r) => r,
             Err(e) => {
-                eprintln!("child-ping req from_fd: {e}");
+                eprintln!("child-ping from_fd {req_fd}: {e}");
                 return 1;
             }
         };
-        let rsp_ring = match child_ring(CHILD_FD_BASE + 1) {
+        let rsp_ring = match child_ring(rsp_fd) {
             Ok(r) => r,
             Err(e) => {
-                eprintln!("child-ping rsp from_fd: {e}");
+                eprintln!("child-ping from_fd {rsp_fd}: {e}");
                 return 1;
             }
         };
@@ -1009,18 +1039,18 @@ mod cli {
         0
     }
 
-    fn child_pong(n: u64, deadline: Instant) -> i32 {
-        let req_ring = match child_ring(CHILD_FD_BASE) {
+    fn child_pong(req_fd: c_int, rsp_fd: c_int, n: u64, deadline: Instant) -> i32 {
+        let req_ring = match child_ring(req_fd) {
             Ok(r) => r,
             Err(e) => {
-                eprintln!("child-pong req from_fd: {e}");
+                eprintln!("child-pong from_fd {req_fd}: {e}");
                 return 1;
             }
         };
-        let rsp_ring = match child_ring(CHILD_FD_BASE + 1) {
+        let rsp_ring = match child_ring(rsp_fd) {
             Ok(r) => r,
             Err(e) => {
-                eprintln!("child-pong rsp from_fd: {e}");
+                eprintln!("child-pong from_fd {rsp_fd}: {e}");
                 return 1;
             }
         };

@@ -12,6 +12,7 @@
 //! LSB-first), zero-padded final group.
 
 use avec_parquet::rle::{rle_decode, rle_encode, ParquetError};
+use avec_parquet::thrift::{ctype, skip_value, ThriftError};
 use avec_parquet::unpack::{unpack_2bit, unpack_4bit, unpack_8bit};
 
 /// Kills rle.rs:29:9 — `Display::fmt` replaced by `Ok(Default::default())`
@@ -169,4 +170,63 @@ fn unpack_8bit_advances_source_word() {
     unpack_8bit(&[0x1111_1111_1111_1111, 0x2222_2222_2222_2222], &mut out);
     assert_eq!(out[..8], [0x11u64; 8]);
     assert_eq!(out[8..], [0x22u64; 8]);
+}
+
+/// Kills thrift.rs:50:9 (Display::fmt -> Ok(Default::default()) renders the
+/// empty string instead of the Debug text).
+#[test]
+fn thrift_display_forwards_to_debug_string() {
+    assert_eq!(
+        ThriftError::MissingRequiredField(4).to_string(),
+        "MissingRequiredField(4)"
+    );
+}
+
+/// Kills thrift.rs:271:21 x3 and 279:21 x3 — the BYTE/DOUBLE skip bounds
+/// (`*pos > src.len()` replaced by `==` / `<` / `>=`): an in-range skip must
+/// succeed (`<` fires spuriously otherwise) and a skip landing exactly at
+/// the source end must succeed (`==` / `>=` fire there).
+#[test]
+fn thrift_byte_double_skip_bounds_are_exact() {
+    // BYTE mid-wire: payload followed by more bytes — `<` would error here.
+    let mut pos = 0;
+    assert_eq!(skip_value(&[0xAB, 0xFF, 0x05], &mut pos, ctype::BYTE, 0), Ok(()));
+    assert_eq!(pos, 1);
+    // BYTE at exact end: payload is the last byte — `==` / `>=` would error.
+    let mut pos = 0;
+    assert_eq!(skip_value(&[0x42], &mut pos, ctype::BYTE, 0), Ok(()));
+    assert_eq!(pos, 1);
+    // DOUBLE mid-wire: 8 payload bytes, then a tail byte.
+    let mut pos = 0;
+    assert_eq!(
+        skip_value(&[0u8; 9], &mut pos, ctype::DOUBLE, 0),
+        Ok(())
+    );
+    assert_eq!(pos, 8);
+    // DOUBLE at exact end: exactly the 8 payload bytes.
+    let mut pos = 0;
+    assert_eq!(skip_value(&[0u8; 8], &mut pos, ctype::DOUBLE, 0), Ok(()));
+    assert_eq!(pos, 8);
+}
+
+/// Kills the MAP skip-path cluster: thrift.rs:304:22 (count==0 early-return
+/// inverted), 308:36 (`kv >> 4` -> `<<`), 308:45 x2 (`kv & 0x0F` -> `|`/`^`),
+/// 309:16 and 312:16 (`!valid_type_id` negation deleted). No other test
+/// exercises an in-range MAP skip; the exact consumed-length and Ok asserts
+/// pin every one of these.
+#[test]
+fn thrift_map_skip_exact_wire_and_empty() {
+    // count=1; kv=0x35 -> key type BYTE(3), value type I32(5); key payload
+    // 0xAB; value payload varint 0xAB 0x05 (LEB128 continuation + stop).
+    let wire = [0x01, 0x35, 0xAB, 0x05];
+    let mut pos = 0;
+    assert_eq!(skip_value(&wire, &mut pos, ctype::MAP, 0), Ok(()));
+    assert_eq!(pos, 4, "map skip must consume exactly the declared wire");
+
+    // Empty map: ONLY the count byte is consumed — the kv byte must not be
+    // read (the 304:22 inversion reads it and hits end-of-input or, on a
+    // longer wire, desyncs the position).
+    let mut pos = 0;
+    assert_eq!(skip_value(&[0x00], &mut pos, ctype::MAP, 0), Ok(()));
+    assert_eq!(pos, 1);
 }

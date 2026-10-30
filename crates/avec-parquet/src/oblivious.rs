@@ -210,7 +210,8 @@ mod tests {
     use super::oblivious_gather_small;
     use super::oblivious_masked_compact;
     use super::ParquetError as PE;
-    use alloc::vec;
+    use alloc::string::ToString;
+use alloc::vec;
     use alloc::vec::Vec;
 
     /// Deterministic LCG (house test-vector shape, as packed_filter).
