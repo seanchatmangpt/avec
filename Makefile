@@ -73,7 +73,7 @@ gate2:
 gate3:
 	@echo "== gate3: C Data Interface wire parity (pyarrow _import_from_c) =="
 	cargo build -p avec-ffi
-	python3 scripts/gate3_cdata.py
+	/Users/sac/.local/bin/uv run --with pyarrow python3 scripts/gate3_cdata.py
 
 gates: gate0 gate1 gate2 gate3
 

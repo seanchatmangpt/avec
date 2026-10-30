@@ -23,6 +23,7 @@ extern crate std;
 
 extern crate alloc;
 
+pub mod batch;
 pub mod bitmap;
 pub mod buffer;
 pub mod c_abi;
@@ -46,9 +47,10 @@ pub const VERSION: &str = generated_version::VERSION;
 
 /// Tests assert on real state (Chicago discipline); alloc is the only
 /// collaborator and it is real.
+pub use batch::{Batch, BatchBuilder, BatchError, Column, ColumnBuilder};
 pub use buffer::Buf;
 pub use c_abi::{export, ArrowArray, ArrowSchema, AVEC_FLAG_NULLABLE};
-pub use foreign::{format_of, primitive_view, is_valid, ForeignError};
+pub use foreign::{format_of, is_valid, primitive_view, ForeignError};
 pub use primitive::{Primitive, PrimitiveBuilder};
 pub use timestamps::{TimestampMicro, TimestampMilli, TimestampNano, TimestampSecond};
 pub use varlen::{Varlen, VarlenBuilder};

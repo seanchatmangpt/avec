@@ -20,7 +20,8 @@
 %% bad_lib "Function not found" — witnessed on OTP 28.3.1, lane BEAM-L1).
 -export([main/1, avec_new/2, avec_new_i64/2, avec_len/1, avec_stats/1,
          avec_free/1, avec_envelope_new/1, avec_envelope_len/1,
-         avec_get/2, avec_get_i64/2, avec_version/0]).
+         avec_get/2, avec_get_i64/2, avec_version/0,
+         avec_new_fast/2, avec_batch_binary/1]).
 -on_load(init/0).
 
 init() ->
@@ -155,4 +156,17 @@ avec_get(_Id, _I) ->
 avec_get_i64(_Id, _I) ->
     erlang:nif_error(nif_library_not_loaded).
 avec_version() ->
+    erlang:nif_error(nif_library_not_loaded).
+
+%% Lane BEAM-L2 (resbin): stub for the zero-copy projection export —
+%% load_nif requires a stub for every NIF the library exports. No asserts
+%% touched.
+avec_batch_binary(_IdOrEnvelope) ->
+    erlang:nif_error(nif_library_not_loaded).
+
+%% Minimal unblock fix (compile-freeze SLA, disclosed in BEAM-L2's receipt):
+%% BEAM-L4's export avec_new_fast had no stub in this file, so load_nif
+%% refused the whole library (bad_lib "Function not found") and every smoke
+%% assert was frozen. Stub only — BEAM-L4's asserts are untouched.
+avec_new_fast(_N, _Fill) ->
     erlang:nif_error(nif_library_not_loaded).

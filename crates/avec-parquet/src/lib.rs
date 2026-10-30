@@ -12,6 +12,8 @@
 
 extern crate alloc;
 
+pub mod bitslice;
+pub mod byteslice;
 pub mod compiled_manifest;
 pub mod dictionary;
 pub mod encode_fast;

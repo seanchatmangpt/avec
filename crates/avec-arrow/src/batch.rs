@@ -11,17 +11,17 @@
 //! repaired.
 
 use alloc::string::String;
+
 use alloc::vec::Vec;
 use core::fmt;
 
 use crate::primitive::{Primitive, PrimitiveBuilder, Scalar};
 use crate::runend::{RunEndEncoded, RunEndEncodedBuilder};
 use crate::varlen::{Varlen, VarlenBuilder};
-use crate::views::ViewVec;
+use crate::views::{ViewVec, ViewVecBuilder};
 
 /// One column of a [`Batch`]: a typed array. Closed over the substrate's
 /// array families; the EAV consumers project one `Batch` per table.
-#[derive(Debug)]
 pub enum Column {
     /// `Primitive<i8>` ("c").
     Int8(Primitive<i8>),
@@ -43,14 +43,24 @@ pub enum Column {
     Float32(Primitive<f32>),
     /// `Primitive<f64>` ("g").
     Float64(Primitive<f64>),
-    /// `Varlen<i32>` ("u").
-    Utf8(Varlen<i32>),
-    /// `Varlen<i64>` ("U").
-    LargeUtf8(Varlen<i64>),
+    /// `Varlen<u32>` ("u").
+    Utf8(Varlen<u32>),
+    /// `Varlen<u64>` ("U").
+    LargeUtf8(Varlen<u64>),
     /// `ViewVec` ("vu").
     Utf8View(ViewVec),
     /// `RunEndEncoded<i32>` ("+r").
     RunEnd(RunEndEncoded<i32>),
+}
+
+impl core::fmt::Debug for Column {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        // Structural summary: shape and format, never buffer contents.
+        f.debug_struct("Column")
+            .field("format", &self.format_code())
+            .field("len", &self.len())
+            .finish()
+    }
 }
 
 impl Column {
@@ -135,10 +145,20 @@ impl fmt::Display for BatchError {
 }
 
 /// A named, row-count-synchronized column set.
-#[derive(Debug)]
 pub struct Batch {
     columns: Vec<(&'static str, Column)>,
     row_count: usize,
+}
+
+impl core::fmt::Debug for Batch {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        // Structural summary: names and row count, never column contents.
+        let names: Vec<&str> = self.columns.iter().map(|(name, _)| *name).collect();
+        f.debug_struct("Batch")
+            .field("row_count", &self.row_count)
+            .field("columns", &names)
+            .finish()
+    }
 }
 
 impl Batch {
@@ -222,10 +242,10 @@ pub enum ColumnBuilder {
     Float32(PrimitiveBuilder<f32>),
     /// `PrimitiveBuilder<f64>`.
     Float64(PrimitiveBuilder<f64>),
-    /// `VarlenBuilder<i32>`.
-    Utf8(VarlenBuilder<i32>),
-    /// `VarlenBuilder<i64>`.
-    LargeUtf8(VarlenBuilder<i64>),
+    /// `VarlenBuilder<u32>`.
+    Utf8(VarlenBuilder<u32>),
+    /// `VarlenBuilder<u64>`.
+    LargeUtf8(VarlenBuilder<u64>),
     /// `ViewVecBuilder`.
     Utf8View(ViewVecBuilder),
     /// `RunEndEncodedBuilder<i32>`.
@@ -276,6 +296,7 @@ impl ColumnBuilder {
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec;
     use super::*;
 
     /// Three typed columns built through the batch builder; the frozen
@@ -355,7 +376,7 @@ mod tests {
     fn format_codes_round_trip() {
         let batch = Batch::try_new(vec![
             ("i", Column::Int32(PrimitiveBuilder::<i32>::new().finish())),
-            ("u", Column::Utf8(VarlenBuilder::<i32>::new().finish())),
+            ("u", Column::Utf8(VarlenBuilder::<u32>::new().finish())),
             (
                 "vu",
                 Column::Utf8View(ViewVecBuilder::new().finish()),

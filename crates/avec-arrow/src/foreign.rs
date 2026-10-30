@@ -15,7 +15,7 @@
 use crate::c_abi::{ArrowArray, ArrowSchema};
 use crate::primitive::Scalar;
 use alloc::string::String;
-use core::ffi::{c_char, CStr};
+use core::ffi::CStr;
 use core::fmt;
 use core::slice;
 
@@ -180,6 +180,7 @@ pub unsafe fn is_valid(
 
 #[cfg(test)]
 mod tests {
+    use core::ffi::c_char;
     use super::*;
     use crate::c_abi::export;
     use crate::primitive::PrimitiveBuilder;

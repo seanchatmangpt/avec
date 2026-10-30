@@ -25,6 +25,8 @@ use std::sync::{Mutex, OnceLock};
 
 mod resources;
 
+mod resbin;
+
 // ---------------------------------------------------------------------------
 // erl_nif ABI, transcribed from erl_nif.h (OTP 28.3.1)
 // ---------------------------------------------------------------------------
@@ -239,6 +241,40 @@ extern "C" fn avec_new(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNifTerm
     unsafe { enif_make_long(env, id) }
 }
 
+/// `avec_new_fast(n, fill) -> Id :: integer() | error`
+///
+/// Normal-scheduler twin of `avec_new/2`: byte-identical logic and argument
+/// contract, registered with `flags: 0` instead of the dirty-CPU flag. The
+/// pair exists to measure the scheduling-regime split itself (see
+/// `test/sched_crossover.escript`): same allocation work, two dispatch
+/// regimes. Correctness surface (ramp, caps, `error` cases) is shared by
+/// construction; only the thread that runs it differs.
+extern "C" fn avec_new_fast(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNifTerm) -> ErlNifTerm {
+    let args = unsafe { std::slice::from_raw_parts(argv, argc.max(0) as usize) };
+    let (mut n, mut fill) = (0i64, 0i64);
+    if argc != 2
+        || unsafe { enif_get_long(env, args[0], &mut n) } == 0
+        || unsafe { enif_get_long(env, args[1], &mut fill) } == 0
+        || !(0..=MAX_N).contains(&n)
+        || fill < i32::MIN as i64
+        || n > 0 && fill + (n - 1) > i32::MAX as i64
+    {
+        return make_atom(env, "error");
+    }
+    let mut builder = PrimitiveBuilder::<i32>::new();
+    let mut i: i64 = 0;
+    while i < n {
+        builder.push(Some((fill + i) as i32));
+        i += 1;
+    }
+    let arr = builder.finish();
+    debug_assert!(arr.buffers_aligned_64(), "avec-arrow violated M-03 alignment");
+    let mut reg = lock_registry();
+    let id = reg.len() as i64;
+    reg.push(Some(Batch::I32(arr)));
+    unsafe { enif_make_long(env, id) }
+}
+
 /// `avec_new_i64(n, fill) -> Id :: integer() | error`
 ///
 /// i64 twin of `avec_new/2`: row `i` holds `fill + i`, and `fill` spans the
@@ -400,13 +436,21 @@ extern "C" fn avec_version(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNif
 /// `ERL_NIF_DIRTY_JOB_CPU_BOUND` (erl_drv_nif.h:50: `= 1`), i.e. 0x01.
 const ERL_NIF_DIRTY_JOB_CPU_BOUND: u32 = 0x01;
 
-static NIF_FUNCS: [ErlNifFunc; 10] = [
+static NIF_FUNCS: [ErlNifFunc; 12] = [
     // n >= 16384 fills build a >= 64 KiB aligned buffer; run it dirty.
     ErlNifFunc {
         name: b"avec_new\0".as_ptr() as *const c_char,
         arity: 2,
         fptr: avec_new,
         flags: ERL_NIF_DIRTY_JOB_CPU_BOUND,
+    },
+    // Scheduling-regime twin (lane BEAM-L4): same fn body as avec_new, no
+    // dirty flag — the controlled variable for the crossover measurement.
+    ErlNifFunc {
+        name: b"avec_new_fast\0".as_ptr() as *const c_char,
+        arity: 2,
+        fptr: avec_new_fast,
+        flags: 0,
     },
     ErlNifFunc {
         name: b"avec_len\0".as_ptr() as *const c_char,
@@ -465,6 +509,15 @@ static NIF_FUNCS: [ErlNifFunc; 10] = [
         fptr: resources::avec_envelope_len,
         flags: 0,
     },
+    // Zero-copy projection (resbin.rs): reads cached envelope metadata and
+    // wraps the aligned payload pointer in a resource binary — O(1), no copy,
+    // normal scheduler (unlike avec_new's buffer builds).
+    ErlNifFunc {
+        name: b"avec_batch_binary\0".as_ptr() as *const c_char,
+        arity: 1,
+        fptr: resbin::avec_batch_binary,
+        flags: 0,
+    },
 ];
 
 /// OTP 26+ no-argument entry point. The BEAM resolves this symbol when
@@ -479,7 +532,7 @@ static NIF_ENTRY: ErlNifEntry = ErlNifEntry {
     major: ERL_NIF_MAJOR_VERSION,
     minor: ERL_NIF_MINOR_VERSION,
     name: b"avec_beam\0".as_ptr() as *const c_char,
-    num_of_funcs: 10,
+    num_of_funcs: 12,
     funcs: NIF_FUNCS.as_ptr() as *mut ErlNifFunc,
     load: Some(resources::nif_load),
     reload: None,

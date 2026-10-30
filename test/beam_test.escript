@@ -11,7 +11,8 @@
 %% bad_lib "Function not found" — witnessed on OTP 28.3.1, lane BEAM-L1).
 -export([main/1, avec_new/2, avec_len/1, avec_get/2, avec_free/1,
          avec_version/0, avec_new_i64/2, avec_get_i64/2, avec_stats/1,
-         avec_envelope_new/1, avec_envelope_len/1]).
+         avec_envelope_new/1, avec_envelope_len/1, avec_new_fast/2,
+         avec_batch_binary/1]).
 -on_load(init/0).
 
 init() ->
@@ -175,4 +176,15 @@ avec_stats(_Id) ->
 avec_envelope_new(_Id) ->
     erlang:nif_error(nif_library_not_loaded).
 avec_envelope_len(_Env) ->
+    erlang:nif_error(nif_library_not_loaded).
+
+%% Lane BEAM-L4 (scheduling-regime split): stub for the new export —
+%% load_nif requires a stub for every NIF the library exports. No asserts
+%% touched.
+avec_new_fast(_N, _Fill) ->
+    erlang:nif_error(nif_library_not_loaded).
+
+%% Cross-lane stub (resbin lane's export): load_nif requires a stub for
+%% every NIF the library exports. No asserts touched.
+avec_batch_binary(_Id) ->
     erlang:nif_error(nif_library_not_loaded).

@@ -24,7 +24,7 @@ use avec_parquet::page::decode_page_into;
 use avec_parquet::page_aligned::{aligned_decode, write_plain_page};
 use avec_parquet::rle::write_varint;
 use avec_parquet::thrift::{
-    write_binary_field, write_bool_field, write_field_header, write_i32_field, write_i64_field,
+    write_binary_field, write_field_header, write_i32_field, write_i64_field,
     write_zigzag_i32, ctype,
 };
 
