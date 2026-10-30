@@ -29,8 +29,9 @@
 -export([main/1]).
 -on_load(init/0).
 
--define(DYLIB, "/Users/sac/avec/target/debug/libavec_beam.dylib").
--define(NIF_BASE, "/Users/sac/avec/target/debug/libavec_beam").
+-define(VERSION, <<"26.10.29">>).
+-define(DEBUG_DIR, "/Users/sac/avec/target/debug").
+-define(RELEASE_DIR, "/Users/sac/avec/target/release").
 -define(GET_N, 10000).
 -define(GET_ROWS, 1024).
 -define(NEW_ROWS, 16384).

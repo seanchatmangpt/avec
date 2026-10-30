@@ -12,15 +12,24 @@
 init() ->
     %% OTP's load_nif always appends ".so" (never tries .dylib), so expose the
     %% cargo cdylib under the name the BEAM looks for. Symlink is refreshed on
-    %% every run so it always targets the current build.
-    Dylib = "/Users/sac/avec/target/debug/libavec_beam.dylib",
-    So = "/Users/sac/avec/target/debug/libavec_beam.so",
+    %% every run so it always targets the current build. Build profile comes
+    %% from AVEC_BEAM_PROFILE ("release") and defaults to debug.
+    {Dylib, NifBase} =
+        case os:getenv("AVEC_BEAM_PROFILE") of
+            {ok, "release"} ->
+                {"/Users/sac/avec/target/release/libavec_beam.dylib",
+                 "/Users/sac/avec/target/release/libavec_beam"};
+            _ ->
+                {"/Users/sac/avec/target/debug/libavec_beam.dylib",
+                 "/Users/sac/avec/target/debug/libavec_beam"}
+        end,
+    So = NifBase ++ ".so",
     case file:read_link_info(So) of
         {ok, _} -> file:delete(So);
         _ -> ok
     end,
     ok = file:make_symlink(Dylib, So),
-    case erlang:load_nif("/Users/sac/avec/target/debug/libavec_beam", 0) of
+    case erlang:load_nif(NifBase, 0) of
         ok ->
             io:format("nif loaded: ~s~n", [So]),
             ok;
@@ -66,7 +75,8 @@ main(_Args) ->
 
     Ver = avec_version(),
     io:format("avec_version => ~p~n", [Ver]),
-    true = is_binary(Ver),
+    %% Version law: the membrane must report the workspace release version.
+    <<"26.10.29">> = Ver,
 
     %% --- typed-error probes (beyond contract) ------------------------------
     expect(avec_len(Id), error, "avec_len(freed id)"),

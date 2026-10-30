@@ -1,20 +1,40 @@
 {
   "mask_min_gbps": {
-    "0x0000000000000000": 72.873,
-    "0x1111111111111111": 77.39,
-    "0x5555555555555555": 77.135,
-    "0xffffffffffffffff": 77.75
+    "0x0000000000000000": 75.975,
+    "0x1111111111111111": 77.946,
+    "0x5555555555555555": 77.586,
+    "0xffffffffffffffff": 77.206
+  },
+  "page": {
+    "decode/literal": 5.721,
+    "decode/mix50": 5.581,
+    "decode/repeated": 74.798,
+    "decode_body/literal": 5.873,
+    "decode_body/mix50": 5.624,
+    "decode_body/repeated": 77.391,
+    "decode_hdr/literal": 0.733,
+    "decode_hdr/mix50": 0.794,
+    "decode_hdr/repeated": 0.703,
+    "write/literal": 0.971,
+    "write/mix50": 1.246,
+    "write/repeated": 10.178,
+    "write_body/literal": 1.001,
+    "write_body/mix50": 1.264,
+    "write_body/repeated": 10.026,
+    "write_hdr/literal": 1.365,
+    "write_hdr/mix50": 1.306,
+    "write_hdr/repeated": 1.33
   },
   "parquet": {
-    "rle_decode/literal/w4": 5.798,
-    "rle_decode/mix50/w4": 5.724,
-    "rle_decode/repeated/w4": 79.382,
-    "rle_encode/literal/w4": 0.994,
-    "rle_encode/mix50/w4": 1.242,
-    "rle_encode/repeated/w4": 10.084,
-    "unpack/random64/w1": 39.074,
-    "unpack/random64/w2": 30.735,
-    "unpack/random64/w4": 23.771,
-    "unpack/random64/w8": 19.186
+    "rle_decode/literal/w4": 5.857,
+    "rle_decode/mix50/w4": 5.547,
+    "rle_decode/repeated/w4": 80.701,
+    "rle_encode/literal/w4": 0.99,
+    "rle_encode/mix50/w4": 1.25,
+    "rle_encode/repeated/w4": 10.374,
+    "unpack/random64/w1": 37.996,
+    "unpack/random64/w2": 30.235,
+    "unpack/random64/w4": 23.272,
+    "unpack/random64/w8": 19.275
   }
 }

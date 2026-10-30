@@ -1,6 +1,8 @@
-//! # avec-core
+//! # avec-arrow
 //!
-//! Freestanding, branchless Apache Arrow columnar substrate.
+//! Freestanding Apache Arrow columnar substrate: branch-free kernel
+//! inner-loop bodies; latches, dispatch and bounds checks are itemized
+//! control flow (docs/BRANCH_REGISTER.md).
 //!
 //! - `no_std` + `alloc` only; zero external dependencies.
 //! - Every buffer 64-byte aligned at allocation (AVX-512 / NEON invariant).

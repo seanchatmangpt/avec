@@ -494,7 +494,7 @@ pub fn read_page_header(src: &[u8]) -> Result<(PageHeader, usize), ThriftError> 
 
 /// Read the `DataPageHeaderV2` substruct (field ids 1-7; 6 optional with
 /// parquet.thrift default `true`).
-fn read_data_page_header_v2(src: &[u8], pos: &mut usize) -> Result<DataPageHeaderV2, ThriftError> {
+fn read_data_page_header_v2(src: &[u8], mut pos: &mut usize) -> Result<DataPageHeaderV2, ThriftError> {
     let mut num_values: Option<i32> = None;
     let mut num_nulls: Option<i32> = None;
     let mut num_rows: Option<i32> = None;
@@ -758,7 +758,10 @@ mod tests {
         wire.push(ctype::STOP);
         assert_eq!(read_page_header(&wire), Err(ThriftError::MissingRequiredField(2)));
 
-        // PageHeader complete but the V2 substruct lacks `encoding` (7).
+        // PageHeader complete but the V2 substruct lacks `num_nulls` (2):
+        // the V2 reader reports its FIRST missing required field in
+        // 1,2,3,4,5,7 order, and that error propagates before the outer
+        // header's own (already satisfied) required checks.
         let mut wire = Vec::new();
         write_i32_field(&mut wire, 1, 0, page_type::DATA_PAGE_V2);
         write_i32_field(&mut wire, 2, 1, 4);
@@ -767,7 +770,7 @@ mod tests {
         write_i32_field(&mut wire, 1, 0, 4);
         wire.push(ctype::STOP);
         wire.push(ctype::STOP);
-        assert_eq!(read_page_header(&wire), Err(ThriftError::MissingRequiredField(7)));
+        assert_eq!(read_page_header(&wire), Err(ThriftError::MissingRequiredField(2)));
     }
 
     #[test]

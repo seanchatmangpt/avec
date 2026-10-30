@@ -2,7 +2,7 @@
 name = "avec-arrow"
 version.workspace = true
 edition.workspace = true
-description = "Freestanding, branchless Apache Arrow columnar substrate - in-memory Arrow columnar substrate (no_std, zero dependencies)."
+description = "Freestanding Apache Arrow columnar substrate: branch-free kernel inner-loop bodies, itemized latches/dispatch (no_std, zero dependencies)."
 license.workspace = true
 repository.workspace = true
 authors.workspace = true

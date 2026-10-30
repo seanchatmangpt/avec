@@ -1,4 +1,6 @@
-//! avec-parquet: branchless Parquet persistence kernels.
+//! avec-parquet: Parquet persistence kernels with branch-free inner-loop
+//! bodies; per-lane bounds checks and record dispatch are itemized control
+//! flow (docs/BRANCH_REGISTER.md).
 //!
 //! Scope (charter v26.10.29, layer 3): vectorized bit-unpacking, SWAR
 //! RLE/bit-packed hybrid decode, direct page-to-buffer decode. Fail-closed
@@ -13,7 +15,9 @@ extern crate alloc;
 pub mod dictionary;
 pub mod encode_fast;
 pub mod packing;
+pub mod page;
 pub mod rle;
+pub mod thrift;
 pub mod unpack;
 
 pub use rle::{rle_decode, rle_encode, ParquetError};

@@ -2,7 +2,7 @@
 name = "avec-parquet"
 version.workspace = true
 edition.workspace = true
-description = "Branchless Parquet persistence kernels: bit-unpacking, SWAR RLE, page-to-buffer decode (no_std, zero dependencies)."
+description = "Parquet persistence kernels with branch-free inner-loop bodies: bit-unpacking, SWAR RLE, page-to-buffer decode (no_std, zero dependencies)."
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
