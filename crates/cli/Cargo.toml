@@ -1,0 +1,28 @@
+[package]
+name = "avec-cli"
+version = "26.10.29"
+edition = "2021"
+description = "Std-hosted CLI over the avec columnar kernels: version, mask line-rate bench, RLE encode comparison, 64-byte alignment probe."
+license = "Apache-2.0"
+repository = "https://github.com/seanchatmangpt/avec"
+authors = ["Sean Chatman <info@chatmangpt.com>"]
+publish = false
+
+[dependencies]
+# Zero-dep repo-local kernels. avec-parquet is required by `bench-parquet`:
+# rle_encode / rle_encode_fast live in avec-parquet, not avec-arrow.
+avec-arrow = { path = "../avec-arrow" }
+avec-parquet = { path = "../avec-parquet" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+
+# Standalone manifest, deliberately NOT a member of the root workspace (the
+# coordinator owns the root Cargo.toml). The empty [workspace] table makes this
+# crate its own workspace root, so a build from inside this directory is
+# self-contained: crate-local Cargo.lock and crate-local target/ dir. Same
+# pattern as crates/wasm-footprint. Adding it to the root members list is a
+# one-line coordinator edit: `crates/cli`, after `crates/integration`.
+[workspace]

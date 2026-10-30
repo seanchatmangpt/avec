@@ -44,14 +44,22 @@ init() ->
     %% OTP's load_nif always appends ".so" (never tries .dylib), so expose the
     %% cargo cdylib under the name the BEAM looks for. Symlink refreshed on
     %% every run so it always targets the current build (same dance as
-    %% test/beam_test.escript).
-    So = ?NIF_BASE ++ ".so",
+    %% test/beam_test.escript). Build profile comes from AVEC_BEAM_PROFILE
+    %% ("release") and defaults to debug.
+    {Dylib, NifBase} =
+        case os:getenv("AVEC_BEAM_PROFILE") of
+            {ok, "release"} -> {?RELEASE_DIR ++ "/libavec_beam.dylib",
+                                ?RELEASE_DIR ++ "/libavec_beam"};
+            _               -> {?DEBUG_DIR ++ "/libavec_beam.dylib",
+                                ?DEBUG_DIR ++ "/libavec_beam"}
+        end,
+    So = NifBase ++ ".so",
     case file:read_link_info(So) of
         {ok, _} -> file:delete(So);
         _ -> ok
     end,
-    ok = file:make_symlink(?DYLIB, So),
-    case erlang:load_nif(?NIF_BASE, 0) of
+    ok = file:make_symlink(Dylib, So),
+    case erlang:load_nif(NifBase, 0) of
         ok ->
             io:format("nif loaded: ~s~n", [So]),
             ok;
@@ -78,7 +86,12 @@ print_env() ->
                erlang:system_info(schedulers_online),
                erlang:system_info(dirty_cpu_schedulers_online),
                erlang:system_info(dirty_io_schedulers)]),
-    io:format("[env] nif_build=debug dylib=target/debug/libavec_beam.dylib run_class=single-run machine-local~n"),
+    Profile = case os:getenv("AVEC_BEAM_PROFILE") of
+                  {ok, "release"} -> release;
+                  _ -> debug
+              end,
+    io:format("[env] nif_build=~p dylib=target/~p/libavec_beam.dylib run_class=single-run machine-local~n",
+              [Profile, Profile]),
     io:format("[env] host_load: ~s", [os:cmd("uptime")]).
 
 %% --- contract sanity before any timing -------------------------------------
@@ -97,6 +110,8 @@ sanity() ->
     ok = avec_free(Id64),
     Ver = avec_version(),
     true = is_binary(Ver),
+    %% Version law: the membrane must report the workspace release version.
+    ?VERSION = Ver,
     io:format("ok   sanity: ramp + stats + i64 path verified; avec_version=~p~n", [Ver]).
 
 %% --- 1. avec_get round-trip latency ----------------------------------------
