@@ -27,6 +27,25 @@ consumer actually links: the optimized (-Oz) cdylib. So the gate is:
       opt stage — export-surface symbols surviving -Oz.
     If either stage passes the scanner, the gate is VACUOUS -> exit 1.
 
+  THIRD (GATING): version-string integrity over BINARY CONTENT (not symbol
+    names): count the byte sequence b"26.10.29\x00" (the NUL-terminated
+    release version, single-sourced from the workspace manifest via
+    CARGO_PKG_VERSION / the ggen-generated avec_arrow::VERSION_C) in each
+    shipped artifact and enforce a per-artifact EXACT-COUNT law:
+      optimized wasm      -> exactly 1 (it exports wasm_version() returning
+                             the NUL-terminated string)
+      libavec_ffi.dylib   -> exactly 1 (exposes avec_version via VERSION_C)
+      libavec_audit.dylib -> exactly 0 (crates/audit has no version export;
+                             VERSION_C is unreferenced there and linker-GC'd
+                             — witnessed 2026-10-29: fresh `cargo build
+                             --profile audit -p avec-audit` then byte-count 0)
+    Any mismatch fires: 2+ = version stamped twice (duplication), 0 on a
+    version-carrying artifact = drift/bump without re-pinning the gate.
+    Anti-vacuity: byte-level shims on a /tmp COPY of the optimized wasm
+    (duplicate the needle; strip it entirely) must FIRE the law both ways,
+    and the real artifact must re-count clean after the shims — the real
+    artifact is never written.
+
 Empirical scan facts (witnessed on this tree: rustc 1.97.0, wasm-opt 112,
 wasm-objdump 1.0.42, Apple LLVM 17 llvm-nm):
 
@@ -51,8 +70,10 @@ literally in mangled identifiers (verified empirically on arm64
 wasm32-wasip1, rustc 1.97).
 
 stdlib only. No git commands. Exits 1 on: forbidden symbol in the optimized
-wasm artifact, primary build/tooling failure, cannot-enumerate, or a vacuous
-probe. Secondary results never affect the exit code.
+wasm artifact, primary build/tooling failure, cannot-enumerate, a vacuous
+panic probe, a version-integrity law violation (occurrence count != the
+artifact's expected count), or a vacuous version shim. Secondary results
+never affect the exit code.
 """
 
 from __future__ import annotations
@@ -86,6 +107,51 @@ HOST_ARTIFACTS = [
         "avec-ffi membrane (release profile)",
         ["cargo", "build", "--release", "-p", "avec-ffi"],
         os.path.join("target", "release", "libavec_ffi.dylib"),
+    ),
+]
+
+# --- third check: version-string integrity (GATING) -------------------------
+# The release version as a NUL-terminated C string. Single-sourced upstream:
+# workspace Cargo.toml -> CARGO_PKG_VERSION (wasm) / ggen-generated
+# avec_arrow::VERSION_C (host). Pinned here as bytes; if the release bumps
+# without re-pinning, the version-carrying artifacts count 0 and the gate
+# FAILS closed (drift arm), printing the manifest cross-check note.
+EXPECTED_VERSION = "26.10.29"
+VERSION_NEEDLE = EXPECTED_VERSION.encode("ascii") + b"\x00"
+
+# Per-artifact EXACT-COUNT law over raw binary content. (label, rel, expected,
+# why). The two version-carrying artifacts must carry the needle exactly once
+# (duplication OR absence both fire); the audit membrane carries none by
+# design (see module docstring) and any occurrence there is an unplanned
+# version literal entering the audited-kernel surface.
+VERSION_SUBJECTS = [
+    (
+        "optimized wasm artifact",
+        os.path.relpath(OPT_WASM, REPO_ROOT),
+        1,
+        "exports wasm_version() -> NUL-terminated CARGO_PKG_VERSION string; "
+        "exactly-once is the law (2+ = stamped twice, 0 = drift)",
+    ),
+    (
+        "avec-ffi membrane (release profile)",
+        os.path.relpath(
+            os.path.join(REPO_ROOT, "target", "release", "libavec_ffi.dylib"),
+            REPO_ROOT,
+        ),
+        1,
+        "exposes avec_version via avec_arrow::VERSION_C (ggen-generated, "
+        "ontology-single-sourced); exactly-once is the law",
+    ),
+    (
+        "avec-audit membrane (audit profile)",
+        os.path.relpath(
+            os.path.join(REPO_ROOT, "target", "audit", "libavec_audit.dylib"),
+            REPO_ROOT,
+        ),
+        0,
+        "no version export by design: crates/audit wraps kernels only and "
+        "never references VERSION_C, so the linker GCs the literal — any "
+        "occurrence is an unplanned version literal in the audit surface",
     ),
 ]
 
@@ -299,6 +365,94 @@ def scan_host(path, nm_cmd):
 
 
 # ---------------------------------------------------------------------------
+# version-string integrity (third check)
+# ---------------------------------------------------------------------------
+def count_version_needle(path, needle=None):
+    """Occurrence count of the version needle in RAW BINARY CONTENT.
+
+    Deliberately a byte scan of the whole file, not a symbol-name scan: the
+    law subjects what the artifact actually carries. bytes.count is
+    non-overlapping; the needle cannot self-overlap anyway (starts '2',
+    ends NUL).
+    """
+    with open(path, "rb") as f:
+        return f.read().count(VERSION_NEEDLE if needle is None else needle)
+
+
+def version_verdict(expected, actual):
+    """(ok, msg) for one artifact's exact-count law."""
+    if actual == expected:
+        return True, f"exactly {expected} occurrence(s) — as expected"
+    return (
+        False,
+        f"expected {expected}, found {actual}"
+        + (" (version stamped twice?)" if actual > expected else " (version drift/absent?)"),
+    )
+
+
+def version_expected_for(path):
+    """Expected needle count for an artifact, via VERSION_SUBJECTS."""
+    rel = os.path.relpath(path, REPO_ROOT)
+    for _label, r, expected, _why in VERSION_SUBJECTS:
+        if r == rel:
+            return expected
+    raise RuntimeError(f"no version expectation registered for {rel}")
+
+
+def check_version_manifest_pin():
+    """Cross-read the workspace manifest version against the pinned needle.
+
+    Informational note only — the count law itself decides the exit. A bump
+    without re-pinning shows up as count 0 on the version-carrying artifacts;
+    this note explains why.
+    """
+    toml_path = os.path.join(REPO_ROOT, "Cargo.toml")
+    try:
+        with open(toml_path, "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if stripped.startswith("version") and "=" in stripped:
+                    manifest = stripped.split("=", 1)[1].strip().strip('"')
+                    if manifest != EXPECTED_VERSION:
+                        return (
+                            f"NOTE: workspace Cargo.toml version is {manifest!r} "
+                            f"but the gate pins {EXPECTED_VERSION!r} — re-pin "
+                            f"EXPECTED_VERSION or the count law will fire"
+                        )
+                    return None
+        return f"NOTE: no version key found in {toml_path}"
+    except OSError as exc:
+        return f"NOTE: cannot read {toml_path}: {exc}"
+
+
+def build_version_shims(subject_path, tmpdir):
+    """Byte-level shims on a /tmp COPY of `subject_path`.
+
+    The real artifact is never opened for write. Returns (dup_path,
+    zero_path): a copy with the needle inserted a SECOND time, and a copy
+    with the needle stripped entirely. If the subject carries no needle the
+    shim cannot be built -> RuntimeError (fail closed).
+    """
+    with open(subject_path, "rb") as f:
+        data = f.read()
+    idx = data.find(VERSION_NEEDLE)
+    if idx < 0:
+        raise RuntimeError(
+            f"cannot build version shims: {subject_path} carries no "
+            f"{VERSION_NEEDLE!r} to mutate"
+        )
+    dup = data[:idx] + VERSION_NEEDLE + data[idx:]
+    zero = data.replace(VERSION_NEEDLE, b"")
+    dup_path = os.path.join(tmpdir, "shim_version_dup.wasm")
+    zero_path = os.path.join(tmpdir, "shim_version_zero.wasm")
+    with open(dup_path, "wb") as f:
+        f.write(dup)
+    with open(zero_path, "wb") as f:
+        f.write(zero)
+    return dup_path, zero_path
+
+
+# ---------------------------------------------------------------------------
 # builds
 # ---------------------------------------------------------------------------
 def build_primary():
@@ -385,7 +539,8 @@ def main() -> int:
     print("SYMBOL GATE - zero-panic Jidoka (charter 7.2.1, rescoped)")
     print(
         "PRIMARY: optimized wasm artifact (gating) | "
-        "SECONDARY: host membranes (informational, non-gating)"
+        "SECONDARY: host membranes (informational, non-gating) | "
+        "VERSION: binary version-string law (gating)"
     )
     print("=" * 74)
 
@@ -477,11 +632,51 @@ def main() -> int:
         "law is proven by the wasm gate — host dylibs measure std, not avec"
     )
 
-    # [3] anti-vacuity probes ------------------------------------------------
-    print("\n[3] ANTI-VACUITY probes")
+    # [3] version-string integrity (third check, GATING) ---------------------
+    print("\n[3] VERSION INTEGRITY - binary version-string law (gating)")
+    print(
+        f"  needle: {VERSION_NEEDLE!r} (expected version {EXPECTED_VERSION!r}, "
+        f"NUL-terminated C-string form) over raw binary content"
+    )
+    manifest_note = check_version_manifest_pin()
+    if manifest_note:
+        print(f"  {manifest_note}")
+    version_failures = []
+    for label, rel, expected, why in VERSION_SUBJECTS:
+        path = os.path.join(REPO_ROOT, rel)
+        if not os.path.isfile(path):
+            # A host membrane that failed to build is already reported loud
+            # and non-gating in [2]; scanning a missing artifact is skipped
+            # loudly here rather than silently passing.
+            print(f"  {label}: ABSENT -> VERSION-SKIP (non-gating; see [2])")
+            print(f"      law: {why}")
+            continue
+        try:
+            actual = count_version_needle(path)
+        except OSError as exc:
+            print(f"  {label}: READ ERROR -> VERSION-FAIL (gating): {exc}")
+            version_failures.append((label, rel, expected, f"read error: {exc}"))
+            continue
+        ok, msg = version_verdict(expected, actual)
+        print(
+            f"  {label}: {actual} occurrence(s) -> "
+            f"{'ok' if ok else f'VERSION-FAIL [GATING] ({msg})'}"
+        )
+        print(f"      law: {why}")
+        if not ok:
+            version_failures.append((label, rel, expected, msg))
+    version_law_ok = not version_failures
+    print(
+        f"  VERSION verdict: "
+        f"{'PASS (all artifact counts match their law)' if version_law_ok else 'FAIL'}"
+    )
+
+    # [4] anti-vacuity probes ------------------------------------------------
+    print("\n[4] ANTI-VACUITY probes")
     fired_raw = False
     fired_opt = False
     host_probe_fired = False
+    version_probe_ok = False
     tmpdir = tempfile.mkdtemp(prefix="symbol_gate_probe_", dir="/tmp")
     try:
         try:
@@ -520,17 +715,53 @@ def main() -> int:
                 )
             except RuntimeError as exc:
                 print(f"  HOST PROBE-ERROR: {exc} (non-gating)")
+
+        # version-integrity shim proof: byte-level mutations of a /tmp COPY
+        # of the optimized wasm must FIRE the count law BOTH ways (duplicated
+        # needle, stripped needle); the real artifact is only ever opened for
+        # read and must re-count clean afterwards. Any exception here leaves
+        # version_probe_ok False -> vacuous -> exit 1 (fail closed).
+        try:
+            dup_path, zero_path = build_version_shims(OPT_WASM, tmpdir)
+            wasm_expected = version_expected_for(OPT_WASM)
+            dup_n = count_version_needle(dup_path)
+            zero_n = count_version_needle(zero_path)
+            dup_fired = dup_n != wasm_expected
+            zero_fired = zero_n != wasm_expected
+            real_n = count_version_needle(OPT_WASM)
+            real_untouched = real_n == wasm_expected
+            print(
+                "  version shims: byte-level mutations of a /tmp COPY of the "
+                "optimized wasm (real artifact never written)"
+            )
+            print(
+                f"    dup shim  : {dup_n} occurrence(s) vs expected "
+                f"{wasm_expected} -> {'FIRED' if dup_fired else 'BLIND'}"
+            )
+            print(
+                f"    zero shim : {zero_n} occurrence(s) vs expected "
+                f"{wasm_expected} -> {'FIRED' if zero_fired else 'BLIND'}"
+            )
+            print(
+                f"    real wasm : {real_n} occurrence(s) after shimming -> "
+                f"{'UNTOUCHED' if real_untouched else 'MUTATED (safety failure)'}"
+            )
+            version_probe_ok = dup_fired and zero_fired and real_untouched
+        except (RuntimeError, OSError) as exc:
+            print(f"  VERSION SHIM-ERROR: {exc} (gating: proof did not run)")
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
         print(f"  cleaned up: {tmpdir}")
 
-    # [4] verdict -------------------------------------------------------------
+    # [5] verdict -------------------------------------------------------------
     print("\n" + "=" * 74)
     print(
         f"PRIMARY (wasm, gating): {'PASS' if primary_pass else 'FAIL'} | "
         f"probe raw-stage: {'FIRED' if fired_raw else 'BLIND'} | "
         f"probe opt-stage: {'FIRED' if fired_opt else 'BLIND'} | "
-        f"host probe: {'FIRED' if host_probe_fired else 'VACUOUS (non-gating)'}"
+        f"host probe: {'FIRED' if host_probe_fired else 'VACUOUS (non-gating)'} | "
+        f"VERSION law: {'PASS' if version_law_ok else 'FAIL'} | "
+        f"version shims: {'FIRED' if version_probe_ok else 'BLIND/NOT-RUN'}"
     )
     if not primary_pass:
         print(
@@ -545,9 +776,25 @@ def main() -> int:
             "optimized export surface)"
         )
         return 1
+    if not version_law_ok:
+        print(
+            "FINAL: FAIL - VERSION INTEGRITY: artifact occurrence count(s) "
+            "violate the per-artifact version-string law:"
+        )
+        for label, rel, expected, msg in version_failures:
+            print(f"  {label} ({rel}): {msg}")
+        return 1
+    if not version_probe_ok:
+        print(
+            "FINAL: FAIL - VACUOUS GATE: the version shim proof did not fire "
+            "(duplicated or stripped needle went undetected, the proof did "
+            "not run, or the real artifact re-counted dirty after shimming)"
+        )
+        return 1
     print(
         "FINAL: PASS - optimized wasm artifact clean (0 forbidden symbols); "
-        "gate proven able to fail at both stages"
+        f"version integrity holds ({EXPECTED_VERSION!r} exactly-once where "
+        "the version ships); gate proven able to fail at every stage"
     )
     return 0
 
