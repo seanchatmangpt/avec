@@ -126,3 +126,29 @@ branch-audit:
 # Zero-panic Jidoka gate.
 symbol-gate:
 	python3 scripts/symbol_gate.py
+
+# --- OPT20-L10 additions ------------------------------------------------------
+
+# Release ladder: every release gate in sequence, fail-closed, naming the first
+# failing target. Each step's real sub-make exit is echoed as
+# `PASS <target> exit=<n>`; a nonzero exit prints `FAIL <target> exit=<n>`,
+# names the target, and terminates release-check with that same exit code.
+# `if $(MAKE)` guards the step so `sh -e` cannot abort before the FAIL line
+# is printed. Sequential by construction (for-loop, one shell), not -j.
+.PHONY: release-check
+
+RELEASE_CHECK_STEPS := gate0 gate1 gate2 gate3 bench-gate footprint branch-audit symbol-gate publish-check
+
+release-check:
+	@for t in $(RELEASE_CHECK_STEPS); do \
+		echo "== release-check: $$t =="; \
+		if $(MAKE) --no-print-directory $$t; then \
+			echo "PASS $$t exit=0"; \
+		else \
+			st=$$?; \
+			echo "FAIL $$t exit=$$st"; \
+			echo "release-check: stopped at $$t (exit=$$st)"; \
+			exit $$st; \
+		fi; \
+	done; \
+	echo "release-check: all $(words $(RELEASE_CHECK_STEPS)) steps PASS"
