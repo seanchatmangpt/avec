@@ -14,8 +14,10 @@ use avec_arrow::bitmap::{
     mask_words, set_bit, word_at, word_valid, Bitmap,
 };
 use avec_arrow::buffer::Buf;
-use avec_arrow::c_abi::{export, ArrowArray, ForeignArray};
-use avec_arrow::primitive::{Primitive, PrimitiveBuilder};
+use avec_arrow::c_abi::{export, ForeignArray};
+use avec_arrow::primitive::PrimitiveBuilder;
+use avec_arrow::runend::RunEndEncodedBuilder;
+use avec_arrow::slice::slice as slice_window;
 use avec_arrow::varlen::{Offset, Varlen, VarlenBuilder};
 use avec_arrow::views::{is_inline, ViewVecBuilder};
 use std::sync::atomic::{AtomicIsize, Ordering};
@@ -590,6 +592,7 @@ fn viewvec_len_is_empty_laws() {
 #[test]
 fn is_inline_boundary_12_13() {
     assert_eq!(is_inline(0), 1);
+    assert_eq!(is_inline(8), 1);
     assert_eq!(is_inline(11), 1);
     assert_eq!(is_inline(12), 1);
     assert_eq!(is_inline(13), 0);
@@ -597,4 +600,81 @@ fn is_inline_boundary_12_13() {
     assert_eq!(is_inline(u32::MAX), 0);
     // i64 arithmetic: (len - 13) >> 63 — sign bit of (len - 13).
     assert_eq!(is_inline(u32::MAX - 1), 0);
+}
+
+// ---------------------------------------------------------------------------
+// runend — court rows 68:9, 189:9, 195:9, 195:26 (file by lane W3-REE)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn runend_len_is_empty_state_laws() {
+    let mut b = RunEndEncodedBuilder::<i32>::new();
+    // Fresh builder: len 0, is_empty true (kills 189:9 -> 0/1 and 195:9
+    // -> false, 195:26 == -> !=).
+    assert_eq!(b.len(), 0);
+    assert!(b.is_empty());
+    b.push(7);
+    b.push(7);
+    b.push(2);
+    // After pushes: len 3, is_empty false (kills 189:9 -> 1 and 195:9
+    // -> true).
+    assert_eq!(b.len(), 3);
+    assert!(!b.is_empty());
+    // Finished array: non-empty is_empty() == false (kills 68:9 -> true).
+    let arr = b.finish();
+    assert_eq!(arr.logical_len(), 3);
+    assert_eq!(arr.num_runs(), 2);
+    assert!(!arr.is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// slice — court rows 69:9, 70:13, 70:28, 71:13, 71:25, 79:9 (file by lane
+// W3-SLICE): PartialEq is pointer+window identity; Debug renders the fields.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn sliced_equality_and_debug_laws() {
+    let mut pb = PrimitiveBuilder::<i32>::new();
+    for i in 0..8 {
+        pb.push(Some(i));
+    }
+    let arr = pb.finish();
+    let mut other_pb = PrimitiveBuilder::<i32>::new();
+    for i in 0..8 {
+        other_pb.push(Some(100 + i));
+    }
+    let other = other_pb.finish();
+
+    let a = slice_window(&arr, 2, 3).expect("window fits");
+    let b = slice_window(&arr, 2, 3).unwrap(); // identical to a
+    let c = slice_window(&arr, 2, 4).unwrap(); // differs by len
+    let d = slice_window(&arr, 1, 3).unwrap(); // differs by offset
+    let e = slice_window(&other, 2, 3).unwrap(); // differs by parent
+
+    // Identical windows are equal (kills eq -> false, and the offset/len
+    // == -> != mutants which flip identical-equality to false).
+    assert!(a == b);
+    // Any single-field divergence breaks equality (kills eq -> true and the
+    // && -> || mutants: `other` has a different parent pointer, so the
+    // mutant's A||B||C is true while the correct eq is false).
+    assert!(a != c);
+    assert!(a != d);
+    assert!(a != e);
+    // Debug must render the struct and its fields (kills fmt ->
+    // Ok(Default::default())).
+    let dbg = alloc_format(|s| {
+        use std::fmt::Write as _;
+        write!(s, "{a:?}").unwrap();
+    });
+    assert!(dbg.contains("Sliced"), "debug output: {dbg}");
+    assert!(dbg.contains("offset: 2"), "debug output: {dbg}");
+    assert!(dbg.contains("len: 3"), "debug output: {dbg}");
+}
+
+/// Format into a String via std (the test binary links std even though the
+/// library is no_std).
+fn alloc_format(f: impl FnOnce(&mut String)) -> String {
+    let mut s = String::new();
+    f(&mut s);
+    s
 }

@@ -6,17 +6,18 @@
 //! headers (delta and non-delta forms), i16/i32/i64, binary, bool-in-header,
 //! and skip for every compact type including nested structs — and nothing
 //! more. It is not a full Thrift runtime: no transports, no message frames,
-//! no containers as values, no unions, no maps/lists as first-class readable
-//! values (they are skip-only). Wire compatibility was checked against the
-//! compact protocol shape, not against a live Apache Thrift peer; the
-//! round-trip and hand-crafted-wire courts below are the proof of
-//! self-consistency.
+//! no unions, and containers (list/set/map) are skip-only. Wire
+//! compatibility targets the compact protocol shape, not a live Apache
+//! Thrift peer; the round-trip and hand-crafted-wire courts below are the
+//! proof of self-consistency.
 //!
 //! Fail-closed law (shared with `crate::rle`): every read is a bounded
-//! slice operation, every arithmetic step on attacker-controlled input is
+//! slice operation, every arithmetic step over attacker-controlled input is
 //! `checked_*`/`try_from`, and malformed input surfaces as a typed
 //! [`ThriftError`] — never a panic, never a silent success. Struct skipping
-//! is depth-guarded so a crafted nesting bomb cannot exhaust the stack.
+//! is depth-guarded so a crafted nesting bomb hits a typed error instead of
+//! the stack guard page, and every skip loop strictly consumes bytes so no
+//! crafted container can spin unboundedly.
 //!
 //! Error semantics reuse the `ParquetError` mold (typed enum, `Debug +
 //! PartialEq + Display`, `std::error::Error` under the `std` feature,
@@ -31,11 +32,10 @@ use core::fmt;
 pub enum ThriftError {
     /// Input ended mid-record (truncated header, truncated varint).
     UnexpectedEof,
-    /// A compact type id outside the defined set {1..=12} (or STOP=0 in a
-    /// value position, where a value was required).
+    /// A compact type id outside the defined set {1..=12}, or STOP (0) in a
+    /// value position where a value was required.
     InvalidType(u8),
-    /// A field id could not be derived (delta overflow of i16, or an
-    /// unparseable non-delta id).
+    /// A field id could not be derived (delta overflow of i16).
     InvalidFieldId,
     /// A required field was absent from the struct on the wire.
     MissingRequiredField(i16),
@@ -54,7 +54,7 @@ impl fmt::Display for ThriftError {
 #[cfg(feature = "std")]
 impl std::error::Error for ThriftError {}
 
-/// Compact-protocol type ids (thrift compact: `CType`).
+/// Compact-protocol type ids.
 pub mod ctype {
     pub const STOP: u8 = 0;
     pub const BOOLEAN_TRUE: u8 = 1;
@@ -62,7 +62,6 @@ pub mod ctype {
     pub const BYTE: u8 = 3;
     pub const I16: u8 = 4;
     pub const I32: u8 = 5;
-    pub const I64: u6 = 6;
     pub const I64: u8 = 6;
     pub const DOUBLE: u8 = 7;
     pub const BINARY: u8 = 8;
@@ -98,20 +97,20 @@ pub fn read_varint(src: &[u8], pos: &mut usize) -> Result<u64, ThriftError> {
     }
 }
 
-/// Zigzag encode i32 (overflow-free: arithmetic done in unsigned domain).
+/// Zigzag encode i32. Unsigned-domain arithmetic: no overflow paths.
 #[must_use]
 pub fn zigzag_encode_i32(n: i32) -> u32 {
-    (u32::from_bits(n as u32) << 1) ^ u32::from_bool... placeholder
+    ((n as u32) << 1) ^ ((n >> 31) as u32)
 }
 
-/// Zigzag decode i32 from a raw varint value.
+/// Zigzag decode i32 from a raw varint value (low 32 bits used).
 #[must_use]
 pub fn zigzag_decode_i32(v: u64) -> i32 {
     let z = v as u32;
     ((z >> 1) as i32) ^ (-((z & 1) as i32))
 }
 
-/// Zigzag encode i64 (unsigned-domain arithmetic, no overflow paths).
+/// Zigzag encode i64. Unsigned-domain arithmetic: no overflow paths.
 #[must_use]
 pub fn zigzag_encode_i64(n: i64) -> u64 {
     ((n as u64) << 1) ^ ((n >> 63) as u64)
@@ -123,23 +122,38 @@ pub fn zigzag_decode_i64(v: u64) -> i64 {
     ((v >> 1) as i64) ^ (-((v & 1) as i64))
 }
 
-/// Zigzag decode i16 (field ids on the wire).
-#[must_use]
-pub fn zigzag_decode_i16(v: u64) -> i16 {
-    let z = v as u16;
-    ((z >> 1) as i16) ^ (-((z & 1) as i16))
-}
-
 /// Zigzag encode i16 (non-delta field ids on the wire).
 #[must_use]
 pub fn zigzag_encode_i16(n: i16) -> u16 {
     ((n as u16) << 1) ^ ((n >> 15) as u16)
 }
 
+/// Zigzag decode i16 from a raw varint value (low 16 bits used).
+#[must_use]
+pub fn zigzag_decode_i16(v: u64) -> i16 {
+    let z = v as u16;
+    ((z >> 1) as i16) ^ (-((z & 1) as i16))
+}
+
+/// Write an i16 as zigzag varint (non-delta field ids).
+pub fn write_zigzag_i16(dst: &mut Vec<u8>, n: i16) {
+    crate::rle::write_varint(dst, u64::from(zigzag_encode_i16(n)));
+}
+
+/// Write an i32 as zigzag varint.
+pub fn write_zigzag_i32(dst: &mut Vec<u8>, n: i32) {
+    crate::rle::write_varint(dst, u64::from(zigzag_encode_i32(n)));
+}
+
+/// Write an i64 as zigzag varint.
+pub fn write_zigzag_i64(dst: &mut Vec<u8>, n: i64) {
+    crate::rle::write_varint(dst, zigzag_encode_i64(n));
+}
+
 /// Write a compact field header.
 ///
 /// Delta form when the id gap fits 1..=15 (`(delta << 4) | type`), else the
-/// non-delta form (type byte, then zigzag-i16 field id as varint).
+/// non-delta form (bare type byte, then zigzag-i16 field id as varint).
 pub fn write_field_header(dst: &mut Vec<u8>, field_id: i16, prev_id: i16, type_id: u8) {
     let delta = i32::from(field_id) - i32::from(prev_id);
     if (1..=15).contains(&delta) {
@@ -176,24 +190,8 @@ pub fn write_binary_field(dst: &mut Vec<u8>, field_id: i16, prev_id: i16, value:
     dst.extend_from_slice(value);
 }
 
-/// Write an i16 as zigzag varint (non-delta field ids).
-pub fn write_zigzag_i16(dst: &mut Vec<u8>, n: i16) {
-    crate::rle::write_varint(dst, u64::from(zigzag_encode_i16(n)));
-}
-
-/// Write an i32 as zigzag varint.
-pub fn write_zigzag_i32(dst: &mut Vec<u8>, n: i32) {
-    crate::rle::write_varint(dst, u64::from(zigzag_encode_i32(n)));
-}
-
-/// Write an i64 as zigzag varint.
-pub fn write_zigzag_i64(dst: &mut Vec<u8>, n: i64) {
-    crate::rle::write_varint(dst, zigzag_encode_i64(n));
-}
-
-/// Read a field header. Returns `Ok(None)` at the struct's STOP byte,
-/// else `(field_id, type_id)`; `prev_id` is the previous field id for the
-/// delta form.
+/// Read a field header. Returns `Ok(None)` at the struct's STOP byte, else
+/// `(field_id, type_id)`; `prev_id` is the previous field id (delta form).
 pub fn read_field_header(
     src: &[u8],
     pos: &mut usize,
@@ -244,8 +242,8 @@ pub fn read_byte(src: &[u8], pos: &mut usize) -> Result<u8, ThriftError> {
 /// Read a binary field payload as a borrowed slice of `src` — zero
 /// allocation by construction (no `Vec`, no copy).
 pub fn read_binary<'a>(src: &'a [u8], pos: &mut usize) -> Result<&'a [u8], ThriftError> {
-    let len = read_varint(src, pos)?;
-    let Some(len) = usize::try_from(len).ok() else {
+    let raw = read_varint(src, pos)?;
+    let Some(len) = usize::try_from(raw).ok() else {
         return Err(ThriftError::LengthOverflow);
     };
     let end = match pos.checked_add(len) {
@@ -262,8 +260,9 @@ pub fn read_binary<'a>(src: &'a [u8], pos: &mut usize) -> Result<&'a [u8], Thrif
 }
 
 /// Skip one value of `type_id`, starting at `*pos`. Bounded: every branch
-/// either consumes at least one byte or returns; crafted containers hit the
-/// source end and report EOF rather than looping unboundedly.
+/// either consumes at least one byte or returns, so crafted containers hit
+/// the source end (or the depth guard) as typed errors instead of looping
+/// unboundedly.
 pub fn skip_value(src: &[u8], pos: &mut usize, type_id: u8, depth: u8) -> Result<(), ThriftError> {
     match type_id {
         ctype::BOOLEAN_TRUE | ctype::BOOLEAN_FALSE => Ok(()), // payload rides in the header
@@ -289,13 +288,16 @@ pub fn skip_value(src: &[u8], pos: &mut usize, type_id: u8, depth: u8) -> Result
             if !valid_type_id(elem_type) {
                 return Err(ThriftError::InvalidType(elem_type));
             }
-            let sizeNibble = size_and_type >> 4;
-            let count: u64 = if sizeNibble == 15 {
+            let size_nibble = size_and_type >> 4;
+            let count: u64 = if size_nibble == 15 {
                 read_varint(src, pos)?
             } else {
-                u64::from(sizeNibble)
+                u64::from(size_nibble)
             };
-            skip_n(src, pos, elem_type, count, depth)
+            for _ in 0..count {
+                skip_element(src, pos, elem_type, depth)?;
+            }
+            Ok(())
         }
         ctype::MAP => {
             let count = read_varint(src, pos)?;
@@ -310,13 +312,9 @@ pub fn skip_value(src: &[u8], pos: &mut usize, type_id: u8, depth: u8) -> Result
             if !valid_type_id(v_ty) {
                 return Err(ThriftError::InvalidType(v_ty));
             }
-            // Each pair consumes at least one byte per element type on the
-            // wire (bools in collections are raw bytes), so the loop is
-            // bounded by the remaining source length.
-            let pairs = count;
-            for _ in 0..pairs {
-                skip_n_single(src, pos, k_ty, depth)?;
-                skip_n_single(src, pos, v_ty, depth)?;
+            for _ in 0..count {
+                skip_element(src, pos, k_ty, depth)?;
+                skip_element(src, pos, v_ty, depth)?;
             }
             Ok(())
         }
@@ -325,20 +323,12 @@ pub fn skip_value(src: &[u8], pos: &mut usize, type_id: u8, depth: u8) -> Result
     }
 }
 
-/// Skip `count` elements of `elem_type`. Bounded: every element consumes at
-/// least one byte (bools in collections are one raw byte, structs at least
-/// a STOP byte), so the loop is bounded by the remaining source length.
-fn skip_n(src: &[u8], pos: &mut usize, elem_type: u8, count: u64, depth: u8) -> Result<(), ThriftError> {
-    for _ in 0..count {
-        skip_n_single(src, pos, elem_type, depth)?;
-    }
-    Ok(())
-}
-
-fn skip_n_single(src: &[u8], pos: &mut usize, elem_type: u8, depth: u8) -> Result<(), ThriftError> {
+/// Skip one collection element of `elem_type`. Bools as collection
+/// elements are stored as one raw byte (compact protocol rule), unlike
+/// bool struct fields whose value rides in the field header.
+fn skip_element(src: &[u8], pos: &mut usize, elem_type: u8, depth: u8) -> Result<(), ThriftError> {
     match elem_type {
         ctype::BOOLEAN_TRUE | ctype::BOOLEAN_FALSE => {
-            // Bools as collection elements are stored as one raw byte.
             let _ = read_byte(src, pos)?;
             Ok(())
         }
@@ -347,43 +337,36 @@ fn skip_n_single(src: &[u8], pos: &mut usize, elem_type: u8, depth: u8) -> Resul
 }
 
 /// Walk a struct's fields, skipping every value, until STOP. Depth-guarded
-/// against crafted nesting bombs.
+/// against crafted nesting bombs; field ids are tracked so delta-encoded
+/// headers decode lawfully even while their values are discarded.
 fn skip_struct(src: &[u8], pos: &mut usize, depth: u8) -> Result<(), ThriftError> {
     if depth >= MAX_SKIP_DEPTH {
         return Err(ThriftError::DepthExceeded);
     }
     let mut prev_id: i16 = 0;
     loop {
-        let Some((_, type_id)) = read_field_header(src, pos, prev_id)? else {
+        let Some((field_id, type_id)) = read_field_header(src, pos, prev_id)? else {
             return Ok(());
         };
-        // Non-delta field ids carry their id in the payload we already
-        // consumed inside read_field_header; the id itself is not needed to
-        // skip the value.
-        prev_id = 0; // compact: delta is relative to the previous id; unknown
-                     // ids stay relative — keep the wire position consistent
-                     // by tracking the real id.
-        // (Re-derive the real id for correctness of subsequent deltas.)
-        // NOTE: read_field_header already consumed any non-delta id bytes.
-        prev_id = 0;
+        prev_id = field_id;
         skip_value(src, pos, type_id, depth + 1)?;
     }
 }
 
-/// Validate a raw type id is in the defined set.
+/// Validate a raw type id is in the defined set {1..=12}.
 fn valid_type_id(t: u8) -> bool {
     (1..=12).contains(&t)
 }
 
-/// Parquet `PageType` values (subset used by this framer).
+/// Parquet `PageType` values (subset this framer names).
 pub mod page_type {
     pub const DATA_PAGE: i32 = 0;
     pub const INDEX_PAGE: i32 = 1;
-    pub const DICTIONARY_PAGE: i2 = 2;
+    pub const DICTIONARY_PAGE: i32 = 2;
     pub const DATA_PAGE_V2: i32 = 3;
 }
 
-/// Parquet `Encoding` values (subset used by this framer).
+/// Parquet `Encoding` values (subset this framer names).
 pub mod encoding {
     pub const PLAIN: i32 = 0;
     pub const PLAIN_DICTIONARY: i32 = 2;
@@ -396,8 +379,9 @@ pub mod encoding {
     pub const BYTE_STREAM_SPLIT: i32 = 9;
 }
 
-/// Minimal `PageHeader` (parquet.thrift field ids preserved: 1 type,
-/// 2 uncompressed_page_size, 3 compressed_page_size, 8 data_page_header_v2).
+/// Minimal `PageHeader` (parquet.thrift field ids preserved: 1 `type`,
+/// 2 `uncompressed_page_size`, 3 `compressed_page_size`,
+/// 8 `data_page_header_v2`).
 ///
 /// Fields 4 (crc) and 5-7 (other subheaders) are not represented; the
 /// reader skips unknown/unrepresented fields leniently (forward-compat),
@@ -419,9 +403,9 @@ pub struct DataPageHeaderV2 {
     pub num_rows: i32,
     pub definition_levels_byte_length: i32,
     pub repetition_levels_byte_length: i32,
-    /// parquet.thrift default is `true` when the field is absent; this
-    /// framer's writer always emits it explicitly (`false` — pages are
-    /// stored uncompressed).
+    /// parquet.thrift default is `true` when the field is absent on the
+    /// wire; this framer's writer always emits it explicitly (`false` —
+    /// pages are stored uncompressed).
     pub is_compressed: bool,
     /// `Encoding` enum value.
     pub encoding: i32,
@@ -438,7 +422,6 @@ pub fn write_page_header(dst: &mut Vec<u8>, h: &PageHeader) {
     prev = 3;
     if let Some(v2) = &h.data_page_header_v2 {
         write_field_header(dst, 8, prev, ctype::STRUCT);
-        prev = 8;
         let mut p: i16 = 0;
         write_i32_field(dst, 1, p, v2.num_values);
         p = 1;
@@ -459,12 +442,12 @@ pub fn write_page_header(dst: &mut Vec<u8>, h: &PageHeader) {
 }
 
 /// Read a minimal `PageHeader`. Returns the header and the number of bytes
-/// consumed (the body starts at `consumed`).
+/// consumed (the page body starts at `consumed`).
 ///
 /// Lenient forward-compat: fields outside the minimal schema (4 crc, 5-7
 /// other subheaders, any future id) are skipped by wire type, including
-/// known-id fields carrying an unexpected type. Required fields (1, 2, 3)
-/// must be present and correctly typed or the read fails with
+/// known-id fields carrying an unexpected wire type. Required fields
+/// (1, 2, 3) must be present or the read fails with
 /// [`ThriftError::MissingRequiredField`].
 pub fn read_page_header(src: &[u8]) -> Result<(PageHeader, usize), ThriftError> {
     let mut pos = 0usize;
@@ -499,7 +482,12 @@ pub fn read_page_header(src: &[u8]) -> Result<(PageHeader, usize), ThriftError> 
         None => return Err(ThriftError::MissingRequiredField(3)),
     };
     Ok((
-        PageHeader { page_type, uncompressed_page_size: uncompressed, compressed_page_size: compressed, data_page_header_v2: v2 },
+        PageHeader {
+            page_type,
+            uncompressed_page_size: uncompressed,
+            compressed_page_size: compressed,
+            data_page_header_v2: v2,
+        },
         pos,
     ))
 }
@@ -512,7 +500,6 @@ fn read_data_page_header_v2(src: &[u8], pos: &mut usize) -> Result<DataPageHeade
     let mut num_rows: Option<i32> = None;
     let mut def_len: Option<i32> = None;
     let mut rep_len: Option<i32> = None;
-    // parquet.thrift: `6: optional bool is_compressed = true`
     let mut is_compressed = true;
     let mut encoding: Option<i32> = None;
     let mut prev: i16 = 0;
@@ -526,7 +513,6 @@ fn read_data_page_header_v2(src: &[u8], pos: &mut usize) -> Result<DataPageHeade
             (2, ctype::I32) => num_nulls = Some(read_i32(src, &mut pos)?),
             (3, ctype::I32) => num_rows = Some(read_i32(src, &mut pos)?),
             (4, ctype::I32) => def_len = Some(read_i32(src, &mut pos)?),
-            (5, ctype::WASN => ()),
             (5, ctype::I32) => rep_len = Some(read_i32(src, &mut pos)?),
             (6, ctype::BOOLEAN_TRUE) => is_compressed = true,
             (6, ctype::BOOLEAN_FALSE) => is_compressed = false,
@@ -554,8 +540,6 @@ fn read_data_page_header_v2(src: &[u8], pos: &mut usize) -> Result<DataPageHeade
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloc::vec;
-    use alloc::vec::Vec;
 
     #[test]
     fn zigzag_round_trip_edges() {
@@ -595,7 +579,7 @@ mod tests {
         // Truncated varint: continuation bit set, stream ends.
         let mut pos = 0;
         assert_eq!(read_varint(&[0x80], &mut pos), Err(ThriftError::UnexpectedEof));
-        // Overlong varint: 11 continuation bytes -> shift passes 64.
+        // Overlong varint: 11 continuation bytes push shift past 64.
         let overlong = [0xFFu8; 11];
         let mut pos = 0;
         assert_eq!(read_varint(&overlong, &mut pos), Err(ThriftError::UnexpectedEof));
@@ -625,7 +609,14 @@ mod tests {
         let mut buf = Vec::new();
         write_bool_field(&mut buf, 6, 5, true);
         write_bool_field(&mut buf, 7, 6, false);
-        assert_eq!(buf, vec![((1i16) << 4) | ctype::BOOLEAN_TRUE as u8, ((1i16) << 4) | ctype::BOOLEAN_FALSE as u8]);
+        // No payload bytes: only the two header bytes are on the wire.
+        assert_eq!(
+            buf,
+            alloc::vec![
+                (1 << 4) | ctype::BOOLEAN_TRUE,
+                (1 << 4) | ctype::BOOLEAN_FALSE
+            ]
+        );
         let mut pos = 0;
         let (f, ty) = read_field_header(&buf, &mut pos, 5).expect("hdr").expect("some");
         assert_eq!((f, ty), (6, ctype::BOOLEAN_TRUE));
@@ -639,12 +630,12 @@ mod tests {
         // Delta form: gap 5 from id 3 to id 8.
         let mut buf = Vec::new();
         write_field_header(&mut buf, 8, 3, ctype::STRUCT);
-        assert_eq!(buf, vec![(5 << 4) | ctype::STRUCT]);
+        assert_eq!(buf, alloc::vec![(5 << 4) | ctype::STRUCT]);
         let mut pos = 0;
         assert_eq!(read_field_header(&buf, &mut pos, 3), Ok(Some((8, ctype::STRUCT))));
 
-        // Non-delta form: gap 200 (i16 jump, e.g. wrapping from 30000 to
-        // -30001 is not needed here; use a far id).
+        // Non-delta form: a far field id forces the bare type byte plus a
+        // zigzag-i16 id varint.
         let mut buf2 = Vec::new();
         write_field_header(&mut buf2, 300, 3, ctype::I32);
         assert_eq!(buf2[0], ctype::I32, "non-delta form: bare type byte");
@@ -675,9 +666,14 @@ mod tests {
         assert_eq!(back, h);
         assert_eq!(consumed, wire.len(), "header must consume its own wire exactly");
 
-        // Absent V2 subheader is a lawful PageHeader shape (e.g. dictionary
-        // pages use field 7 instead).
-        let h2 = PageHeader { page_type: 2, uncompressed_page_size: 7, compressed_page_size: 7, data_page_header_v2: None };
+        // Absent V2 subheader is a lawful PageHeader shape (other page
+        // types carry different subheaders on fields 5-7).
+        let h2 = PageHeader {
+            page_type: page_type::DICTIONARY_PAGE,
+            uncompressed_page_size: 7,
+            compressed_page_size: 7,
+            data_page_header_v2: None,
+        };
         let mut wire2 = Vec::new();
         write_page_header(&mut wire2, &h2);
         let (back2, consumed2) = read_page_header(&wire2).expect("parse");
@@ -687,10 +683,10 @@ mod tests {
 
     #[test]
     fn page_header_skips_unrepresented_fields() {
-        // Hand-built wire: our three required i32 fields + a crc (field 4,
-        // i32) + a DataPageHeader-shaped struct at field 5 + a binary blob
-        // at field 6 — all of which the minimal reader must skip by wire
-        // type while still resolving field 8.
+        // Hand-built wire: the three required i32 fields + a crc (field 4,
+        // i32) + a nested struct (field 5) + a binary blob (field 6) + a
+        // list of i32 (field 7, extended-size form) — all skipped by wire
+        // type — then the real V2 subheader at field 8.
         let mut wire = Vec::new();
         let mut prev = 0i16;
         write_i32_field(&mut wire, 1, prev, page_type::DATA_PAGE_V2);
@@ -701,7 +697,7 @@ mod tests {
         prev = 3;
         write_i32_field(&mut wire, 4, prev, 0x1234_5678); // crc — skipped
         prev = 4;
-        // field 5: a nested struct {1: i64} — skipped with depth 1.
+        // field 5: nested struct {1: i64} — skipped with depth 1.
         write_field_header(&mut wire, 5, prev, ctype::STRUCT);
         prev = 5;
         write_i64_field(&mut wire, 1, 0, -77);
@@ -709,8 +705,7 @@ mod tests {
         // field 6: binary — skipped.
         write_binary_field(&mut wire, 6, prev, b"skipped-payload");
         prev = 6;
-        // field 7: a list of three i32 elements — skipped (extended-size
-        // nibble form).
+        // field 7: list of three i32 elements — skipped (extended size).
         write_field_header(&mut wire, 7, prev, ctype::LIST);
         prev = 7;
         wire.push((15 << 4) | ctype::I32);
@@ -743,14 +738,14 @@ mod tests {
         assert_eq!(h.compressed_page_size, 10);
         let v2 = h.data_page_header_v2.expect("v2 present");
         assert_eq!(v2.num_values, 4);
-        assert_eq!(v2.is_compressed, false);
+        assert!(!v2.is_compressed);
         assert_eq!(v2.encoding, encoding::RLE);
         assert_eq!(consumed, wire.len());
     }
 
     #[test]
     fn missing_required_fields_fail_typed() {
-        // Only field 2 present: missing 1 and 3.
+        // Only field 2 present: missing 1.
         let mut wire = Vec::new();
         write_i32_field(&mut wire, 2, 0, 5);
         wire.push(ctype::STOP);
@@ -762,6 +757,17 @@ mod tests {
         write_i32_field(&mut wire, 3, 1, 5);
         wire.push(ctype::STOP);
         assert_eq!(read_page_header(&wire), Err(ThriftError::MissingRequiredField(2)));
+
+        // PageHeader complete but the V2 substruct lacks `encoding` (7).
+        let mut wire = Vec::new();
+        write_i32_field(&mut wire, 1, 0, page_type::DATA_PAGE_V2);
+        write_i32_field(&mut wire, 2, 1, 4);
+        write_i32_field(&mut wire, 3, 2, 4);
+        write_field_header(&mut wire, 8, 3, ctype::STRUCT);
+        write_i32_field(&mut wire, 1, 0, 4);
+        wire.push(ctype::STOP);
+        wire.push(ctype::STOP);
+        assert_eq!(read_page_header(&wire), Err(ThriftError::MissingRequiredField(7)));
     }
 
     #[test]
@@ -783,7 +789,8 @@ mod tests {
         let mut wire = Vec::new();
         write_page_header(&mut wire, &h);
         for cut in 0..wire.len() {
-            let err = read_page_header(&wire[..cut]).expect_err(&alloc::format!("cut {cut} must fail"));
+            let err = read_page_header(&wire[..cut])
+                .expect_err(&alloc::format!("cut {cut} must fail"));
             assert!(
                 matches!(
                     err,
@@ -799,38 +806,39 @@ mod tests {
     #[test]
     fn crafted_nesting_bomb_hits_depth_guard() {
         // 40 nested single-field structs: (delta 1, STRUCT) * 40 then stops.
-        let mut wire = vec![0x1Cu8; 40];
-        wire.extend(vec![0u8; 41]);
+        let mut wire = alloc::vec![0x1Cu8; 40];
+        wire.extend(alloc::vec![0u8; 41]);
         let mut pos = 0usize;
-        // Enter as a value-skip at depth 0.
-        let err = skip_value(&wire, &mut pos, ctype::STRUCT, 0).expect_err("must refuse deep nesting");
+        let err = skip_value(&wire, &mut pos, ctype::STRUCT, 0)
+            .expect_err("must refuse deep nesting");
         assert_eq!(err, ThriftError::DepthExceeded);
     }
 
     #[test]
-    fn invalid_type_ids_fail_typed() {
-        // Value position: type id 13 in a field header.
+    fn invalid_type_id_in_delta_header_fails_typed() {
+        // Field 3 arrives with compact type 13 (undefined), delta-encoded
+        // from field 2 — the reader must fail before any payload read.
+        let mut wire = Vec::new();
+        write_i32_field(&mut wire, 1, 0, page_type::DATA_PAGE_V2);
+        write_i32_field(&mut wire, 2, 1, 8);
+        wire.push((1 << 4) | 13);
+        assert_eq!(
+            read_page_header(&wire),
+            Err(ThriftError::InvalidType(13))
+        );
+    }
+
+    #[test]
+    fn list_element_type_zero_fails_typed() {
+        // Field 4 is a list whose element type nibble is 0 (STOP) — invalid
+        // as an element type.
         let mut wire = Vec::new();
         write_i32_field(&mut wire, 1, 0, 3);
-        wire.push(ctype::STOP);
-        wire.pop();
-        wire.push(0x0D); // field 1, type 13 — wait, this replaces the STOP, so field 1 type 13
-        // Non-delta id follows the type byte for type 13? The reader sees
-        // type 13 (unknown) and must fail before anything else.
-        let mut pos = 0;
-        let err = read_page_header(&wire).expect_err("unknown type must fail");
-        assert_eq!(err, ThriftError::InvalidType(13));
-
-        // STOP in a value position (list element type 0).
-        let mut wire2 = Vec::new();
-        write_i32_field(&mut wire2, 1, 0, 3);
-        write_i32_field(&mut wire2, 2, 1, 7);
-        write_i32_field(&mut wire2, 3, 2, 7);
-        wire2.push((1 << 4) | ctype::LIST); // field 4, list
-        wire2.push(0x00); // size nibble 0... elem type 0 -> invalid
-        let mut pos = 0;
-        let err = read_page_header(&wire2).expect_err("elem type 0 must fail");
-        assert_eq!(err, ThriftError::InvalidType(0));
+        write_i32_field(&mut wire, 2, 1, 7);
+        write_i32_field(&mut wire, 3, 2, 7);
+        wire.push((1 << 4) | ctype::LIST);
+        wire.push(0x00); // size nibble 0, elem type 0 -> invalid
+        assert_eq!(read_page_header(&wire), Err(ThriftError::InvalidType(0)));
     }
 
     #[test]
@@ -842,14 +850,14 @@ mod tests {
         write_i32_field(&mut wire, 3, 2, 7);
         wire.push((1 << 4) | ctype::BINARY);
         crate::rle::write_varint(&mut wire, 1u64 << 40);
-        let mut pos = 0;
         assert_eq!(read_page_header(&wire), Err(ThriftError::UnexpectedEof));
     }
 
     #[test]
     fn bool_list_elements_are_raw_bytes() {
-        // List of 3 bools as a skipped unknown field: extended size form,
-        // elem type BOOLEAN_TRUE; each element is one raw byte on the wire.
+        // A list of 3 bools as a skipped unknown field: extended-size form,
+        // elem type BOOLEAN_TRUE; each element is one raw byte on the wire
+        // (collection bools), so exactly 3 bytes are consumed.
         let mut wire = Vec::new();
         write_i32_field(&mut wire, 1, 0, 3);
         write_i32_field(&mut wire, 2, 1, 7);
@@ -859,7 +867,6 @@ mod tests {
         crate::rle::write_varint(&mut wire, 3);
         wire.extend_from_slice(&[0x01, 0x00, 0x01]);
         wire.push(ctype::STOP);
-        let mut pos = 0;
         let (h, consumed) = read_page_header(&wire).expect("bool list skips as raw bytes");
         assert_eq!(consumed, wire.len());
         assert_eq!(h.uncompressed_page_size, 7);

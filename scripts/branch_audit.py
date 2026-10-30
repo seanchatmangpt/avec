@@ -80,6 +80,7 @@ WRAPPERS = [
     "audit_get_bit", "audit_set_bit",
     "audit_unpack_1bit", "audit_unpack_2bit", "audit_unpack_4bit",
     "audit_unpack_8bit", "audit_is_inline",
+    "audit_is_all_valid", "audit_count_one_bits",
 ]
 
 # Transitive kernel-callee extents: (legacy-mangled substring, display name,
@@ -105,6 +106,9 @@ KERNEL_CALLEES = [
     (r"10avec_arrow6bitmap10mask_words$", "mask_words", (2, 0, 3)),
     (r"10avec_arrow6bitmap11count_valid$", "count_valid", (2, 0, 3)),
     (r"10avec_arrow7silicon15mask_words_neon$", "mask_words_neon", (3, 0, 4)),
+    (r"10avec_arrow6bitmapNtB2_6Bitmap12is_all_valid$",
+     "is_all_valid", (1, 2, 5)),
+    (r"10avec_arrow6bitmap14count_one_bits$", "count_one_bits", (1, 2, 5)),
     (r"12avec_parquet6unpack11unpack_1bit$", "unpack_1bit", (4, 3, 1)),
     (r"12avec_parquet6unpack11unpack_2bit$", "unpack_2bit", (4, 3, 1)),
     (r"12avec_parquet6unpack11unpack_4bit$", "unpack_4bit", (4, 3, 1)),
@@ -115,17 +119,29 @@ KERNEL_CALLEES = [
 # branch-free body (NEON EXTENT RULE above).
 REQUIRE_VEC_PRIMARY = {"mask_words_neon"}
 
-# PANIC-PATH budgets: calls into core::panicking (bounds checks, release
-# paths) are C-class control flow — itemized per symbol, budget-pinned,
-# never silently ignored. The unpack kernels each carry exactly one
-# panic_bounds_check call (the audit-profile recon of 2026-10-29); the scan
-# kernels and wrappers carry zero and MUST stay at zero (a bounds panic
-# growing inside a scan kernel is a true violation: the kernel claims
-# bounds-freedom by construction).
-PANIC_BUDGETS = {
+# FAIL-PATH budgets: calls into core::panicking (panic_bounds_check) or the
+# slice-index failure path (slice_index_fail) are C-class control flow —
+# itemized per symbol, budget-pinned, never silently ignored. Machine recon
+# 2026-10-29: the four unpack kernels carry exactly one panic_bounds_check
+# each; is_all_valid/count_one_bits carry two slice_index_fail calls each
+# (the provably-untaken per-iteration bounds checks' out-of-line fail path).
+# The other scan kernels and all wrappers carry zero and MUST stay at zero
+# (a bounds fail path growing inside e.g. mask_words is a true violation:
+# the kernel claims bounds-freedom by construction).
+FAIL_BUDGETS = {
     "mask_words": 0, "count_valid": 0, "mask_words_neon": 0,
+    "is_all_valid": 2, "count_one_bits": 2,
     "unpack_1bit": 1, "unpack_2bit": 1, "unpack_4bit": 1, "unpack_8bit": 1,
 }
+
+# UNCOVERED law: the audit-vacuity incident (2026-10-29) happened because
+# real kernels (is_all_valid, count_one_bits) had no audit-crate caller, were
+# GC'd from the artifact, and were named NOWHERE — silence, not a documented
+# skip. Law: every avec_arrow/avec_parquet Rust-mangled extent present in the
+# artifact must be covered by WRAPPERS or KERNEL_CALLEES; anything else is
+# named here with a reason and reviewed, or the gate exits 1. Empty means
+# every extent is audited; the gate always prints this section.
+UNCOVERED_ALLOWLIST = []
 
 # CALLEE-LINKAGE LAW: every Rust-mangled call/tail-branch target leaving an
 # audited extent must be covered by a KERNEL_CALLEES pattern. This is the
@@ -136,7 +152,8 @@ PANIC_BUDGETS = {
 # Symmetrically, a future kernel called by an audited extent but absent from
 # KERNEL_CALLEES would be unaudited; linkage makes that loud instead.
 RUST_MANGLED_RE = re.compile(r"_RNv|_RINv|_RNvN")
-PANIC_RE = re.compile(r"panic")
+# Fail/panic runtime targets (C-class bounds, index, release paths).
+FAIL_RE = re.compile(r"panic|slice_index_fail")
 
 # arm64 + x86_64 conditional-branch mnemonics. Targets are parsed from the
 # first operand token of the form 0x<hex>; an unparseable target is
@@ -251,21 +268,22 @@ def simd_loop_heads(loops, insns):
     return heads
 
 
-def audit_one(display, insns, budgets, require_vec, panic_budget):
-    """Audit one extent. Returns (ok, report_lines, n_conditionals)."""
+def audit_one(display, insns, budgets, require_vec, fail_budget):
+    """Audit one extent. Returns (ok, lines, n_conditionals, n_body_conds)."""
     latches, body_conds, dispatch, unaccounted, loops = classify(insns, budgets)
     lines = []
     fails = []
 
-    # PANIC-PATH class: calls into core::panicking inside the extent.
-    panic_paths = []
+    # FAIL-PATH class: calls into core::panicking / slice-index-fail inside
+    # the extent (bounds, index, release C-class paths).
+    fail_paths = []
     for addr, mnem, ops in insns:
         if mnem in ("bl", "b") or mnem.startswith("call"):
             m = ANNOT_RE.search(ops)
-            if m and PANIC_RE.search(m.group(1)):
-                panic_paths.append(f"0x{addr:x} {mnem} {m.group(1)}")
-    if len(panic_paths) > panic_budget:
-        fails.append(f"PANIC-PATH {len(panic_paths)} > budget {panic_budget}")
+            if m and FAIL_RE.search(m.group(1)):
+                fail_paths.append(f"0x{addr:x} {mnem} {m.group(1)}")
+    if len(fail_paths) > fail_budget:
+        fails.append(f"FAIL-PATH {len(fail_paths)} > budget {fail_budget}")
 
     vec_primary = None
     vec_tail = []
@@ -301,7 +319,7 @@ def audit_one(display, insns, budgets, require_vec, panic_budget):
     line = (f"{display:44s} LATCH {len(latches)}/{budgets[0]}  "
             f"BODY {len(body_conds)}/{budgets[1]}  "
             f"DISPATCH {len(dispatch)}/{budgets[2]}  "
-            f"PANIC {len(panic_paths)}/{panic_budget}  {verdict}")
+            f"FAIL-PATH {len(fail_paths)}/{fail_budget}  {verdict}")
     if vec_primary is not None:
         line += f"  VEC-PRIMARY@0x{vec_primary:x} body=0cond"
     if vec_tail:
@@ -309,7 +327,7 @@ def audit_one(display, insns, budgets, require_vec, panic_budget):
     lines.append(line)
 
     for cls, items in (("LATCH", latches), ("BODY-COND", body_conds),
-                       ("DISPATCH", dispatch), ("PANIC-PATH", panic_paths)):
+                       ("DISPATCH", dispatch), ("FAIL-PATH", fail_paths)):
         for it in items:
             lines.append(f"    {cls:9s} {it}")
     for it in unaccounted:
