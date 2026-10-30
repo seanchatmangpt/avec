@@ -10,19 +10,15 @@
 -on_load(init/0).
 
 init() ->
-    Env = os:getenv("AVEC_BEAM_PROFILE"),
-    Pick = case Env of
-               {ok, "release"} -> rel;
-               _ -> dbg
-           end,
-    io:format("DBG env=~p pick=~p~n", [Env, Pick]),
     %% OTP's load_nif always appends ".so" (never tries .dylib), so expose the
     %% cargo cdylib under the name the BEAM looks for. Symlink is refreshed on
     %% every run so it always targets the current build. Build profile comes
-    %% from AVEC_BEAM_PROFILE ("release") and defaults to debug.
+    %% from AVEC_BEAM_PROFILE ("release") and defaults to debug. os:getenv/1
+    %% returns {ok, Val} on OTP <= 27 and the bare Val on OTP 28+; both
+    %% shapes are accepted.
     {Dylib, NifBase} =
         case os:getenv("AVEC_BEAM_PROFILE") of
-            {ok, "release"} ->
+            Rel when Rel =:= {ok, "release"}; Rel =:= "release" ->
                 {"/Users/sac/avec/target/release/libavec_beam.dylib",
                  "/Users/sac/avec/target/release/libavec_beam"};
             _ ->

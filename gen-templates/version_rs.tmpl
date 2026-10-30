@@ -12,3 +12,7 @@ sparql:
 
 /// avec release version (project graph, single source of truth).
 pub const VERSION: &str = "{{ results[0].version }}";
+
+/// NUL-terminated C form for FFI version exports (drift-guarded by
+/// avec-ffi's parity test against VERSION).
+pub const VERSION_C: &[u8] = b"{{ results[0].version }}\0";

@@ -72,8 +72,29 @@ def load_library():
 
 
 def version() -> str:
-    """Version string reported by the loaded avec-ffi cdylib."""
-    return load_library().avec_version().decode("utf-8")
+    """Version string reported by the loaded avec-ffi cdylib.
+
+    Refuses loudly if the returned bytes are not a bare dotted version:
+    avec_version() is documented as NUL-terminated, but the current cdylib
+    returns a &str pointer whose strlen runs into adjacent rodata literals
+    (seen: b"26.10.29there is no such thing as a release load..."), so a
+    polluted read is an upstream avec-ffi contract violation, not valid
+    output.
+    """
+    import re
+
+    raw = load_library().avec_version()
+    if raw is None:
+        raise RuntimeError("avec: avec_version() returned NULL")
+    text = raw.decode("utf-8", errors="replace")
+    if re.fullmatch(r"[0-9]+(?:\.[0-9]+)+", text) is None:
+        raise RuntimeError(
+            "avec: avec_version() returned a non-NUL-terminated string "
+            f"(read {text!r}); upstream avec-ffi violates its documented "
+            "C-string contract — fix crates/avec-ffi/src/lib.rs to expose a "
+            "NUL-terminated static"
+        )
+    return text
 
 
 def avec_new_i32_batch(n: int, null_every: int) -> "pa.Array":

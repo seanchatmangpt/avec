@@ -45,13 +45,16 @@ init() ->
     %% cargo cdylib under the name the BEAM looks for. Symlink refreshed on
     %% every run so it always targets the current build (same dance as
     %% test/beam_test.escript). Build profile comes from AVEC_BEAM_PROFILE
-    %% ("release") and defaults to debug.
+    %% ("release") and defaults to debug. os:getenv/1 returns {ok, Val} on
+    %% OTP <= 27 and the bare Val on OTP 28+; both shapes are accepted.
     {Dylib, NifBase} =
         case os:getenv("AVEC_BEAM_PROFILE") of
-            {ok, "release"} -> {?RELEASE_DIR ++ "/libavec_beam.dylib",
-                                ?RELEASE_DIR ++ "/libavec_beam"};
-            _               -> {?DEBUG_DIR ++ "/libavec_beam.dylib",
-                                ?DEBUG_DIR ++ "/libavec_beam"}
+            Rel when Rel =:= {ok, "release"}; Rel =:= "release" ->
+                {?RELEASE_DIR ++ "/libavec_beam.dylib",
+                 ?RELEASE_DIR ++ "/libavec_beam"};
+            _ ->
+                {?DEBUG_DIR ++ "/libavec_beam.dylib",
+                 ?DEBUG_DIR ++ "/libavec_beam"}
         end,
     So = NifBase ++ ".so",
     case file:read_link_info(So) of
@@ -87,7 +90,7 @@ print_env() ->
                erlang:system_info(dirty_cpu_schedulers_online),
                erlang:system_info(dirty_io_schedulers)]),
     Profile = case os:getenv("AVEC_BEAM_PROFILE") of
-                  {ok, "release"} -> release;
+                  R when R =:= {ok, "release"}; R =:= "release" -> release;
                   _ -> debug
               end,
     io:format("[env] nif_build=~p dylib=target/~p/libavec_beam.dylib run_class=single-run machine-local~n",

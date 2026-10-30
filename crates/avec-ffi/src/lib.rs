@@ -57,5 +57,20 @@ pub extern "C" fn avec_batch_rows() -> i64 {
 /// avec version string pointer (NUL-terminated).
 #[no_mangle]
 pub extern "C" fn avec_version() -> *const core::ffi::c_char {
-    avec_arrow::VERSION.as_ptr() as *const core::ffi::c_char
+    // Rust &str is NOT NUL-terminated; serve the generated C form
+    // (drift-guarded: version_cstr_parity asserts the prefix equals VERSION).
+    avec_arrow::VERSION_C.as_ptr() as *const core::ffi::c_char
+}
+
+#[cfg(test)]
+mod version_cstr_parity {
+    /// Drift guard: the C-string form must equal VERSION + NUL.
+    #[test]
+    fn c_form_matches_version() {
+        let v = avec_arrow::VERSION.as_bytes();
+        let c = avec_arrow::VERSION_C;
+        assert_eq!(c.len(), v.len() + 1);
+        assert_eq!(&c[..v.len()], v);
+        assert_eq!(c[v.len()], 0);
+    }
 }

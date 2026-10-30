@@ -17,8 +17,10 @@
 //! - `rust_eh_personality` stable symbol stub (`#[no_mangle] pub extern "C"`,
 //!   NOT `#[lang]` — the `#[lang]` form is nightly-only).
 //!
-//! Exports: `wasm_mask_words`, `wasm_unpack_1bit`, `wasm_rle_decode` — thin
-//! C ABI wrappers over `avec_arrow::bitmap::mask_words`,
+//! Exports: `wasm_version` — C ABI returning a NUL-terminated version string
+//! (single-sourced from this crate's manifest via `CARGO_PKG_VERSION`); plus
+//! `wasm_mask_words`, `wasm_unpack_1bit`, `wasm_rle_decode` — thin C ABI
+//! wrappers over `avec_arrow::bitmap::mask_words`,
 //! `avec_parquet::unpack::unpack_1bit`, `avec_parquet::rle_decode`.
 //!
 //! Build (standalone manifest; not a root-workspace member):
@@ -125,6 +127,25 @@ fn footprint_panic(_info: &core::panic::PanicInfo<'_>) -> ! {
 /// `#[lang = "eh_personality"]` form requires nightly, this form does not.
 #[no_mangle]
 pub extern "C" fn rust_eh_personality() {}
+
+/// NUL-terminated artifact version, C-string form so any ABI consumer can
+/// read it without a length parameter.
+///
+/// Single-sourced from this crate's manifest (`CARGO_PKG_VERSION`) at compile
+/// time: there is no second hand-written copy of the version here to drift
+/// from `Cargo.toml`. The node execution court in `scripts/footprint.sh`
+/// asserts the artifact's bytes equal the manifest version (26.10.29 at the
+/// time of writing) — the court is what makes that binding visible, not this
+/// source line.
+static VERSION: &[u8] = concat!(env!("CARGO_PKG_VERSION"), "\0").as_bytes();
+
+/// C ABI: returns a pointer to the NUL-terminated artifact version string
+/// (e.g. `b"26.10.29\0"`) living in the module's read-only data. The pointer
+/// is valid for the lifetime of the instance; the string is never mutated.
+#[no_mangle]
+pub extern "C" fn wasm_version() -> *const u8 {
+    VERSION.as_ptr()
+}
 
 /// Build a shared `&[u64]` over caller memory. `len == 0` yields the empty
 /// slice without dereferencing `ptr` (which may legitimately dangle).

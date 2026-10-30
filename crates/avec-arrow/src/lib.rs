@@ -36,6 +36,7 @@ pub mod views;
 
 mod generated_layout;
 mod generated_version;
+pub use generated_version::VERSION_C;
 
 /// Release version projected from the project graph (`ontology/avec.ttl`).
 pub const VERSION: &str = generated_version::VERSION;

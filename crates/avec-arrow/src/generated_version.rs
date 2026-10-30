@@ -3,3 +3,7 @@
 
 /// avec release version (project graph, single source of truth).
 pub const VERSION: &str = "26.10.29";
+
+/// NUL-terminated C form for FFI version exports (drift-guarded by
+/// avec-ffi's parity test against VERSION).
+pub const VERSION_C: &[u8] = b"26.10.29\0";
