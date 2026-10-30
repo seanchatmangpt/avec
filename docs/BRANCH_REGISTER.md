@@ -79,3 +79,22 @@ bounds.
 No claim in the repo survives as "zero conditional branches" without the
 body/latch/dispatch scoping. The honest claim, now enforced by the gate:
 **inner-loop bodies are branch-free; all other conditionals are itemized.**
+
+## Addendum — truth-pass transcription complete, 2026-10-29 (lane REL-L11, repo v26.10.29)
+
+Fresh `make branch-audit` this session, exit 0, over `target/audit/libavec_audit.dylib`:
+
+- The R1 callee-extent rewrite has landed. Per-symbol budgets reproduce R2 exactly:
+  mask_words 2/0/3, count_valid 2/0/3, mask_words_neon 3/0/4, unpack_1/2/4bit 4/3/1
+  each, unpack_8bit 6/9/1 — and R3's two uncovered kernels are now wrapped:
+  is_all_valid 1/2/4, count_one_bits 1/2/4 (2 `slice_index_fail` fail-paths each),
+  with the gate printing "UNCOVERED KERNELS: none — every avec kernel extent is
+  audited". R3's parquet `rle.rs:229` / `rle.rs:122` / `packing.rs:63` sites remain
+  OUTSIDE the audited symbol set (the audit crate wraps the parquet `unpack` family
+  only); the R5 class counts are unchanged by this session.
+- Verbatim summary line: "BRANCH AUDIT PASS: branch-free inner-loop bodies: 3/9
+  kernels; loop-latch/dispatch/bounds conditionals itemized: 71 total across 9
+  kernels (+12 branch-free wrapper shims); panic/fail paths: 8; unaccounted: 0".
+- R4's docs transcription is complete: `README.md` and `docs/DFLSS_CHARTER.md` now
+  carry the scoped wording everywhere (no unscoped "zero branches"/"branchless"
+  claim remains in either); this register stays the claim of record.
