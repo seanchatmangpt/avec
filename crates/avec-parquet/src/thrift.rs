@@ -429,13 +429,20 @@ pub fn write_page_header(dst: &mut Vec<u8>, h: &PageHeader) {
         p = 2;
         write_i32_field(dst, 3, p, v2.num_rows);
         p = 3;
-        write_i32_field(dst, 4, p, v2.definition_levels_byte_length);
+        // Real parquet.thrift DataPageHeaderV2 field ids (the previous
+        // slots were swapped — internally self-consistent, externally
+        // rejected by pyarrow/arrow-rs; caught by the PCL2 external-reader
+        // receipt. See docs/PHASE_CHANGE_RECEIPTS.md):
+        // 4=encoding, 5=definition_levels_byte_length,
+        // 6=repetition_levels_byte_length, 7=is_compressed.
+        write_i32_field(dst, 4, p, v2.encoding);
         p = 4;
-        write_i32_field(dst, 5, p, v2.repetition_levels_byte_length);
+        write_i32_field(dst, 5, p, v2.definition_levels_byte_length);
         p = 5;
-        write_bool_field(dst, 6, p, v2.is_compressed);
+        write_i32_field(dst, 6, p, v2.repetition_levels_byte_length);
         p = 6;
-        write_i32_field(dst, 7, p, v2.encoding);
+        write_bool_field(dst, 7, p, v2.is_compressed);
+
         dst.push(ctype::STOP); // end of the V2 substruct
     }
     dst.push(ctype::STOP); // end of PageHeader
@@ -512,20 +519,20 @@ fn read_data_page_header_v2(src: &[u8], mut pos: &mut usize) -> Result<DataPageH
             (1, ctype::I32) => num_values = Some(read_i32(src, &mut pos)?),
             (2, ctype::I32) => num_nulls = Some(read_i32(src, &mut pos)?),
             (3, ctype::I32) => num_rows = Some(read_i32(src, &mut pos)?),
-            (4, ctype::I32) => def_len = Some(read_i32(src, &mut pos)?),
-            (5, ctype::I32) => rep_len = Some(read_i32(src, &mut pos)?),
-            (6, ctype::BOOLEAN_TRUE) => is_compressed = true,
-            (6, ctype::BOOLEAN_FALSE) => is_compressed = false,
-            (7, ctype::I32) => encoding = Some(read_i32(src, &mut pos)?),
+            (4, ctype::I32) => encoding = Some(read_i32(src, &mut pos)?),
+            (5, ctype::I32) => def_len = Some(read_i32(src, &mut pos)?),
+            (6, ctype::I32) => rep_len = Some(read_i32(src, &mut pos)?),
+            (7, ctype::BOOLEAN_TRUE) => is_compressed = true,
+            (7, ctype::BOOLEAN_FALSE) => is_compressed = false,
             (_, other) => skip_value(src, &mut pos, other, 0)?,
         }
     }
     let num_values = num_values.ok_or(ThriftError::MissingRequiredField(1))?;
     let num_nulls = num_nulls.ok_or(ThriftError::MissingRequiredField(2))?;
     let num_rows = num_rows.ok_or(ThriftError::MissingRequiredField(3))?;
-    let definition_levels_byte_length = def_len.ok_or(ThriftError::MissingRequiredField(4))?;
-    let repetition_levels_byte_length = rep_len.ok_or(ThriftError::MissingRequiredField(5))?;
-    let encoding = encoding.ok_or(ThriftError::MissingRequiredField(7))?;
+    let encoding = encoding.ok_or(ThriftError::MissingRequiredField(4))?;
+    let definition_levels_byte_length = def_len.ok_or(ThriftError::MissingRequiredField(5))?;
+    let repetition_levels_byte_length = rep_len.ok_or(ThriftError::MissingRequiredField(6))?;
     Ok(DataPageHeaderV2 {
         num_values,
         num_nulls,
@@ -722,13 +729,14 @@ mod tests {
         p = 2;
         write_i32_field(&mut wire, 3, p, 4);
         p = 3;
-        write_i32_field(&mut wire, 4, p, 0);
+        // IDL-true field order: 4=encoding, 5=def_len, 6=rep_len, 7=compressed.
+        write_i32_field(&mut wire, 4, p, encoding::RLE);
         p = 4;
         write_i32_field(&mut wire, 5, p, 0);
         p = 5;
-        write_bool_field(&mut wire, 6, p, false);
+        write_i32_field(&mut wire, 6, p, 0);
         p = 6;
-        write_i32_field(&mut wire, 7, p, encoding::RLE);
+        write_bool_field(&mut wire, 7, p, false);
         wire.push(ctype::STOP);
         wire.push(ctype::STOP);
 

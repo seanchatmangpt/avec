@@ -39,7 +39,8 @@
 //!   [`ParquetError::UnexpectedEof`], matching `rle_decode`'s full-buffer
 //!   precedent.
 
-use crate::rle::{decode_into, rle_encode, ParquetError};
+use crate::encode_fast::rle_encode_fast;
+use crate::rle::{decode_into, ParquetError};
 use crate::thrift::{
     encoding, page_type, read_page_header, write_page_header, DataPageHeaderV2, PageHeader,
     ThriftError,
@@ -63,7 +64,9 @@ fn size_i32(v: usize) -> i32 {
 /// the declared width — out-of-range values are truncated by the hybrid
 /// codec's packer, same as `crate::rle`.
 pub fn write_data_page_v2(values: &[u32], bits: u8, num_rows: u32) -> Vec<u8> {
-    let body = rle_encode(values, bits);
+    // Pre-sized fast encoder: byte-identical output (240k-case differential),
+    // kills the output-Vec growth (23 of the 28 literal-shape allocs).
+    let body = rle_encode_fast(values, bits);
     let header = PageHeader {
         page_type: page_type::DATA_PAGE_V2,
         uncompressed_page_size: size_i32(body.len()),

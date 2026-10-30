@@ -12,19 +12,12 @@
 // crates/avec-parquet/src/compiled_manifest.rs.
 
 pub const SPECIALIZATION_MANIFEST: &[Spec] = &[
-
     Spec { width: 1, encoding: Enc::Rle, kernel: rle_w::<1> },
-
     Spec { width: 8, encoding: Enc::Rle, kernel: rle_w::<8> },
-
     Spec { width: 16, encoding: Enc::Plain, kernel: plain_w::<16> },
-
     Spec { width: 32, encoding: Enc::Plain, kernel: plain_w::<32> },
-
     Spec { width: 64, encoding: Enc::Plain, kernel: plain_w::<64> },
-
     Spec { width: 128, encoding: Enc::Plain, kernel: plain_w::<128> },
-
     Spec { width: 256, encoding: Enc::Plain, kernel: plain_w::<256> },
-
 ];
+

@@ -125,9 +125,8 @@ pub fn rle_encode(values: &[u32], bits: u8) -> Vec<u8> {
                 let mut byte = 0u8;
                 let mut bit = 0;
                 while bit < vb {
-                    if (u64::from(val) >> bit) & 1 == 1 {
-                        byte |= 1 << bit;
-                    }
+                    let bit_val = ((u64::from(val) >> bit) & 1) as u8;
+                    byte |= bit_val << bit;
                     bit += 1;
                 }
                 out.push(byte);

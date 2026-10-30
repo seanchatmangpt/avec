@@ -230,3 +230,50 @@ fn thrift_map_skip_exact_wire_and_empty() {
     assert_eq!(skip_value(&[0x00], &mut pos, ctype::MAP, 0), Ok(()));
     assert_eq!(pos, 1);
 }
+
+/// Kills thrift.rs:352:45 (`depth + 1` -> `depth - 1` in skip_struct): with
+/// u8 wrap, depth 0 -> 255 trips the >=32 guard at the SECOND nested struct,
+/// so a lawful 3-deep nested struct must still skip cleanly. The existing
+/// bomb test only asserts DepthExceeded (which the mutant still produces,
+/// two levels early), and the only other struct skip in the suite nests one
+/// level deep, where the mutant is invisible.
+///
+/// Wire receipt: field headers are (delta << 4) | type; I32 type nibble is 5
+/// (BOOLEAN_TRUE is 1 — 0x11 bytes parse as bool headers and leave
+/// num_values unset), deltas are id GAPS (consecutive ids = delta 1).
+#[test]
+fn thrift_three_deep_struct_skip_succeeds() {
+    // PageHeader { 1: type=3, 2: size=7, 3: size=7,
+    //   4: STRUCT { 1: STRUCT { 1: i32(5) } }, 8: V2 subheader }.
+    let wire: Vec<u8> = vec![
+        0x15, 0x06, // field 1, I32, zigzag(3)=6
+        0x15, 0x0E, // field 2, I32, zigzag(7)=14 (delta 1 from id 1)
+        0x15, 0x0E, // field 3, I32, zigzag(7)=14 (delta 1 from id 2)
+        0x1C, // field 4, STRUCT (delta 1 from id 3)
+        0x1C, //   inner field 1, STRUCT (delta 1 from 0)
+        0x15, 0x0A, //     innermost field 1, I32, zigzag(5)=10
+        0x00, //   inner STOP
+        0x00, // outer struct STOP
+        0x4C, // field 8, STRUCT (delta 4 from id 4: 4+4=8)
+        0x15, 0x08, // V2 field 1 num_values=4 (I32 nibble 5, delta 1)
+        0x15, 0x00, // field 2 num_nulls=0
+        0x15, 0x08, // field 3 num_rows=4
+        0x15, 0x06, // field 4 encoding, zigzag(3)=6 (RLE)
+        0x15, 0x00, // field 5 def_len=0
+        0x15, 0x00, // field 6 rep_len=0
+        0x12, // field 7, BOOLEAN_FALSE (delta 1, type nibble 2)
+        0x00, // V2 STOP
+        0x00, // PageHeader STOP
+    ];
+    let (h, consumed) = avec_parquet::thrift::read_page_header(&wire).expect("3-deep skip");
+    assert_eq!(h.page_type, 3);
+    assert_eq!(h.uncompressed_page_size, 7);
+    assert_eq!(h.compressed_page_size, 7);
+    let v2 = h.data_page_header_v2.expect("v2");
+    assert_eq!(v2.num_values, 4);
+    assert_eq!(v2.num_nulls, 0);
+    assert_eq!(v2.num_rows, 4);
+    assert_eq!(v2.encoding, 3);
+    assert!(!v2.is_compressed);
+    assert_eq!(consumed, wire.len(), "header must consume its own wire");
+}

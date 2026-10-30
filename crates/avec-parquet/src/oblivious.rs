@@ -449,7 +449,7 @@ use alloc::vec;
         let values = [1u32, 2, 3, 4, 5, 6];
         let valid = [0b0010_0101u64]; // count 3, but out < values.len()
         let mut out = [0x7E7Eu32; 2];
-        oblivious_masked_compact(&values, &valid, &mut out);
+        let _ = oblivious_masked_compact(&values, &valid, &mut out);
     }
 
     /// Exact semantics on a dense buffer: prefix equals the reference,

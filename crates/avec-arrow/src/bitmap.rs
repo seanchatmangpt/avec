@@ -110,9 +110,9 @@ impl Bitmap {
             n_bits: valid.len(),
         };
         for (i, &v) in valid.iter().enumerate() {
-            if v {
-                set_bit(bm.bits.as_mut_slice(), i);
-            }
+            let byte_idx = i >> 3;
+            let bit_idx = i & 7;
+            bm.bits.as_mut_slice()[byte_idx] |= (v as u8) << bit_idx;
         }
         Some(bm)
     }

@@ -25,12 +25,16 @@ extern crate alloc;
 
 pub mod batch;
 pub mod bitmap;
+pub mod branchless;
 pub mod buffer;
 pub mod c_abi;
 pub mod c_abi_nested;
 pub mod chase_lev;
 pub mod digest;
+pub mod fingerprint;
 pub mod foreign;
+pub mod mmu_arena;
+pub mod perfect_hash;
 pub mod primitive;
 pub mod runend;
 pub mod silicon;

@@ -127,6 +127,14 @@ branch-audit:
 symbol-gate:
 	python3 scripts/symbol_gate.py
 
+test-beam:
+	@echo "== test-beam: NIF membrane + resource bin + sched crossover =="
+	cargo build -p avec-beam
+	cargo build --release -p avec-beam
+	escript test/beam_test.escript
+	escript test/resource_bin.escript
+	escript test/sched_crossover.escript
+
 # --- OPT20-L10 additions ------------------------------------------------------
 
 # Release ladder: every release gate in sequence, fail-closed, naming the first

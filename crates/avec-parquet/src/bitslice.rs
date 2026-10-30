@@ -96,9 +96,8 @@ pub fn pack_vertical(values: &[u32], w: u8) -> Vec<u64> {
             let mut bit = 0usize;
             let mut v = v;
             while v != 0 {
-                if v & 1 == 1 {
-                    out[base + bit] |= 1u64 << t;
-                }
+                let bit_val = (v & 1) as u64;
+                out[base + bit] |= bit_val << t;
                 v >>= 1;
                 bit += 1;
             }
@@ -209,6 +208,140 @@ fn mask_of(w: u8) -> u32 {
     ((1u64 << w) - 1) as u32
 }
 
+/// 128-lane dual-word vertical bit-slice range scanner.
+///
+/// Evaluates two consecutive 64-lane groups (128 tuples) in parallel per level,
+/// doubling memory throughput and amortizing outer loop overhead while preserving
+/// bitwise equality with [`scan_range_vertical`].
+pub fn scan_range_vertical_128(
+    src: &[u64],
+    w: u8,
+    lo: u32,
+    hi: u32,
+    out_valid: &mut [u64],
+) {
+    assert!((1..=32).contains(&w), "scan_range_vertical_128: w={w} outside 1..=32");
+    let wf = w as usize;
+    assert!(src.len() % wf == 0, "src length must be multiple of w");
+    let groups = src.len() / wf;
+    assert!(out_valid.len() >= groups, "out_valid buffer too small");
+
+    let domain_max = (1u64 << w) - 1;
+    if lo as u64 > domain_max {
+        out_valid[..groups].fill(0);
+        return;
+    }
+    let hi = (hi as u64).min(domain_max) as u32;
+
+    let mut g = 0;
+    // Process pairs of 64-lane groups (128 tuples)
+    while g + 1 < groups {
+        let words0 = &src[g * wf..(g + 1) * wf];
+        let words1 = &src[(g + 1) * wf..(g + 2) * wf];
+
+        let mut hi_gt0 = 0u64;
+        let mut hi_lt0 = 0u64;
+        let mut lo_gt0 = 0u64;
+        let mut lo_lt0 = 0u64;
+
+        let mut hi_gt1 = 0u64;
+        let mut hi_lt1 = 0u64;
+        let mut lo_gt1 = 0u64;
+        let mut lo_lt1 = 0u64;
+
+        for (lvl, (&bits0, &bits1)) in words0.iter().rev().zip(words1.iter().rev()).enumerate() {
+            let level = wf - 1 - lvl;
+            let eq_hi0 = !(hi_gt0 | hi_lt0);
+            let eq_lo0 = !(lo_gt0 | lo_lt0);
+            let eq_hi1 = !(hi_gt1 | hi_lt1);
+            let eq_lo1 = !(lo_gt1 | lo_lt1);
+
+            if ((eq_hi0 | eq_lo0) | (eq_hi1 | eq_lo1)) == 0 {
+                break;
+            }
+
+            let hb = (((hi >> level) & 1) as u64).wrapping_neg();
+            let lb = (((lo >> level) & 1) as u64).wrapping_neg();
+
+            hi_gt0 |= eq_hi0 & bits0 & !hb;
+            hi_lt0 |= eq_hi0 & hb & !bits0;
+            lo_gt0 |= eq_lo0 & bits0 & !lb;
+            lo_lt0 |= eq_lo0 & lb & !bits0;
+
+            hi_gt1 |= eq_hi1 & bits1 & !hb;
+            hi_lt1 |= eq_hi1 & hb & !bits1;
+            lo_gt1 |= eq_lo1 & bits1 & !lb;
+            lo_lt1 |= eq_lo1 & lb & !bits1;
+        }
+
+        out_valid[g] = !(hi_gt0 | lo_lt0);
+        out_valid[g + 1] = !(hi_gt1 | lo_lt1);
+        g += 2;
+    }
+
+    // Scalar tail if odd number of groups
+    if g < groups {
+        let words = &src[g * wf..(g + 1) * wf];
+        let mut hi_gt = 0u64;
+        let mut hi_lt = 0u64;
+        let mut lo_gt = 0u64;
+        let mut lo_lt = 0u64;
+
+        for (lvl, &bits) in words.iter().rev().enumerate() {
+            let level = wf - 1 - lvl;
+            let eq_hi = !(hi_gt | hi_lt);
+            let eq_lo = !(lo_gt | lo_lt);
+            if (eq_hi | eq_lo) == 0 {
+                break;
+            }
+            let hb = (((hi >> level) & 1) as u64).wrapping_neg();
+            let lb = (((lo >> level) & 1) as u64).wrapping_neg();
+            hi_gt |= eq_hi & bits & !hb;
+            hi_lt |= eq_hi & hb & !bits;
+            lo_gt |= eq_lo & bits & !lb;
+            lo_lt |= eq_lo & lb & !bits;
+        }
+        out_valid[g] = !(hi_gt | lo_lt);
+    }
+}
+
+/// Compressed-domain algebraic filtered summation over 128-lane vertical bit-slices.
+///
+/// Computes the exact filtered sum of values across two 64-lane groups without unpacking
+/// into an intermediate scalar representation:
+///
+/// $$\sum_{i \in M} v_i = (k \cdot b) + \sum_{j=0}^{w-1} 2^j \cdot \text{popcnt}(B_j \land M)$$
+///
+/// - `src`: Packed vertical words (groups * w * 8 bytes).
+/// - `w`: Bit-width of tuples (1..=32).
+/// - `base`: Base offset $b$ of the Frame-of-Reference (FFOR).
+/// - `mask0`: Active filter mask for the first 64 lanes.
+/// - `mask1`: Active filter mask for the second 64 lanes.
+///
+/// Operates strictly in vector registers using straight-line popcounts with 0 memory allocation.
+#[inline(always)]
+pub fn sum_masked_vertical_128(
+    src: &[u64],
+    w: u8,
+    base: i64,
+    mask0: u64,
+    mask1: u64,
+) -> i64 {
+    let wf = w as usize;
+    let k0 = mask0.count_ones() as i64;
+    let k1 = mask1.count_ones() as i64;
+    let mut delta_sum: i64 = 0;
+
+    for j in 0..wf {
+        let b0 = src[j] & mask0;
+        let b1 = src[wf + j] & mask1;
+        let c = (b0.count_ones() + b1.count_ones()) as i64;
+        delta_sum += c << j;
+    }
+
+    ((k0 + k1) * base) + delta_sum
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -235,6 +368,59 @@ mod tests {
                 ^ (w as u64) << 32,
         );
         (0..n).map(|_| rng.next_bounded(mask_of(w))).collect()
+    }
+
+    #[test]
+    fn test_scan_range_vertical_128_differential() {
+        for &w in &[1, 2, 4, 8, 12, 16] {
+            let n = 256;
+            let values = gen_values(n, w);
+            let packed = pack_vertical(&values, w);
+            let groups = packed.len() / w as usize;
+            let mut out64 = alloc::vec![0u64; groups];
+            let mut out128 = alloc::vec![0u64; groups];
+
+            let lo = 1;
+            let hi = (1 << (w.min(4))) - 1;
+            scan_range_vertical(&packed, w, lo, hi, &mut out64);
+            scan_range_vertical_128(&packed, w, lo, hi, &mut out128);
+
+            assert_eq!(out64, out128, "w={w} differential parity failure between 64 and 128 scanner");
+        }
+    }
+
+    #[test]
+    fn test_sum_masked_vertical_128_algebraic_parity() {
+        for &w in &[1, 2, 4, 8, 12] {
+            let n = 128;
+            let values = gen_values(n, w);
+            let packed = pack_vertical(&values, w);
+            let base = 100i64;
+
+            let mask0 = 0x5555_5555_5555_5555u64; // alternating lanes
+            let mask1 = 0x3333_3333_3333_3333u64;
+
+            // Direct compressed-domain algebraic sum
+            let alg_sum = sum_masked_vertical_128(&packed, w, base, mask0, mask1);
+
+            // Ground truth: scalar materialize-and-sum
+            let mut true_sum: i64 = 0;
+            for i in 0..64 {
+                if (mask0 >> i) & 1 == 1 {
+                    true_sum += base + values[i] as i64;
+                }
+            }
+            for i in 0..64 {
+                if (mask1 >> i) & 1 == 1 {
+                    true_sum += base + values[64 + i] as i64;
+                }
+            }
+
+            assert_eq!(
+                alg_sum, true_sum,
+                "w={w} compressed-domain algebraic sum failed ground truth parity"
+            );
+        }
     }
 
     /// Materialize-then-filter reference over already-64-padded values.
