@@ -86,6 +86,7 @@ pub fn rle_encode(values: &[u32], bits: u8) -> Vec<u8> {
             write_varint(&mut out, u64::from(run as u32) << 1);
             let vb = usize::from(bits).div_ceil(8);
             out.extend_from_slice(&v.to_le_bytes()[..vb]);
+            i += run;
         } else {
             // literal batch: coalesce until the next >=3-run (or end)
             let start = i;
@@ -99,6 +100,20 @@ pub fn rle_encode(values: &[u32], bits: u8) -> Vec<u8> {
                     break;
                 }
                 j += r;
+            }
+            // Literal records are full 8-lane groups; the wire form has no
+            // intra-record lane count, so a partial FINAL group is the only
+            // partial form a decoder can resolve (budget clamp at end of
+            // stream). Mid-stream partial batches would over-decode pad
+            // lanes over the following records — absorb following lanes up
+            // to the group boundary instead (values are preserved; runs
+            // absorbed here re-encode as literals, which is exact).
+            let count = j - start;
+            let rem = count % 8;
+            if rem != 0 {
+                let need = 8 - rem;
+                let absorb = need.min(values.len() - j);
+                j += absorb;
             }
             let count = j - start;
             let groups = count.div_ceil(8);
@@ -189,19 +204,26 @@ pub fn decode_into(src: &[u8], out: &mut [u32]) -> Result<usize, ParquetError> {
         } else {
             // literal run: groups of 8 byte-per-lane words
             let groups = (header >> 1) as usize;
-            // A varint header can name a group count whose payload size does
-            // not fit `usize`: fail closed with a typed error instead of the
-            // overflow panic the unchecked multiply would raise in debug
-            // builds (module law: zero panics on malformed pages).
+            // Fail-closed arithmetic on attacker-controlled headers (both
+            // profiles, never an overflow panic — module law: zero panics on
+            // malformed pages):
+            // - `groups * 8` can exceed usize (giant group count);
+            // - `pos + byte_len` can wrap even when byte_len fits.
+            // Both classes report LiteralOverrun: the record claims more
+            // literal payload than could ever be present.
+            let available = src.len() - pos;
             let Some(byte_len) = groups.checked_mul(8) else {
-                return Err(ParquetError::UnexpectedEof);
+                return Err(ParquetError::LiteralOverrun { claimed: usize::MAX, available });
             };
             // Literal records may end with a zero-padded partial final group;
             // the caller budget bounds the real lane count (Parquet spec
             // discipline: decode stops at page end).
             let count = byte_len.min(out.len() - oi);
-            let Some(packed) = src.get(pos..pos + byte_len) else {
-                return Err(ParquetError::LiteralOverrun { claimed: byte_len, available: src.len() - pos });
+            let Some(end) = pos.checked_add(byte_len) else {
+                return Err(ParquetError::LiteralOverrun { claimed: byte_len, available });
+            };
+            let Some(packed) = src.get(pos..end) else {
+                return Err(ParquetError::LiteralOverrun { claimed: byte_len, available });
             };
             let mut k = 0;
             while k < count {
@@ -414,7 +436,7 @@ mod decode_into_tests {
             let n = decode_into(&page, window).expect("decode_into window");
             assert_eq!(n, 5, "page holds 10 lanes, window budget 5");
         }
-        for (i, want) in [1u32, 2, 3, 4, 5].iter().enumerate() {
+        for (i, want) in [10u32, 20, 1, 2, 3].iter().enumerate() {
             assert_eq!(out[2 + i], *want, "window lane {i} must land at absolute index {}", 2 + i);
         }
         // Everything outside the window keeps the sentinel.
@@ -441,30 +463,48 @@ mod decode_into_tests {
         assert_eq!(rle_decode(&page, &mut out), Err(ParquetError::UnexpectedEof));
     }
 
-    #[test]
-    fn decode_into_giant_literal_groups_fail_closed() {
-        // Literal header claims u32::MAX groups: groups*8 cannot fit usize.
-        // Fail closed with a typed error, never an overflow panic.
-        let mut page = alloc::vec![8u8];
-        // varint ((u32::MAX as u64) << 1) | 1 = 0x1FFFFFFFE | 1
-        let header = ((u32::MAX as u64) << 1) | 1;
-        let mut v = header;
+    /// varint-encode `value` (same wire form as `write_varint`).
+    fn varint(value: u64) -> Vec<u8> {
+        let mut out = Vec::new();
+        let mut v = value;
         loop {
             let mut b = (v & 0x7F) as u8;
             v >>= 7;
             if v != 0 {
                 b |= 0x80;
             }
-            page.push(b);
+            out.push(b);
             if v == 0 {
-                break;
+                return out;
             }
         }
+    }
+
+    #[test]
+    fn decode_into_giant_literal_groups_fail_closed() {
         let mut out = alloc::vec![0u32; 64];
+
+        // Class 1: groups*8 overflows usize. header = (2^61 << 1) | 1.
+        let header = (0x2000_0000_0000_0000u64 << 1) | 1;
+        let mut page = alloc::vec![8u8];
+        page.extend_from_slice(&varint(header));
+        let available = 0; // src is exactly the width byte + header
         assert_eq!(
             decode_into(&page, &mut out),
-            Err(ParquetError::UnexpectedEof),
-            "giant literal header must fail closed, not overflow-panic"
+            Err(ParquetError::LiteralOverrun { claimed: usize::MAX, available }),
+            "groups*8 overflow must fail closed with LiteralOverrun, not overflow-panic"
+        );
+
+        // Class 2 (robustness-lane seed class): groups*8 fits, but
+        // pos + byte_len wraps. Repro wire: [04, ff*8, 3f] -> groups = 2^61-1,
+        // byte_len = 2^64-8, pos = 10 -> checked_add overflows.
+        let page2: Vec<u8> = alloc::vec![
+            0x04, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F,
+        ];
+        assert_eq!(
+            decode_into(&page2, &mut out),
+            Err(ParquetError::LiteralOverrun { claimed: usize::MAX - 7, available: 0 }),
+            "pos+byte_len wrap must fail closed with LiteralOverrun in BOTH profiles"
         );
     }
 }
@@ -507,10 +547,6 @@ mod wiring {
                 Some(ptr) => Buf64 { ptr, len },
                 None => handle_alloc_error(layout),
             }
-        }
-
-        fn len(&self) -> usize {
-            self.len
         }
 
         fn as_ptr(&self) -> *const u8 {

@@ -227,6 +227,22 @@ fn bitmap_word_tail_word_reads_partial_bytes() {
 }
 
 #[test]
+fn is_all_valid_mask_excludes_bits_beyond_n_bits() {
+    // `from_bytes` admits buffers longer than bitmap_bytes(n_bits): the tail
+    // word's high bytes are real nonzero memory that is NOT part of the
+    // bitmap. Correct code masks them off via `(1 << tail) - 1`; the
+    // `if tail == 64` -> `!=` mutant (court row bitmap.rs:185:42) selects
+    // u64::MAX and counts them, flipping an all-valid map to not-all-valid.
+    let mut buf = Buf::new_zeroed(16);
+    buf.as_mut_slice()[9] = 0x80; // bit 72: inside word 1, outside n_bits=65
+    let mut bm = Bitmap::from_bytes(buf, 65);
+    for i in 0..65 {
+        bm.set(i, true);
+    }
+    assert!(bm.is_all_valid());
+}
+
+#[test]
 fn bitmap_words_len_boundaries() {
     let bm0 = Bitmap::from_bytes(Buf::new_zeroed(0), 0);
     assert_eq!(bm0.words_len(), 0);
@@ -342,6 +358,19 @@ fn buf_drop_deallocates() {
 
 #[test]
 fn foreign_array_len_exact() {
+    // 0-row array: is_empty() must be true (kills the `-> false` mutant at
+    // c_abi.rs:186:9 surfaced by the current court run).
+    let empty_arr = export(PrimitiveBuilder::<i32>::new().finish(), c"i".as_ptr()).0;
+    let empty_ptr = Box::into_raw(Box::new(empty_arr));
+    // SAFETY: live, spec-compliant, test-owned array.
+    let fa0 = unsafe { ForeignArray::take(empty_ptr) };
+    assert!(fa0.is_empty());
+    assert_eq!(fa0.len(), 0);
+    drop(fa0);
+    // SAFETY: shell freed after release ran.
+    drop(unsafe { Box::from_raw(empty_ptr) });
+
+    // 3-row array with a null: exact length (kills len -> 0/1/-1, rows 60-62).
     let mut b = PrimitiveBuilder::<i32>::new();
     b.push(Some(1));
     b.push(None);
@@ -452,12 +481,16 @@ fn primitive_buffers_aligned_64_law() {
 }
 
 #[test]
-fn builder_len_tracks_pushes() {
+fn builder_len_and_is_empty_track_pushes() {
     let mut b = PrimitiveBuilder::<i32>::new();
+    // Fresh builder: is_empty() true (kills `-> false`, court row 170:9).
+    assert!(b.is_empty());
     assert_eq!(b.len(), 0);
     b.push(Some(1));
     b.push(None);
     b.push(Some(3));
+    // After pushes: is_empty() false (kills `-> true`, court row 170:9).
+    assert!(!b.is_empty());
     assert_eq!(b.len(), 3);
 }
 

@@ -34,10 +34,14 @@ fn display_forwards_to_debug_string() {
 #[test]
 fn golden_bytes_run_vs_literal_boundary() {
     let encoded = rle_encode(&[9, 9, 9, 5, 5, 6, 6, 6], 4);
-    assert_eq!(encoded, vec![4, 6, 9, 3, 5, 5, 0, 0, 0, 0, 0, 0, 6, 6]);
-    // Mid-stream literal groups zero-pad to full 8-lane groups on the wire;
-    // decode is budget-bounded, so the real lanes are recovered with the
-    // real-lane budget (5), not the padded group width.
+    // Wire-format fix: literal batches mid-stream are FULL 8-lane groups —
+    // the batch absorbs the following run lanes (5,5 + 6,6,6 -> one group)
+    // because the record form has no intra-record lane count and a partial
+    // group mid-stream would over-decode pad lanes over the next record.
+    // Zero-padding exists only in a FINAL group (budget clamp at end of
+    // stream). Old (defective) bytes pinned [.., 5,5, 0*6, 6,6].
+    assert_eq!(encoded, vec![4, 6, 9, 3, 5, 5, 6, 6, 6, 0, 0, 0]);
+    // Budget-bounded decode recovers the real lanes.
     let mut out = [0u32; 5];
     rle_decode(&encoded, &mut out).expect("decode");
     assert_eq!(out, [9, 9, 9, 5, 5]);
