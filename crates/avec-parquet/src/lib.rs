@@ -17,6 +17,7 @@ pub mod encode_fast;
 pub mod packing;
 pub mod page;
 pub mod page_aligned;
+pub mod packed_filter;
 pub mod rle;
 pub mod thrift;
 pub mod unpack;
