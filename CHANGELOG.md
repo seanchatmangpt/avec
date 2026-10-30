@@ -16,6 +16,18 @@ release notes' Discrepancies section, not reconciled here.
   facts, the T1-T4 requirement tickets (batch/table layer, typed zero-copy
   ingest, timestamp `Scalar`, wasm32-unknown-unknown receipt), and the
   standing table.
+- Ticket T1: `batch.rs` — `Column`/`Batch`/`BatchBuilder` named column
+  layer with the finish-time length law; `VarlenBuilder::len`/`is_empty`
+  and `ViewVecBuilder::len`/`is_empty`.
+- Ticket T2: `foreign.rs` — typed zero-copy ingest of foreign C Data
+  Interface pairs (`format_of`, `primitive_view`, `is_valid`,
+  `ForeignError`), bounds- and alignment-checked against caller-supplied
+  buffer lengths.
+- Ticket T3: `timestamps.rs` — `TimestampSecond/Milli/Micro/Nano` `Scalar`
+  newtypes over i64 (format codes `tss:/tsm:/tsu:/tsn:UTC`).
+- Ticket T4: `scripts/footprint.sh` accepts `WASM_TARGET`; the full
+  footprint gate passes for `wasm32-unknown-unknown` (3,435 B stripped,
+  CTQ-4 PASS).
 
 ## [26.10.29] - 2026-10-29
 

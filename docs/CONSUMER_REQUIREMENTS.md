@@ -99,10 +99,35 @@ cryptographic, accidental-rot class only. The consumers' digest needs
 | element | standing |
 |---|---|
 | publication fit | DECIDED (patch bridge; crates.io is destination) |
-| T1 batch/table layer | TICKETED (high; purrdf-process gate) |
-| T2 typed zero-copy ingest | TICKETED (high; OPT-17 gate) |
-| T3 timestamp Scalar | TICKETED (medium) |
-| T4 unknown-unknown wasm receipt | TICKETED (medium) |
+| T1 batch/table layer | LANDED (ALIVE) |
+| T2 typed zero-copy ingest | LANDED (ALIVE) |
+| T3 timestamp Scalar | LANDED (ALIVE) |
+| T4 unknown-unknown wasm receipt | LANDED (ALIVE) |
 | dictionary vector layer | DEFERRED (later want for EAV name/type columns) |
-| purrdf wiring | DEFERRED until T1 or T2 lands (recipe in purrdf's
-`docs/jira/v26.10.26/avec-consumption.md`) |
+| purrdf wiring | TRIGGER MET (T1+T2 landed) — recipe in purrdf's
+`docs/jira/v26.10.26/avec-consumption.md` §2 |
+
+## Receipts (2026-10-29, tickets landed)
+
+- **T1** — `crates/avec-arrow/src/batch.rs`: `Column` (14 families),
+  `Batch::try_new` length law (ragged + duplicate-name refusals),
+  `BatchBuilder`/`ColumnBuilder` mirror; `VarlenBuilder::len`/`ViewVecBuilder::len`
+  added (swept into co-lane commit `18ece61`/`177cec4` window). Receipt:
+  `cargo test -p avec-arrow --lib` → **54 passed; 0 failed**; full test
+  targets green (property 1, validation 6, mutation_kills 36/36, 1+35
+  filtered).
+- **T2** — `crates/avec-arrow/src/foreign.rs`: `format_of`,
+  `primitive_view::<T>` (format-match, bounds vs caller-supplied buffer
+  length, alignment check), `is_valid` (absent bitmap = all-valid Arrow
+  law). Receipt: export→view round-trip, format-mismatch refusal, and
+  short-buffer refusal all pass in the 54; `gate3_cdata.py` (pyarrow
+  bitwise parity) remains the external court, not re-run here.
+- **T3** — `crates/avec-arrow/src/timestamps.rs`: `TimestampSecond/Milli/
+  Micro/Nano` newtypes over i64, format codes `tss:/tsm:/tsu:/tsn:UTC`
+  matching the layout prefixes; byte-identity with i64 columns pinned by
+  test. Included in the 54.
+- **T4** — `scripts/footprint.sh` `WASM_TARGET` override; run receipt:
+  `WASM_TARGET=wasm32-unknown-unknown bash scripts/footprint.sh` → GATE
+  PASS (raw 4,309 B, stripped 3,435 B, CTQ-4 PASS, version court byte-exact
+  "26.10.29", 5-export surface + 15 node checks); plus release rlib builds
+  for both crates (arrow 399,168 B / parquet 250,526 B rlib).
