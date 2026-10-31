@@ -81,7 +81,9 @@ impl<'a> IdxV2<'a> {
 
     /// The i-th object's pack offset. Handles the bit-31 escape into the
     /// 64-bit large-offset table with an arithmetic MSB mask select, not a
-    /// branch. Typed error on truncation — never a panic on external input.
+    /// branch. Typed error on truncation and on a corrupt escape (MSB set
+    /// but the large entry is absent/out of range) — never a panic, never a
+    /// silent wrong offset, on external input.
     pub fn offset(&self, i: u32) -> Result<u64, GitError> {
         let small_off = OID_TABLE_OFF + self.n as usize * 24 + i as usize * 4;
         if small_off + 4 > self.data.len() {
@@ -92,11 +94,24 @@ impl<'a> IdxV2<'a> {
                 .try_into()
                 .expect("offset slice"), // guarded above
         );
-        // MSB mask: bit31 set ⇒ large table
-        let msb_mask = (raw >> 31).wrapping_neg(); // !0 or 0
+        // MSB mask: bit31 set ⇒ large table. The negation runs in u64 so the
+        // mask is full-width: the large table exists precisely to carry
+        // offsets >= 2^32, and a 32-bit mask (the old `msb_mask as u64` =
+        // 0x0000_0000_FFFF_FFFF) truncated every such offset to its low half.
+        let msb_mask = ((raw >> 31) as u64).wrapping_neg(); // 0xFFFF..FF or 0
         let large_idx = (raw & 0x7FFF_FFFF) as usize;
         let large_base = OID_TABLE_OFF + self.n as usize * 28;
         let large_end = large_base + (large_idx + 1) * 8;
+        // Corrupt escape: MSB claims the large table but the entry is absent
+        // or out of range. Typed error on this failure edge — never the
+        // silent Ok(0) the old placeholder produced.
+        if msb_mask != 0 && large_end > self.data.len() {
+            return Err(GitError::Truncated);
+        }
+        // Guarded read: whenever the select can pick this value (msb set) the
+        // guard above has established in-range; the `else 0` arm is taken only
+        // when msb is clear, where the select masks it to zero — so the
+        // placeholder can never surface.
         let large_entry = if large_end <= self.data.len() {
             u64::from_be_bytes(
                 self.data[large_end - 8..large_end]
@@ -107,8 +122,9 @@ impl<'a> IdxV2<'a> {
             0
         };
         let small_val = (raw & 0x7FFF_FFFF) as u64;
-        // select: msb set → large entry, else small value (arithmetic select)
-        Ok((small_val & !(msb_mask as u64)) | (large_entry & msb_mask as u64))
+        // select: msb set → full 64-bit large entry, else small value
+        // (arithmetic select, full-width — no truncation, no branch here)
+        Ok((small_val & !msb_mask) | (large_entry & msb_mask))
     }
 
     /// Constant-time ladder lookup of `t`: returns `(index, pack_offset)` on a
@@ -122,7 +138,12 @@ impl<'a> IdxV2<'a> {
         let b = t[0] as usize;
         let lo = if b == 0 { 0 } else { self.fanout(b - 1) };
         let hi = self.fanout(b);
-        let part = hi - lo;
+        // Malformed idx: fanout must be monotonic across partitions. A
+        // non-monotonic table would underflow here (debug panic on external
+        // input), so refuse it as a typed error instead.
+        let Some(part) = hi.checked_sub(lo) else {
+            return Err(GitError::Truncated);
+        };
         if part > LADDER_WINDOW {
             return Err(GitError::TooManyObjects(part as usize));
         }

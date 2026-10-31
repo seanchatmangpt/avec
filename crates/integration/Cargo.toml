@@ -10,6 +10,8 @@ avec-arrow = { path = "../avec-arrow" }
 
 [dev-dependencies]
 avec-arrow = { path = "../avec-arrow" }
+avec-audit = { path = "../audit" }
 avec-blake3 = { path = "../avec-blake3" }
-avec-parquet = { path = "../avec-parquet" }
+# std: the scan module (mmap scanner + ScanError surface) is feature-gated.
+avec-parquet = { path = "../avec-parquet", features = ["std"] }
 avec-git = { path = "../avec-git" }

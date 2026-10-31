@@ -13,3 +13,9 @@ default = []
 std = []
 
 [dependencies]
+
+[dev-dependencies]
+# tests/codec_properties.rs (wave-14 lane 10): Quad64 wire round-trip property
+# reaches the real avec-arrow layout — same crate-as-dev-dep pattern as
+# avec-ffi. Workspace path dep; adds no external dependency.
+avec-arrow = { path = "../avec-arrow" }

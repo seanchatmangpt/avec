@@ -69,6 +69,7 @@ name = "avec-integration"
 version = "26.10.29"
 dependencies = [
  "avec-arrow",
+ "avec-audit",
  "avec-blake3",
  "avec-git",
  "avec-parquet",
@@ -77,6 +78,9 @@ dependencies = [
 [[package]]
 name = "avec-parquet"
 version = "26.10.29"
+dependencies = [
+ "avec-arrow",
+]
 
 [[package]]
 name = "bench"

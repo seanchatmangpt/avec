@@ -429,6 +429,12 @@ pub fn parse_pack_v2(pack: &[u8]) -> Result<alloc::vec::Vec<ParsedObject>, GitEr
             return Err(GitError::SizeOverflow);
         }
         let body_start = pos + hdr_len;
+        // Malformed header: the object header can claim more bytes than the
+        // pack body holds, which would make the zlib-window range below
+        // start past its end (panic on external input). Refuse as truncated.
+        if body_start + 2 > pack.len() - 20 {
+            return Err(GitError::Truncated);
+        }
         // Inflate the zlib body to find its true extent and validate the
         // declared uncompressed size.
         let (data, used) = crate::deflate::inflate(&pack[body_start + 2..pack.len() - 20])
