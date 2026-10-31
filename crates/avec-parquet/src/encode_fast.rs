@@ -27,6 +27,7 @@
 //!   `r = 3`, tighter above);
 //! - one final partial literal batch per encode: `<= 9` bytes;
 //! - width byte: 1.
+//!
 //! So total `<= 9n/8 + 10 << 2n + 64`, the pre-sized capacity. Growth past
 //! the initial allocation is impossible while that bound holds, and the
 //! test module pins final capacity equality to prove no realloc fired.
@@ -71,9 +72,13 @@ pub fn rle_encode_fast(values: &[u32], bits: u8) -> Vec<u8> {
     }
     // Lane bytes carry exactly `bits` low bits (the baseline's per-lane bit
     // copy loop is `byte = val & ((1 << bits) - 1)` by construction).
-    let lane_mask = if bits == 8 { u32::MAX } else { (1u32 << bits) - 1 };
+    let lane_mask = if bits == 8 {
+        u32::MAX
+    } else {
+        (1u32 << bits) - 1
+    };
     let vb = usize::from(bits).div_ceil(8); // == 1 for every width 1..=8
-    // Single pre-sized allocation; bound argument in the module docs.
+                                            // Single pre-sized allocation; bound argument in the module docs.
     let mut out = Vec::with_capacity(values.len().saturating_mul(2).saturating_add(64));
     out.push(bits);
     let mut i = 0;
@@ -249,10 +254,8 @@ mod tests {
         for bits in 1..=8u8 {
             for (si, &shape) in shapes.iter().enumerate() {
                 for n in 0..10000usize {
-                    let seed = 0x5EED_0000
-                        ^ (u64::from(bits) << 32)
-                        ^ ((si as u64) << 24)
-                        ^ (n as u64);
+                    let seed =
+                        0x5EED_0000 ^ (u64::from(bits) << 32) ^ ((si as u64) << 24) ^ (n as u64);
                     let values = shape_values(shape, n, bits, seed);
                     let base = rle_encode(&values, bits);
                     let fast = rle_encode_fast(&values, bits);
@@ -328,21 +331,33 @@ mod tests {
         }
     }
 
-    /// Delegation parity: out-of-kernel widths return exactly what the
-    /// baseline returns (fast path refuses to re-derive them). Widths where
-    /// the baseline itself panics are delegated, not re-asserted: the fast
-    /// path's body there IS the baseline call (`return rle_encode(..)`), so
-    /// divergence is impossible by construction — only re-derivable widths
-    /// (non-panicking in both profiles) get a real byte assert here.
+    /// Delegation parity: out-of-kernel widths behave exactly as the
+    /// baseline behaves (fast path refuses to re-derive them). Since the
+    /// baseline grew an up-front domain check (`UnsupportedBitWidth` panic
+    /// for widths outside 1..=8 — wave-4 lane 8 overflow fix), delegation
+    /// parity there is panic-parity, asserted via catch_unwind on both
+    /// encoders. In-kernel widths keep byte-parity asserts (see
+    /// `differential_parity_all_widths_shapes_sizes`).
     #[test]
     fn out_of_domain_widths_delegate_byte_identically() {
-        // bits=0: run arm (vb=0, empty value bytes) + literal arm (zero
-        // lane bytes) — non-panicking in debug and release.
+        // bits=0 and bits=16 are outside the baseline's byte-lane domain
+        // 1..=8: both encoders must refuse loudly (the fast path's body
+        // there IS the baseline call, so this pins the delegation seam).
         let mixed = alloc::vec![7u32, 7, 7, 1, 2, 3, 4, 5, 6, 7, 8];
-        assert_eq!(rle_encode_fast(&mixed, 0), rle_encode(&mixed, 0));
-        // bits=16: run-only input (no literal arm, vb=2 within to_le_bytes).
+        let fast_refused = std::panic::catch_unwind(|| rle_encode_fast(&mixed, 0)).is_err();
+        let base_refused = std::panic::catch_unwind(|| rle_encode(&mixed, 0)).is_err();
+        assert!(
+            fast_refused && base_refused,
+            "bits=0: both encoders must refuse"
+        );
+
         let runs = alloc::vec![7u32, 7, 7, 7, 9, 9, 9, 9];
-        assert_eq!(rle_encode_fast(&runs, 16), rle_encode(&runs, 16));
+        let fast_refused = std::panic::catch_unwind(|| rle_encode_fast(&runs, 16)).is_err();
+        let base_refused = std::panic::catch_unwind(|| rle_encode(&runs, 16)).is_err();
+        assert!(
+            fast_refused && base_refused,
+            "bits=16: both encoders must refuse"
+        );
     }
 }
 

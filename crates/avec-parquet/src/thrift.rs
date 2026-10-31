@@ -167,7 +167,11 @@ pub fn write_field_header(dst: &mut Vec<u8>, field_id: i16, prev_id: i16, type_i
 /// Write a bool field — the value rides in the header type id
 /// (`BOOLEAN_TRUE`/`BOOLEAN_FALSE`), no payload bytes.
 pub fn write_bool_field(dst: &mut Vec<u8>, field_id: i16, prev_id: i16, value: bool) {
-    let ty = if value { ctype::BOOLEAN_TRUE } else { ctype::BOOLEAN_FALSE };
+    let ty = if value {
+        ctype::BOOLEAN_TRUE
+    } else {
+        ctype::BOOLEAN_FALSE
+    };
     write_field_header(dst, field_id, prev_id, ty);
 }
 
@@ -501,7 +505,7 @@ pub fn read_page_header(src: &[u8]) -> Result<(PageHeader, usize), ThriftError> 
 
 /// Read the `DataPageHeaderV2` substruct (field ids 1-7; 6 optional with
 /// parquet.thrift default `true`).
-fn read_data_page_header_v2(src: &[u8], mut pos: &mut usize) -> Result<DataPageHeaderV2, ThriftError> {
+fn read_data_page_header_v2(src: &[u8], pos: &mut usize) -> Result<DataPageHeaderV2, ThriftError> {
     let mut num_values: Option<i32> = None;
     let mut num_nulls: Option<i32> = None;
     let mut num_rows: Option<i32> = None;
@@ -511,20 +515,20 @@ fn read_data_page_header_v2(src: &[u8], mut pos: &mut usize) -> Result<DataPageH
     let mut encoding: Option<i32> = None;
     let mut prev: i16 = 0;
     loop {
-        let Some((field_id, type_id)) = read_field_header(src, &mut pos, prev)? else {
+        let Some((field_id, type_id)) = read_field_header(src, pos, prev)? else {
             break;
         };
         prev = field_id;
         match (field_id, type_id) {
-            (1, ctype::I32) => num_values = Some(read_i32(src, &mut pos)?),
-            (2, ctype::I32) => num_nulls = Some(read_i32(src, &mut pos)?),
-            (3, ctype::I32) => num_rows = Some(read_i32(src, &mut pos)?),
-            (4, ctype::I32) => encoding = Some(read_i32(src, &mut pos)?),
-            (5, ctype::I32) => def_len = Some(read_i32(src, &mut pos)?),
-            (6, ctype::I32) => rep_len = Some(read_i32(src, &mut pos)?),
+            (1, ctype::I32) => num_values = Some(read_i32(src, pos)?),
+            (2, ctype::I32) => num_nulls = Some(read_i32(src, pos)?),
+            (3, ctype::I32) => num_rows = Some(read_i32(src, pos)?),
+            (4, ctype::I32) => encoding = Some(read_i32(src, pos)?),
+            (5, ctype::I32) => def_len = Some(read_i32(src, pos)?),
+            (6, ctype::I32) => rep_len = Some(read_i32(src, pos)?),
             (7, ctype::BOOLEAN_TRUE) => is_compressed = true,
             (7, ctype::BOOLEAN_FALSE) => is_compressed = false,
-            (_, other) => skip_value(src, &mut pos, other, 0)?,
+            (_, other) => skip_value(src, pos, other, 0)?,
         }
     }
     let num_values = num_values.ok_or(ThriftError::MissingRequiredField(1))?;
@@ -585,11 +589,17 @@ mod tests {
         assert_eq!(pos, 1 + 1 + 2 + 10);
         // Truncated varint: continuation bit set, stream ends.
         let mut pos = 0;
-        assert_eq!(read_varint(&[0x80], &mut pos), Err(ThriftError::UnexpectedEof));
+        assert_eq!(
+            read_varint(&[0x80], &mut pos),
+            Err(ThriftError::UnexpectedEof)
+        );
         // Overlong varint: 11 continuation bytes push shift past 64.
         let overlong = [0xFFu8; 11];
         let mut pos = 0;
-        assert_eq!(read_varint(&overlong, &mut pos), Err(ThriftError::UnexpectedEof));
+        assert_eq!(
+            read_varint(&overlong, &mut pos),
+            Err(ThriftError::UnexpectedEof)
+        );
     }
 
     #[test]
@@ -599,13 +609,19 @@ mod tests {
         write_i64_field(&mut buf, 2, 1, i64::MIN);
         write_binary_field(&mut buf, 9, 2, b"page-body");
         let mut pos = 0;
-        let (f1, ty1) = read_field_header(&buf, &mut pos, 0).expect("f1").expect("some");
+        let (f1, ty1) = read_field_header(&buf, &mut pos, 0)
+            .expect("f1")
+            .expect("some");
         assert_eq!((f1, ty1), (1, ctype::I32));
         assert_eq!(read_i32(&buf, &mut pos), Ok(-1));
-        let (f2, ty2) = read_field_header(&buf, &mut pos, f1).expect("f2").expect("some");
+        let (f2, ty2) = read_field_header(&buf, &mut pos, f1)
+            .expect("f2")
+            .expect("some");
         assert_eq!((f2, ty2), (2, ctype::I64));
         assert_eq!(read_i64(&buf, &mut pos), Ok(i64::MIN));
-        let (f3, ty3) = read_field_header(&buf, &mut pos, f2).expect("f3").expect("some");
+        let (f3, ty3) = read_field_header(&buf, &mut pos, f2)
+            .expect("f3")
+            .expect("some");
         assert_eq!((f3, ty3), (9, ctype::BINARY));
         assert_eq!(read_binary(&buf, &mut pos), Ok(&b"page-body"[..]));
         assert_eq!(pos, buf.len(), "consumed exactly the wire");
@@ -625,9 +641,13 @@ mod tests {
             ]
         );
         let mut pos = 0;
-        let (f, ty) = read_field_header(&buf, &mut pos, 5).expect("hdr").expect("some");
+        let (f, ty) = read_field_header(&buf, &mut pos, 5)
+            .expect("hdr")
+            .expect("some");
         assert_eq!((f, ty), (6, ctype::BOOLEAN_TRUE));
-        let (f2, ty2) = read_field_header(&buf, &mut pos, f).expect("hdr").expect("some");
+        let (f2, ty2) = read_field_header(&buf, &mut pos, f)
+            .expect("hdr")
+            .expect("some");
         assert_eq!((f2, ty2), (7, ctype::BOOLEAN_FALSE));
         assert_eq!(pos, buf.len());
     }
@@ -639,7 +659,10 @@ mod tests {
         write_field_header(&mut buf, 8, 3, ctype::STRUCT);
         assert_eq!(buf, alloc::vec![(5 << 4) | ctype::STRUCT]);
         let mut pos = 0;
-        assert_eq!(read_field_header(&buf, &mut pos, 3), Ok(Some((8, ctype::STRUCT))));
+        assert_eq!(
+            read_field_header(&buf, &mut pos, 3),
+            Ok(Some((8, ctype::STRUCT)))
+        );
 
         // Non-delta form: a far field id forces the bare type byte plus a
         // zigzag-i16 id varint.
@@ -647,7 +670,10 @@ mod tests {
         write_field_header(&mut buf2, 300, 3, ctype::I32);
         assert_eq!(buf2[0], ctype::I32, "non-delta form: bare type byte");
         let mut pos = 0;
-        assert_eq!(read_field_header(&buf2, &mut pos, 3), Ok(Some((300, ctype::I32))));
+        assert_eq!(
+            read_field_header(&buf2, &mut pos, 3),
+            Ok(Some((300, ctype::I32)))
+        );
         assert_eq!(pos, buf2.len());
     }
 
@@ -671,7 +697,11 @@ mod tests {
         write_page_header(&mut wire, &h);
         let (back, consumed) = read_page_header(&wire).expect("parse");
         assert_eq!(back, h);
-        assert_eq!(consumed, wire.len(), "header must consume its own wire exactly");
+        assert_eq!(
+            consumed,
+            wire.len(),
+            "header must consume its own wire exactly"
+        );
 
         // Absent V2 subheader is a lawful PageHeader shape (other page
         // types carry different subheaders on fields 5-7).
@@ -757,14 +787,20 @@ mod tests {
         let mut wire = Vec::new();
         write_i32_field(&mut wire, 2, 0, 5);
         wire.push(ctype::STOP);
-        assert_eq!(read_page_header(&wire), Err(ThriftError::MissingRequiredField(1)));
+        assert_eq!(
+            read_page_header(&wire),
+            Err(ThriftError::MissingRequiredField(1))
+        );
 
         // Fields 1 and 3 present, 2 missing.
         let mut wire = Vec::new();
         write_i32_field(&mut wire, 1, 0, 3);
         write_i32_field(&mut wire, 3, 1, 5);
         wire.push(ctype::STOP);
-        assert_eq!(read_page_header(&wire), Err(ThriftError::MissingRequiredField(2)));
+        assert_eq!(
+            read_page_header(&wire),
+            Err(ThriftError::MissingRequiredField(2))
+        );
 
         // PageHeader complete but the V2 substruct lacks `num_nulls` (2):
         // the V2 reader reports its FIRST missing required field in
@@ -778,7 +814,10 @@ mod tests {
         write_i32_field(&mut wire, 1, 0, 4);
         wire.push(ctype::STOP);
         wire.push(ctype::STOP);
-        assert_eq!(read_page_header(&wire), Err(ThriftError::MissingRequiredField(2)));
+        assert_eq!(
+            read_page_header(&wire),
+            Err(ThriftError::MissingRequiredField(2))
+        );
     }
 
     #[test]
@@ -800,8 +839,8 @@ mod tests {
         let mut wire = Vec::new();
         write_page_header(&mut wire, &h);
         for cut in 0..wire.len() {
-            let err = read_page_header(&wire[..cut])
-                .expect_err(&alloc::format!("cut {cut} must fail"));
+            let err =
+                read_page_header(&wire[..cut]).expect_err(&alloc::format!("cut {cut} must fail"));
             assert!(
                 matches!(
                     err,
@@ -820,8 +859,8 @@ mod tests {
         let mut wire = alloc::vec![0x1Cu8; 40];
         wire.extend(alloc::vec![0u8; 41]);
         let mut pos = 0usize;
-        let err = skip_value(&wire, &mut pos, ctype::STRUCT, 0)
-            .expect_err("must refuse deep nesting");
+        let err =
+            skip_value(&wire, &mut pos, ctype::STRUCT, 0).expect_err("must refuse deep nesting");
         assert_eq!(err, ThriftError::DepthExceeded);
     }
 
@@ -833,10 +872,7 @@ mod tests {
         write_i32_field(&mut wire, 1, 0, page_type::DATA_PAGE_V2);
         write_i32_field(&mut wire, 2, 1, 8);
         wire.push((1 << 4) | 13);
-        assert_eq!(
-            read_page_header(&wire),
-            Err(ThriftError::InvalidType(13))
-        );
+        assert_eq!(read_page_header(&wire), Err(ThriftError::InvalidType(13)));
     }
 
     #[test]

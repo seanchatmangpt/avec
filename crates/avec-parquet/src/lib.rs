@@ -12,6 +12,12 @@
 
 extern crate alloc;
 
+// The `std` feature links std for the hosted-target reader (`scan`) and the
+// `std::error::Error` impls. Without this, the feature flag was decorative:
+// `impl std::error::Error` under the gate failed to resolve (E0433).
+#[cfg(feature = "std")]
+extern crate std;
+
 pub mod bitslice;
 pub mod byteslice;
 pub mod compiled_manifest;
@@ -19,12 +25,20 @@ pub mod dictionary;
 pub mod dispatch_table;
 pub mod encode_fast;
 pub mod ffor;
-pub mod packing;
+pub mod level_free;
 pub mod oblivious;
+pub mod packed_filter;
+pub mod packing;
 pub mod page;
 pub mod page_aligned;
-pub mod packed_filter;
 pub mod rle;
+// Scan is the hosted-target (std) reader; gated per the crate's std-feature
+// pattern so the no_std build (wasm-footprint link glue, wasm32 targets)
+// stays std-free. Compile-freeze unblock by lane I16 — see
+// crates/wasm-footprint/NOTES-v26.10.31.md; scan tests run with
+// `cargo test -p avec-parquet --features std`.
+#[cfg(feature = "std")]
+pub mod scan;
 pub mod stream_compact;
 pub mod thrift;
 pub mod unpack;

@@ -12,15 +12,15 @@
 //!   that *hangs* is caught and named by seed, not silently frozen;
 //! - out-of-bounds detection uses two independent canaries:
 //!   (a) a separate canary `Vec` allocated after the output buffer,
-//!       snapshotted before and compared after each call, plus
+//!   snapshotted before and compared after each call, plus
 //!   (b) an in-allocation guard band: `out` and a 64-lane guard region share
-//!       one heap allocation via `split_at_mut`, so a write just past
-//!       `out.len()` lands in observed memory, not in unrelated allocator
-//!       space. Both must be byte-identical after every call.
-//!       Caveat recorded honestly: in fully safe Rust the bound already
-//!       holds by construction; the canaries exist to fail loudly the day
-//!       the branchless/SWAR kernel grows `unsafe`, which is this crate's
-//!       charter direction.
+//!   one heap allocation via `split_at_mut`, so a write just past
+//!   `out.len()` lands in observed memory, not in unrelated allocator
+//!   space. Both must be byte-identical after every call.
+//!   Caveat recorded honestly: in fully safe Rust the bound already
+//!   holds by construction; the canaries exist to fail loudly the day
+//!   the branchless/SWAR kernel grows `unsafe`, which is this crate's
+//!   charter direction.
 //! - the well-formed fixtures below are HAND-BUILT from the documented wire
 //!   format, not produced by `rle_encode`: this lane courts DECODE
 //!   fail-closedness, and coupling its inputs to encoder liveness would let
@@ -397,7 +397,7 @@ fn fail_closed_adversarial_corpus() {
         for flavor in [[0xFFu8], [0x80u8]] {
             for n in [10usize, 11, 12, 13] {
                 let mut src = vec![w];
-                src.extend(std::iter::repeat(flavor[0]).take(n));
+                src.extend(std::iter::repeat_n(flavor[0], n));
                 let seed = seed_for(3, idx);
                 led.check(
                     seed,
@@ -553,7 +553,7 @@ fn fail_closed_adversarial_corpus() {
         let mut src = vec![4u8];
         write_varint(&mut src, ((groups as u64) << 1) | 1);
         let short = 8 * (groups - 1);
-        src.extend(std::iter::repeat(0u8).take(short));
+        src.extend(std::iter::repeat_n(0u8, short));
         let seed = seed_for(6, idx);
         led.check(
             seed,
@@ -619,7 +619,7 @@ fn fail_closed_adversarial_corpus() {
             "width+overlong junk".to_string(),
             {
                 let mut s = vec![4u8];
-                s.extend(std::iter::repeat(0xFFu8).take(12));
+                s.extend(std::iter::repeat_n(0xFFu8, 12));
                 s
             },
             Expect::Universal, // Ok: zero budget never reads records

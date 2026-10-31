@@ -156,11 +156,17 @@ pub fn decode_page_into(page: &[u8], out: &mut [u32]) -> Result<usize, ParquetEr
     // 3. Budget: the header's lane claim is bounded by the caller's slice.
     if v2.num_values < 0 {
         // A negative claim cannot fit any budget: the unbounded overrun.
-        return Err(ParquetError::RunOverrun { run_len: usize::MAX, budget: out.len() });
+        return Err(ParquetError::RunOverrun {
+            run_len: usize::MAX,
+            budget: out.len(),
+        });
     }
     let num_values = v2.num_values as usize;
     if num_values > out.len() {
-        return Err(ParquetError::RunOverrun { run_len: num_values, budget: out.len() });
+        return Err(ParquetError::RunOverrun {
+            run_len: num_values,
+            budget: out.len(),
+        });
     }
 
     // 4. Body: direct-slice decode, zero intermediate storage. A page that
@@ -195,7 +201,11 @@ mod tests {
         // Framing is honest: the header consumes exactly its own wire, and
         // the body is byte-identical to the hybrid codec's output.
         let (_, header_len) = read_page_header(&page).expect("header");
-        assert_eq!(&page[header_len..], &rle_encode(values, bits)[..], "bits={bits}");
+        assert_eq!(
+            &page[header_len..],
+            &rle_encode(values, bits)[..],
+            "bits={bits}"
+        );
 
         let mut out = alloc::vec![SENTINEL; values.len()];
         let n = decode_page_into(&page, &mut out).expect("decode");
@@ -293,7 +303,9 @@ mod tests {
         page[1] = page_type::DATA_PAGE as u8; // field 1's zigzag payload: 0 -> DATA_PAGE
         assert_eq!(
             decode_page_into(&page, &mut out),
-            Err(ParquetError::UnsupportedBitWidth(page_type::DATA_PAGE as u8))
+            Err(ParquetError::UnsupportedBitWidth(
+                page_type::DATA_PAGE as u8
+            ))
         );
 
         // Non-RLE encoding (BIT_PACKED = 4): field 7 of the V2 substruct.
@@ -320,7 +332,9 @@ mod tests {
         header.extend_from_slice(&body);
         assert_eq!(
             decode_page_into(&header, &mut out),
-            Err(ParquetError::UnsupportedBitWidth(encoding::BIT_PACKED as u8))
+            Err(ParquetError::UnsupportedBitWidth(
+                encoding::BIT_PACKED as u8
+            ))
         );
 
         // V2 page type without the V2 subheader.
@@ -406,7 +420,10 @@ mod tests {
         let mut out = alloc::vec![0u32; 3];
         assert_eq!(
             decode_page_into(&page, &mut out),
-            Err(ParquetError::RunOverrun { run_len: 10, budget: 3 })
+            Err(ParquetError::RunOverrun {
+                run_len: 10,
+                budget: 3
+            })
         );
 
         // Negative num_values: the unbounded claim. Hand-built header with
@@ -434,7 +451,10 @@ mod tests {
         let mut out = alloc::vec![0u32; 100];
         assert_eq!(
             decode_page_into(&header, &mut out),
-            Err(ParquetError::RunOverrun { run_len: usize::MAX, budget: 100 })
+            Err(ParquetError::RunOverrun {
+                run_len: usize::MAX,
+                budget: 100
+            })
         );
     }
 
@@ -462,7 +482,10 @@ mod tests {
             },
         );
         header.extend_from_slice(&body);
-        assert_eq!(decode_page_into(&header, &mut out), Err(ParquetError::UnexpectedEof));
+        assert_eq!(
+            decode_page_into(&header, &mut out),
+            Err(ParquetError::UnexpectedEof)
+        );
     }
 
     #[test]
@@ -520,5 +543,4 @@ mod tests {
         // And the whole header is small, delta-encoded, self-delimiting.
         assert!(header_len < 32, "header len {header_len}");
     }
-
 }

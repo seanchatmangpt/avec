@@ -66,7 +66,12 @@ pub struct Spec {
 pub fn rle_w<const W: u16>(src: &[u8], out: &mut [u32]) -> Result<usize, ParquetError> {
     // Per-monomorphization compile-time domain check (inline const blocks
     // may reference const-generic parameters; inner `const` items may not).
-    let _ = const { assert!(matches!(W, 1 | 2 | 4 | 8), "rle_w: W must be a SWAR kernel width: 1, 2, 4 or 8") };
+    const {
+        assert!(
+            matches!(W, 1 | 2 | 4 | 8),
+            "rle_w: W must be a SWAR kernel width: 1, 2, 4 or 8"
+        )
+    };
     match src.first() {
         None => Err(ParquetError::UnexpectedEof),
         Some(&bits) if u16::from(bits) != W => Err(ParquetError::UnsupportedBitWidth(bits)),
@@ -86,7 +91,12 @@ pub fn rle_w<const W: u16>(src: &[u8], out: &mut [u32]) -> Result<usize, Parquet
 /// budget and returns the lanes written; a trailing partial element is
 /// ignored (bounded reads, no overread). Zero allocation, zero panics.
 pub fn plain_w<const W: u16>(src: &[u8], out: &mut [u32]) -> Result<usize, ParquetError> {
-    let _ = const { assert!(W >= 8 && W % 8 == 0 && W <= 256, "plain_w: W must be a byte-multiple in 8..=256") };
+    const {
+        assert!(
+            W >= 8 && W.is_multiple_of(8) && W <= 256,
+            "plain_w: W must be a byte-multiple in 8..=256"
+        )
+    };
     let eb: usize = W as usize / 8;
     let lpe: usize = (W as usize).div_ceil(32);
     let n_elems = src.len() / eb;
@@ -116,7 +126,12 @@ pub fn plain_w<const W: u16>(src: &[u8], out: &mut [u32]) -> Result<usize, Parqu
 /// each `W/32`-lane group is one element's LE words. A trailing partial
 /// group is dropped (complete elements only, matching [`plain_w`]).
 pub fn plain_encode<const W: u16>(lanes: &[u32]) -> Vec<u8> {
-    let _ = const { assert!(W >= 8 && W % 8 == 0 && W <= 256, "plain_encode: W must be a byte-multiple in 8..=256") };
+    const {
+        assert!(
+            W >= 8 && W.is_multiple_of(8) && W <= 256,
+            "plain_encode: W must be a byte-multiple in 8..=256"
+        )
+    };
     let eb: usize = W as usize / 8;
     let lpe: usize = (W as usize).div_ceil(32);
     let mut out = Vec::with_capacity(lanes.len() / lpe * eb);
@@ -149,20 +164,48 @@ pub fn dispatch(width: u16, encoding: Enc) -> Option<Kernel> {
 /// width added to the graph changes the rendered table and the drift is
 /// caught by diff, not by memory.
 pub const SPECIALIZATION_MANIFEST: &[Spec] = &[
-    Spec { width: 1, encoding: Enc::Rle, kernel: rle_w::<1> },
-    Spec { width: 8, encoding: Enc::Rle, kernel: rle_w::<8> },
-    Spec { width: 16, encoding: Enc::Plain, kernel: plain_w::<16> },
-    Spec { width: 32, encoding: Enc::Plain, kernel: plain_w::<32> },
-    Spec { width: 64, encoding: Enc::Plain, kernel: plain_w::<64> },
-    Spec { width: 128, encoding: Enc::Plain, kernel: plain_w::<128> },
-    Spec { width: 256, encoding: Enc::Plain, kernel: plain_w::<256> },
+    Spec {
+        width: 1,
+        encoding: Enc::Rle,
+        kernel: rle_w::<1>,
+    },
+    Spec {
+        width: 8,
+        encoding: Enc::Rle,
+        kernel: rle_w::<8>,
+    },
+    Spec {
+        width: 16,
+        encoding: Enc::Plain,
+        kernel: plain_w::<16>,
+    },
+    Spec {
+        width: 32,
+        encoding: Enc::Plain,
+        kernel: plain_w::<32>,
+    },
+    Spec {
+        width: 64,
+        encoding: Enc::Plain,
+        kernel: plain_w::<64>,
+    },
+    Spec {
+        width: 128,
+        encoding: Enc::Plain,
+        kernel: plain_w::<128>,
+    },
+    Spec {
+        width: 256,
+        encoding: Enc::Plain,
+        kernel: plain_w::<256>,
+    },
 ];
 
 #[cfg(test)]
 mod tests {
     use super::{dispatch, plain_encode, plain_w, rle_w, Enc, SPECIALIZATION_MANIFEST};
-    use crate::ParquetError;
     use crate::rle::rle_encode;
+    use crate::ParquetError;
     use alloc::vec;
     use alloc::vec::Vec;
 
@@ -175,7 +218,11 @@ mod tests {
     #[test]
     fn manifest_widths_match_ontology_register() {
         let widths: Vec<u16> = SPECIALIZATION_MANIFEST.iter().map(|s| s.width).collect();
-        assert_eq!(widths, EXPECTED_MODELED_WIDTHS.to_vec(), "manifest widths drift from the ontology register");
+        assert_eq!(
+            widths,
+            EXPECTED_MODELED_WIDTHS.to_vec(),
+            "manifest widths drift from the ontology register"
+        );
         assert_eq!(widths.len(), 7);
     }
 
@@ -194,9 +241,15 @@ mod tests {
             );
         }
         // Codec-supported but ontology-unmodeled pairs dispatch to nothing.
-        assert!(dispatch(4, Enc::Rle).is_none(), "width 4 is not modeled by the graph");
+        assert!(
+            dispatch(4, Enc::Rle).is_none(),
+            "width 4 is not modeled by the graph"
+        );
         assert!(dispatch(2, Enc::Plain).is_none());
-        assert!(dispatch(16, Enc::Rle).is_none(), "width 16 exceeds the SWAR lane ceiling");
+        assert!(
+            dispatch(16, Enc::Rle).is_none(),
+            "width 16 exceeds the SWAR lane ceiling"
+        );
         assert!(dispatch(0, Enc::Plain).is_none());
     }
 
@@ -231,7 +284,9 @@ mod tests {
             let lanes: Vec<u32> = match w {
                 16 => (0..23u32).map(|i| (i * 77 + 3) % 0x1_0000).collect(),
                 32 => (0..13u32).map(|i| i * 0x0100_0001 + 7).collect(),
-                _ => (0..(5 * u32::from(w) / 32)).map(|i| i.wrapping_mul(0x9E37_79B9) | 1).collect(),
+                _ => (0..(5 * u32::from(w) / 32))
+                    .map(|i| i.wrapping_mul(0x9E37_79B9) | 1)
+                    .collect(),
             };
             let page = match w {
                 16 => plain_encode::<16>(&lanes),
@@ -251,7 +306,14 @@ mod tests {
     #[test]
     fn plain_w_budget_and_partial_element_streaming() {
         // Three 64-bit elements = 6 u32 lanes.
-        let lanes: [u32; 6] = [0x0403_0201, 0x0807_0605, 0x0C0B_0A09, 0x100F_0E0D, 0x1413_1211, 0x1817_1615];
+        let lanes: [u32; 6] = [
+            0x0403_0201,
+            0x0807_0605,
+            0x0C0B_0A09,
+            0x100F_0E0D,
+            0x1413_1211,
+            0x1817_1615,
+        ];
         let page = plain_encode::<64>(&lanes);
         assert_eq!(page.len(), 24);
 
@@ -280,7 +342,10 @@ mod tests {
         // width-8 kernel is a typed error, never a silent decode.
         let page4 = rle_encode(&[1, 2, 3, 4, 5, 6, 7, 8], 4);
         let mut out = [0u32; 8];
-        assert_eq!(rle_w::<8>(&page4, &mut out), Err(ParquetError::UnsupportedBitWidth(4)));
+        assert_eq!(
+            rle_w::<8>(&page4, &mut out),
+            Err(ParquetError::UnsupportedBitWidth(4))
+        );
         // Empty page: typed EOF, not a panic.
         assert_eq!(rle_w::<1>(&[], &mut out), Err(ParquetError::UnexpectedEof));
         // Plain kernels never read a header: empty src is Ok(0) lanes.

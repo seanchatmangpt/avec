@@ -211,7 +211,7 @@ mod tests {
     use super::oblivious_masked_compact;
     use super::ParquetError as PE;
     use alloc::string::ToString;
-use alloc::vec;
+    use alloc::vec;
     use alloc::vec::Vec;
 
     /// Deterministic LCG (house test-vector shape, as packed_filter).
@@ -389,7 +389,7 @@ use alloc::vec;
     fn compact_differential_grid() {
         let sizes = [0usize, 1, 63, 64, 1000, 1_000_000];
         for &n in &sizes {
-            let mut rng = Lcg(0xC0_C0_4C7 + n as u64);
+            let mut rng = Lcg(0x0C0C_04C7 + n as u64);
             let values: Vec<u32> = (0..n).map(|_| rng.next() as u32).collect();
 
             let bits_all: Vec<bool> = alloc::vec![true; n];
@@ -406,7 +406,7 @@ use alloc::vec;
             let mut bits_clu: Vec<bool> = Vec::with_capacity(n);
             while bits_clu.len() < n {
                 let block = 64 + (rng.next() % 128) as usize;
-                let v = rng.next() % 2 == 0;
+                let v = rng.next().is_multiple_of(2);
                 let end = (bits_clu.len() + block).min(n);
                 while bits_clu.len() < end {
                     bits_clu.push(v);

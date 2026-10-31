@@ -145,7 +145,7 @@ pub fn scan_range_vertical_counted(
     );
     let wf = w as usize;
     assert!(
-        src.len() % wf == 0,
+        src.len().is_multiple_of(wf),
         "scan_range_vertical: src.len()={} is not a multiple of w={wf}",
         src.len()
     );
@@ -213,16 +213,16 @@ fn mask_of(w: u8) -> u32 {
 /// Evaluates two consecutive 64-lane groups (128 tuples) in parallel per level,
 /// doubling memory throughput and amortizing outer loop overhead while preserving
 /// bitwise equality with [`scan_range_vertical`].
-pub fn scan_range_vertical_128(
-    src: &[u64],
-    w: u8,
-    lo: u32,
-    hi: u32,
-    out_valid: &mut [u64],
-) {
-    assert!((1..=32).contains(&w), "scan_range_vertical_128: w={w} outside 1..=32");
+pub fn scan_range_vertical_128(src: &[u64], w: u8, lo: u32, hi: u32, out_valid: &mut [u64]) {
+    assert!(
+        (1..=32).contains(&w),
+        "scan_range_vertical_128: w={w} outside 1..=32"
+    );
     let wf = w as usize;
-    assert!(src.len() % wf == 0, "src length must be multiple of w");
+    assert!(
+        src.len().is_multiple_of(wf),
+        "src length must be multiple of w"
+    );
     let groups = src.len() / wf;
     assert!(out_valid.len() >= groups, "out_valid buffer too small");
 
@@ -320,13 +320,7 @@ pub fn scan_range_vertical_128(
 ///
 /// Operates strictly in vector registers using straight-line popcounts with 0 memory allocation.
 #[inline(always)]
-pub fn sum_masked_vertical_128(
-    src: &[u64],
-    w: u8,
-    base: i64,
-    mask0: u64,
-    mask1: u64,
-) -> i64 {
+pub fn sum_masked_vertical_128(src: &[u64], w: u8, base: i64, mask0: u64, mask1: u64) -> i64 {
     let wf = w as usize;
     let k0 = mask0.count_ones() as i64;
     let k1 = mask1.count_ones() as i64;
@@ -362,11 +356,9 @@ mod tests {
     }
 
     fn gen_values(n: usize, w: u8) -> Vec<u32> {
-        let mut rng = Rng(
-            0x9E37_79B9_7F4A_7C15
-                ^ (n as u64).wrapping_mul(0xFF51_AFD7_ED55_8CCD)
-                ^ (w as u64) << 32,
-        );
+        let mut rng = Rng(0x9E37_79B9_7F4A_7C15
+            ^ (n as u64).wrapping_mul(0xFF51_AFD7_ED55_8CCD)
+            ^ (w as u64) << 32);
         (0..n).map(|_| rng.next_bounded(mask_of(w))).collect()
     }
 
@@ -385,7 +377,10 @@ mod tests {
             scan_range_vertical(&packed, w, lo, hi, &mut out64);
             scan_range_vertical_128(&packed, w, lo, hi, &mut out128);
 
-            assert_eq!(out64, out128, "w={w} differential parity failure between 64 and 128 scanner");
+            assert_eq!(
+                out64, out128,
+                "w={w} differential parity failure between 64 and 128 scanner"
+            );
         }
     }
 
@@ -459,8 +454,8 @@ mod tests {
             for &n in &MATRIX_SIZES {
                 let values = gen_values(n, w);
                 let packed = pack_vertical(&values, w);
-                assert_eq!(packed.len(), ((n + 63) / 64) * w as usize);
-                let groups = (n + 63) / 64;
+                assert_eq!(packed.len(), n.div_ceil(64) * w as usize);
+                let groups = n.div_ceil(64);
                 let point = if n > 0 { values[n / 2] } else { 0 };
                 // pack zero-pads to a 64 multiple; the reference must see the
                 // same padded lanes the scanner sees.
@@ -496,9 +491,9 @@ mod tests {
                 let values = gen_values(n, w);
                 let packed = pack_vertical(&values, w);
                 let mut padded = values;
-                padded.resize(((n + 63) / 64) * 64, 0);
+                padded.resize(n.div_ceil(64) * 64, 0);
                 let mut back = Vec::with_capacity(padded.len());
-                for g in 0..((n + 63) / 64) {
+                for g in 0..n.div_ceil(64) {
                     for t in 0..64 {
                         let mut v = 0u32;
                         for j in 0..w as usize {
@@ -577,14 +572,14 @@ mod tests {
                 let values = gen_values(n, w);
                 let packed = pack_vertical(&values, w);
                 let mut padded = values;
-                padded.resize(((n + 63) / 64) * 64, 0);
+                padded.resize(n.div_ceil(64) * 64, 0);
                 let point = if n > 0 { padded[n / 2] } else { 0 };
                 for class in MATRIX_CLASSES {
                     let (lo, hi) = class_bounds(w, class, point);
                     let expect = reference_range_mask(&padded, lo, hi);
-                    let mut got = alloc::vec![0u64; ((n + 63) / 64).max(1)];
+                    let mut got = alloc::vec![0u64; n.div_ceil(64).max(1)];
                     scan_range_vertical(&packed, w, lo, hi, &mut got);
-                    got.truncate((n + 63) / 64);
+                    got.truncate(n.div_ceil(64));
                     assert_eq!(got, expect, "w={w} n={n} class={class}");
                 }
             }
@@ -600,7 +595,7 @@ mod tests {
         let w = 12;
         let values = gen_values(1_000_000, w);
         let packed = pack_vertical(&values, w);
-        let groups = (values.len() + 63) / 64;
+        let groups = values.len().div_ceil(64);
         let mut got = alloc::vec![0u64; groups];
         let touched = scan_range_vertical_counted(&packed, w, 0, mask_of(w), &mut got);
         assert!(

@@ -277,7 +277,7 @@ mod tests {
         let mut got = alloc::vec![0u64; words];
         filter_eq_packed(&packed, w, needle, &mut got);
 
-        let mut want = alloc::vec![0xDEADBEEF_CAFEu64; words];
+        let mut want = alloc::vec![0xDEAD_BEEF_CAFEu64; words];
         reference_filter(&packed, w, needle, &mut want);
 
         assert_eq!(got, want, "w={w} needle={needle} packed={packed:?}");

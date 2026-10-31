@@ -180,7 +180,11 @@ pub fn point_get(packed: &[Vec<u8>], k: u8, i: usize) -> u32 {
 #[inline]
 #[must_use]
 fn kmask_of(k: u8) -> u32 {
-    if k == 16 { 0xFFFF_u32 } else { (1u32 << k) - 1 }
+    if k == 16 {
+        0xFFFF_u32
+    } else {
+        (1u32 << k) - 1
+    }
 }
 
 /// REUSED MATH, not a new trick — the `w = 8` arm of
@@ -255,11 +259,7 @@ mod tests {
             self.0
         }
         fn value(&mut self, k: u8) -> u32 {
-            let mask = if k == 16 {
-                0xFFFFu64
-            } else {
-                (1u64 << k) - 1
-            };
+            let mask = if k == 16 { 0xFFFFu64 } else { (1u64 << k) - 1 };
             (self.next() & mask) as u32
         }
     }

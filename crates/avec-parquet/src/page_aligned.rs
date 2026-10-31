@@ -358,7 +358,10 @@ mod tests {
         let n = aligned_decode(&page, &mut out).expect("decode");
         assert_eq!(n, values.len());
         assert_eq!(&out[..values.len()], values);
-        assert!(out[values.len()..].iter().all(|&x| x == SENTINEL), "tail untouched");
+        assert!(
+            out[values.len()..].iter().all(|&x| x == SENTINEL),
+            "tail untouched"
+        );
 
         // Body offset == header end (no padding), body == values. The
         // writer is deterministic, so the body is the last values.len()
@@ -438,7 +441,9 @@ mod tests {
 
     #[test]
     fn truncated_at_every_prefix_fails_closed() {
-        let values: Vec<u8> = (0..64u8).map(|i| i.wrapping_mul(7).wrapping_add(1)).collect();
+        let values: Vec<u8> = (0..64u8)
+            .map(|i| i.wrapping_mul(7).wrapping_add(1))
+            .collect();
         let page = write_plain_page(&values, 64);
         let mut out = alloc::vec![0u8; 64];
 
@@ -467,7 +472,9 @@ mod tests {
         page[1] = 0;
         assert_eq!(
             aligned_decode(&page, &mut out),
-            Err(ParquetError::UnsupportedBitWidth(page_type::DATA_PAGE as u8))
+            Err(ParquetError::UnsupportedBitWidth(
+                page_type::DATA_PAGE as u8
+            ))
         );
 
         // Non-PLAIN encoding at real idl 4 (RLE = 3).
@@ -484,7 +491,10 @@ mod tests {
         write_i32_field(&mut header, 2, 1, 4);
         write_i32_field(&mut header, 3, 2, 4);
         header.push(ctype::STOP);
-        assert_eq!(aligned_decode(&header, &mut out), Err(ParquetError::UnexpectedEof));
+        assert_eq!(
+            aligned_decode(&header, &mut out),
+            Err(ParquetError::UnexpectedEof)
+        );
     }
 
     #[test]
@@ -537,7 +547,10 @@ mod tests {
         let mut out = alloc::vec![0u8; 3];
         assert_eq!(
             aligned_decode(&page, &mut out),
-            Err(ParquetError::RunOverrun { run_len: 10, budget: 3 })
+            Err(ParquetError::RunOverrun {
+                run_len: 10,
+                budget: 3
+            })
         );
 
         // Negative num_values: the unbounded claim. Hand-built header with
@@ -547,7 +560,10 @@ mod tests {
         let mut out = alloc::vec![0u8; 100];
         assert_eq!(
             aligned_decode(&header, &mut out),
-            Err(ParquetError::RunOverrun { run_len: usize::MAX, budget: 100 })
+            Err(ParquetError::RunOverrun {
+                run_len: usize::MAX,
+                budget: 100
+            })
         );
     }
 
@@ -582,7 +598,10 @@ mod tests {
         b.push(ctype::STOP);
         b.push(ctype::STOP);
         b.extend_from_slice(&values);
-        assert_eq!(aligned_decode(&b, &mut out), Err(ParquetError::UnexpectedEof));
+        assert_eq!(
+            aligned_decode(&b, &mut out),
+            Err(ParquetError::UnexpectedEof)
+        );
     }
 
     #[test]
@@ -592,7 +611,10 @@ mod tests {
         let mut header = header_with(3, encoding::PLAIN, false, 0, 0, 10, 10, 10);
         header.extend_from_slice(&(0..9u8).collect::<Vec<u8>>());
         let mut out = alloc::vec![0u8; 10];
-        assert_eq!(aligned_decode(&header, &mut out), Err(ParquetError::UnexpectedEof));
+        assert_eq!(
+            aligned_decode(&header, &mut out),
+            Err(ParquetError::UnexpectedEof)
+        );
     }
 
     #[test]

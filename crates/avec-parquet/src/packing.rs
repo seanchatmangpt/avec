@@ -204,7 +204,8 @@ mod tests {
 
             for i in 0..n {
                 assert_eq!(
-                    u64::from(tight[i]), lanes[i],
+                    u64::from(tight[i]),
+                    lanes[i],
                     "w={w} lane {i}: tight vs SWAR"
                 );
             }
@@ -239,7 +240,10 @@ mod tests {
         let bytes = [0u8; 3];
         assert_eq!(
             unpack_bits_tight(&bytes, 3, &mut out),
-            Err(ParquetError::LiteralOverrun { claimed: 4, available: 3 })
+            Err(ParquetError::LiteralOverrun {
+                claimed: 4,
+                available: 3
+            })
         );
     }
 
@@ -252,7 +256,10 @@ mod tests {
         bytes[4] = 0xFF; // garbage that would corrupt if honored
         assert_eq!(
             unpack_bits_tight(&bytes, 3, &mut out),
-            Err(ParquetError::LiteralOverrun { claimed: 4, available: 5 })
+            Err(ParquetError::LiteralOverrun {
+                claimed: 4,
+                available: 5
+            })
         );
     }
 
@@ -263,7 +270,10 @@ mod tests {
         // Nonempty bytes with a zero-lane budget is trailing garbage.
         assert_eq!(
             unpack_bits_tight(&[7], 4, &mut out),
-            Err(ParquetError::LiteralOverrun { claimed: 0, available: 1 })
+            Err(ParquetError::LiteralOverrun {
+                claimed: 0,
+                available: 1
+            })
         );
     }
 

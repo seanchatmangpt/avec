@@ -240,7 +240,7 @@ mod tests {
                 let per_word = 64 / w as usize;
                 let words = n.div_ceil(per_word);
                 for base in [0u32, 0xDEAD_BEEF] {
-                    let seed = 0xF0A5_0000 ^ u64::from(w) * 7919 ^ n as u64 ^ u64::from(base);
+                    let seed = 0xF0A5_0000 ^ (u64::from(w) * 7919) ^ n as u64 ^ u64::from(base);
                     let src = random_words(words, seed);
                     let mut got = vec![0u32; n];
                     ffor_unpack(&src, w, base, &mut got);
@@ -294,10 +294,7 @@ mod tests {
         assert_eq!(ffor_pack(&[7], 8).expect("single"), (7, vec![0x00]));
         assert_eq!(ffor_pack(&[7], 4).expect("single"), (7, vec![0x00]));
         // Range exactly filling the width is lawful (inclusive bound).
-        assert_eq!(
-            ffor_pack(&[100, 100 + 15], 4).expect("exact fit").0,
-            100
-        );
+        assert_eq!(ffor_pack(&[100, 100 + 15], 4).expect("exact fit").0, 100);
     }
 
     /// Width gate: out-of-set widths are typed errors on the pack side.
@@ -409,7 +406,7 @@ mod tests {
             assert!(max - base <= 15, "{name}: span {max}-{base} must fit w=4");
             assert_eq!(bytes.len(), n * 4 / 8, "{name}: w=4 wire is n/2 bytes");
             assert!(
-                base >= fixtures::LO && base < fixtures::LO + fixtures::BAND,
+                (fixtures::LO..fixtures::LO + fixtures::BAND).contains(&base),
                 "{name}: base {base} must sit inside the band"
             );
             // Round-trip through the real bit streams.
@@ -458,9 +455,7 @@ mod tests {
             let n = 100usize; // straddles every byte/group boundary
             let mut r = SplitMix(0xBEEF + u64::from(w));
             let base = 0x1234_5678;
-            let deltas: Vec<u32> = (0..n)
-                .map(|_| r.below(1u64 << w) as u32)
-                .collect();
+            let deltas: Vec<u32> = (0..n).map(|_| r.below(1u64 << w) as u32).collect();
             let bytes = pack_bits(&deltas, w);
             let words = le_words(&bytes);
 
@@ -540,7 +535,12 @@ mod bench {
         let mut best_two = f64::INFINITY;
         for _ in 0..ROUNDS {
             let t0 = Instant::now();
-            ffor_unpack(black_box(&src), 8, black_box(base), black_box(&mut out_fused));
+            ffor_unpack(
+                black_box(&src),
+                8,
+                black_box(base),
+                black_box(&mut out_fused),
+            );
             best_fused = best_fused.min(t0.elapsed().as_secs_f64());
             black_box(out_fused[out_fused.len() - 1]);
 

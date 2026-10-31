@@ -34,6 +34,14 @@ pub fn compact_lanes_branchless(
 use core::arch::aarch64::*;
 
 /// NEON In-Register Byte Table Shuffle Compaction
+///
+/// # Safety
+///
+/// No memory-safety precondition on the caller: `values`, `mask_byte`, and
+/// `lut_indices` are NEON registers, not pointers, and `vtbl1_u8` is total
+/// (out-of-range LUT lane bytes select 0). Marked `unsafe` because the body
+/// executes target-gated NEON intrinsics; callers need only the platform
+/// gate (`cfg(target_arch = "aarch64")`) this function already carries.
 #[cfg(target_arch = "aarch64")]
 #[inline(always)]
 pub unsafe fn neon_table_compact_8(

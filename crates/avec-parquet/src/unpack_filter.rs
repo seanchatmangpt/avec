@@ -166,8 +166,8 @@ mod tests {
         assert_eq!(&out[..8], &[0u64; 8]); // word 0 = all-zero bytes
         assert_eq!(&out[8..16], &[0xFF; 8]); // word 1 = all-0xFF bytes
         assert_eq!(&out[16..20], &[0; 4]); // padded words -> zero lanes
-        // bits 0..7 set (0 lanes == needle 0), bits 8..15 clear (0xFF),
-        // bits 16..19 set (padded zero lanes), tail bits 20..63 zero.
+                                           // bits 0..7 set (0 lanes == needle 0), bits 8..15 clear (0xFF),
+                                           // bits 16..19 set (padded zero lanes), tail bits 20..63 zero.
         assert_eq!(valid[0], 0xF_0000 | 0xFF);
     }
 
@@ -206,7 +206,7 @@ mod tests {
             let max_lane = (1u32 << w) - 1;
             let absent = 1u32 << w; // out of lane domain -> cannot match
             for &n in &SIZES {
-                let src = gen_src(n, (64 / w as usize) as usize);
+                let src = gen_src(n, (64 / w as usize));
                 let lanes = unpack_ref(unpack, &src, n);
                 let mut needles: Vec<u32> = vec![0, max_lane, absent]; // min, max, absent
                 if n > 0 {
@@ -249,7 +249,7 @@ mod tests {
             (W4, unpack_4bit as UnpackFn, unpack_4bit_filtered as FusedFn),
             (W8, unpack_8bit as UnpackFn, unpack_8bit_filtered as FusedFn),
         ] {
-            let src = gen_src(65, (64 / w as usize) as usize);
+            let src = gen_src(65, (64 / w as usize));
             let lanes = unpack_ref(unpack, &src, 65);
             let needle = lanes[64] as u32; // the lone tail lane's value
             let mut fused_out = vec![0xAAu64; 65];
@@ -341,8 +341,18 @@ mod bench {
     #[test]
     fn bench_fused_vs_two_pass() {
         for (w, unpack, fused, needle) in [
-            (4u8, unpack_4bit as UnpackFn, unpack_4bit_filtered as FusedFn, 0x9u32),
-            (8u8, unpack_8bit as UnpackFn, unpack_8bit_filtered as FusedFn, 0x9Au32),
+            (
+                4u8,
+                unpack_4bit as UnpackFn,
+                unpack_4bit_filtered as FusedFn,
+                0x9u32,
+            ),
+            (
+                8u8,
+                unpack_8bit as UnpackFn,
+                unpack_8bit_filtered as FusedFn,
+                0x9Au32,
+            ),
         ] {
             let src = gen_src(w);
             let mut out_fused = vec![0u64; N];
@@ -355,10 +365,28 @@ mod bench {
             assert_eq!(out_fused, out_two, "w={w}: bench page out diverged");
             assert_eq!(valid_fused, valid_two, "w={w}: bench page mask diverged");
 
-            let fused_gibs = (N * 8) as f64 / GIB
-                / min_of_five(unpack, fused, &src, needle, &mut out_fused, &mut valid_fused, true);
-            let two_gibs = (N * 8) as f64 / GIB
-                / min_of_five(unpack, fused, &src, needle, &mut out_two, &mut valid_two, false);
+            let fused_gibs = (N * 8) as f64
+                / GIB
+                / min_of_five(
+                    unpack,
+                    fused,
+                    &src,
+                    needle,
+                    &mut out_fused,
+                    &mut valid_fused,
+                    true,
+                );
+            let two_gibs = (N * 8) as f64
+                / GIB
+                / min_of_five(
+                    unpack,
+                    fused,
+                    &src,
+                    needle,
+                    &mut out_two,
+                    &mut valid_two,
+                    false,
+                );
             println!(
                 "[bench-unpack-filter] unpack+filter w={w} fused vs two-pass: {fused_gibs:.3} vs {two_gibs:.3} GiB/s logical (n={N}, needle=0x{needle:X}, min-of-{ROUNDS})"
             );

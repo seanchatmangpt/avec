@@ -77,7 +77,11 @@ pub fn unpack_8bit(src: &[u64], out: &mut [u64]) {
 
 /// Bit-unpack by width: dispatch over the four SWAR kernels.
 /// Malformed widths return a typed error (fail-closed, FMEA row 3).
-pub fn unpack_bits(bits_per_value: u8, src: &[u64], out: &mut [u64]) -> Result<(), crate::ParquetError> {
+pub fn unpack_bits(
+    bits_per_value: u8,
+    src: &[u64],
+    out: &mut [u64],
+) -> Result<(), crate::ParquetError> {
     match bits_per_value {
         1 => unpack_1bit(src, out),
         2 => unpack_2bit(src, out),

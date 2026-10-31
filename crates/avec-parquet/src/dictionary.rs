@@ -101,7 +101,7 @@ impl DictionaryBuilder {
     /// Intern `v`: first occurrence appends to the dictionary, any later
     /// occurrence reuses the existing index.
     pub fn push(&mut self, v: u32) {
-        if self.index_of.get(&v).is_none() {
+        if !self.index_of.contains_key(&v) {
             // Cast is exact in this arm: the dictionary only ever holds
             // distinct `u32` keys, so if it ever reached 2^32 entries every
             // possible `v` would already be present and this arm would be
@@ -137,7 +137,11 @@ impl DictionaryBuilder {
     /// function); `BTreeMap`'s `Index` panics if it were ever violated —
     /// loud and unreachable, not input handling.
     pub fn finish(self) -> (Vec<u32>, Vec<u32>) {
-        let Self { values, index_of, dict } = self;
+        let Self {
+            values,
+            index_of,
+            dict,
+        } = self;
         let indices = values.iter().map(|v| index_of[v]).collect();
         (dict, indices)
     }
@@ -234,7 +238,11 @@ mod tests {
 
         let (dict, indices) = b.finish();
         assert_eq!(dict, vec![10, 20, 30], "dictionary is first-seen order");
-        assert_eq!(indices, vec![0, 1, 0, 2, 1, 0], "reuse maps to existing index");
+        assert_eq!(
+            indices,
+            vec![0, 1, 0, 2, 1, 0],
+            "reuse maps to existing index"
+        );
     }
 
     #[test]
@@ -266,7 +274,10 @@ mod tests {
             (257, Err(ParquetError::UnsupportedBitWidth(9))),
             (1000, Err(ParquetError::UnsupportedBitWidth(10))),
             // usize::BITS so the expectation holds on 32- and 64-bit targets.
-            (usize::MAX, Err(ParquetError::UnsupportedBitWidth(usize::BITS as u8))),
+            (
+                usize::MAX,
+                Err(ParquetError::UnsupportedBitWidth(usize::BITS as u8)),
+            ),
         ];
         for (n, want) in table {
             assert_eq!(required_bits(n), want, "required_bits({n})");
@@ -312,9 +323,18 @@ mod tests {
     #[test]
     fn encode_page_gates_fail_typed() {
         // Width outside the kernel set.
-        assert_eq!(encode_page(&[1], &[0], 3), Err(ParquetError::UnsupportedBitWidth(3)));
-        assert_eq!(encode_page(&[], &[], 0), Err(ParquetError::UnsupportedBitWidth(0)));
-        assert_eq!(encode_page(&[], &[], 16), Err(ParquetError::UnsupportedBitWidth(16)));
+        assert_eq!(
+            encode_page(&[1], &[0], 3),
+            Err(ParquetError::UnsupportedBitWidth(3))
+        );
+        assert_eq!(
+            encode_page(&[], &[], 0),
+            Err(ParquetError::UnsupportedBitWidth(0))
+        );
+        assert_eq!(
+            encode_page(&[], &[], 16),
+            Err(ParquetError::UnsupportedBitWidth(16))
+        );
 
         // Dictionary bigger than 2^bits: the given width cannot carry it.
         let dict5 = vec![10u32, 11, 12, 13, 14];
@@ -446,7 +466,10 @@ mod tests {
         // 8-bit lanes against a tiny dict.
         let page = rle_encode(&[5], 8);
         let mut out = vec![0u32; 1];
-        assert_eq!(decode_page(&page, &[1u32, 2], &mut out), Err(ParquetError::UnexpectedEof));
+        assert_eq!(
+            decode_page(&page, &[1u32, 2], &mut out),
+            Err(ParquetError::UnexpectedEof)
+        );
 
         // A dictionary no kernel width can index is refused before decode.
         let dict257: Vec<u32> = (0..257).collect();
@@ -462,7 +485,10 @@ mod tests {
         // (inherited rle_decode full-buffer semantics), not silent success.
         let page = rle_encode(&[0, 0, 0], 1);
         let mut out = vec![0u32; 5];
-        assert_eq!(decode_page(&page, &[9u32], &mut out), Err(ParquetError::UnexpectedEof));
+        assert_eq!(
+            decode_page(&page, &[9u32], &mut out),
+            Err(ParquetError::UnexpectedEof)
+        );
 
         // Exact budget decodes.
         let mut out = vec![0u32; 3];

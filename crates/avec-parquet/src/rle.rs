@@ -71,7 +71,26 @@ pub fn write_varint(dst: &mut Vec<u8>, mut value: u64) {
     }
 }
 /// Encode values as the hybrid codec (repeated runs >= 3, literal groups of 8).
+///
+/// The literal arm packs one byte per lane (lane k at bit offset 8k of its
+/// group's u64 word), so the wire can only express `bits` in `1..=8` — the
+/// decoder refuses every other width header with
+/// [`ParquetError::UnsupportedBitWidth`]. Widths outside `1..=8` have no
+/// representable encoding on this wire; encoding them would silently
+/// truncate/corrupt lanes, so the encoder refuses loudly up front.
+///
+/// # Panics
+/// Panics when `bits` is outside `1..=8` (message names
+/// `UnsupportedBitWidth(<bits>)`). This replaces the previous
+/// shift-left-overflow panic mid-literal-arm for `bits in 9..=32` (witnessed
+/// at bits=12) and the `to_le_bytes()[..vb]` slice panic for `bits >= 33`:
+/// same loud refusal, at the contract boundary instead of mid-loop.
 pub fn rle_encode(values: &[u32], bits: u8) -> Vec<u8> {
+    assert!(
+        (1..=8).contains(&bits),
+        "UnsupportedBitWidth({bits}): rle_encode packs one byte per lane; \
+         the wire supports widths 1..=8 only (decoder kernel set {{1,2,4,8}})"
+    );
     let mut out = Vec::new();
     out.push(bits);
     let mut i = 0;
@@ -120,7 +139,11 @@ pub fn rle_encode(values: &[u32], bits: u8) -> Vec<u8> {
             write_varint(&mut out, ((groups as u64) << 1) | 1);
             let mut lane = 0;
             while lane < groups * 8 {
-                let val = if start + lane < j { values[start + lane] } else { 0 };
+                let val = if start + lane < j {
+                    values[start + lane]
+                } else {
+                    0
+                };
                 let vb = usize::from(bits);
                 let mut byte = 0u8;
                 let mut bit = 0;
@@ -188,7 +211,10 @@ pub fn decode_into(src: &[u8], out: &mut [u32]) -> Result<usize, ParquetError> {
             // repeated run
             let run_len = (header >> 1) as usize;
             if run_len > out.len() - oi {
-                return Err(ParquetError::RunOverrun { run_len, budget: out.len() - oi });
+                return Err(ParquetError::RunOverrun {
+                    run_len,
+                    budget: out.len() - oi,
+                });
             }
             let vb = usize::from(bits).div_ceil(8);
             let Some(vb_slice) = src.get(pos..pos + vb) else {
@@ -212,17 +238,26 @@ pub fn decode_into(src: &[u8], out: &mut [u32]) -> Result<usize, ParquetError> {
             // literal payload than could ever be present.
             let available = src.len() - pos;
             let Some(byte_len) = groups.checked_mul(8) else {
-                return Err(ParquetError::LiteralOverrun { claimed: usize::MAX, available });
+                return Err(ParquetError::LiteralOverrun {
+                    claimed: usize::MAX,
+                    available,
+                });
             };
             // Literal records may end with a zero-padded partial final group;
             // the caller budget bounds the real lane count (Parquet spec
             // discipline: decode stops at page end).
             let count = byte_len.min(out.len() - oi);
             let Some(end) = pos.checked_add(byte_len) else {
-                return Err(ParquetError::LiteralOverrun { claimed: byte_len, available });
+                return Err(ParquetError::LiteralOverrun {
+                    claimed: byte_len,
+                    available,
+                });
             };
             let Some(packed) = src.get(pos..end) else {
-                return Err(ParquetError::LiteralOverrun { claimed: byte_len, available });
+                return Err(ParquetError::LiteralOverrun {
+                    claimed: byte_len,
+                    available,
+                });
             };
             let mut k = 0;
             while k < count {
@@ -257,7 +292,12 @@ mod tests {
     #[test]
     fn literal_groups() {
         round_trip(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 4);
-        round_trip(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 3, 3, 3], 4);
+        round_trip(
+            &[
+                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 3, 3, 3,
+            ],
+            4,
+        );
     }
 
     #[test]
@@ -369,7 +409,10 @@ mod alloc_proof {
         let delta = current_allocs() - before;
 
         println!("[alloc-court] decode_into allocs={delta} lanes={lanes}");
-        assert_eq!(delta, 0, "decode_into allocated {delta} times during decode — zero-alloc law violated");
+        assert_eq!(
+            delta, 0,
+            "decode_into allocated {delta} times during decode — zero-alloc law violated"
+        );
         assert_eq!(n, lanes, "page must exactly fill the pre-allocated slice");
 
         // rle_decode delegates to decode_into: same zero-alloc law.
@@ -378,7 +421,10 @@ mod alloc_proof {
         rle_decode(&page, &mut sink).expect("rle_decode");
         let delta = current_allocs() - before;
         println!("[alloc-court] rle_decode  allocs={delta} lanes={lanes}");
-        assert_eq!(delta, 0, "rle_decode allocated {delta} times — zero-alloc law violated");
+        assert_eq!(
+            delta, 0,
+            "rle_decode allocated {delta} times — zero-alloc law violated"
+        );
     }
 }
 
@@ -419,7 +465,11 @@ mod decode_into_tests {
             assert_eq!(n, values.len());
             // Exact per-position landing: value i at slice index i.
             for (i, &v) in values.iter().enumerate() {
-                assert_eq!(out[i], v, "lane {i} bits={bits}: got {:x}, want {v:x}", out[i]);
+                assert_eq!(
+                    out[i], v,
+                    "lane {i} bits={bits}: got {:x}, want {v:x}",
+                    out[i]
+                );
             }
             // No lane beyond the decoded prefix was touched.
             assert!(out[values.len()..].is_empty());
@@ -436,7 +486,12 @@ mod decode_into_tests {
             assert_eq!(n, 5, "page holds 10 lanes, window budget 5");
         }
         for (i, want) in [10u32, 20, 1, 2, 3].iter().enumerate() {
-            assert_eq!(out[2 + i], *want, "window lane {i} must land at absolute index {}", 2 + i);
+            assert_eq!(
+                out[2 + i],
+                *want,
+                "window lane {i} must land at absolute index {}",
+                2 + i
+            );
         }
         // Everything outside the window keeps the sentinel.
         assert_eq!(out[0], SENTINEL);
@@ -454,12 +509,18 @@ mod decode_into_tests {
         let n = decode_into(&page, &mut out).expect("decode_into");
         assert_eq!(n, 16, "lanes written must equal the page's lane count");
         assert_eq!(&out[..16], &values[..]);
-        assert!(out[16..].iter().all(|&x| x == SENTINEL), "tail must be untouched");
+        assert!(
+            out[16..].iter().all(|&x| x == SENTINEL),
+            "tail must be untouched"
+        );
 
         // rle_decode keeps its full-buffer semantics: a partial page is not
         // Ok(()) — it is UnexpectedEof, exactly as the pre-refactor body
         // surfaced it (read_varint at a consumed page end).
-        assert_eq!(rle_decode(&page, &mut out), Err(ParquetError::UnexpectedEof));
+        assert_eq!(
+            rle_decode(&page, &mut out),
+            Err(ParquetError::UnexpectedEof)
+        );
     }
 
     /// varint-encode `value` (same wire form as `write_varint`).
@@ -490,19 +551,24 @@ mod decode_into_tests {
         let available = 0; // src is exactly the width byte + header
         assert_eq!(
             decode_into(&page, &mut out),
-            Err(ParquetError::LiteralOverrun { claimed: usize::MAX, available }),
+            Err(ParquetError::LiteralOverrun {
+                claimed: usize::MAX,
+                available
+            }),
             "groups*8 overflow must fail closed with LiteralOverrun, not overflow-panic"
         );
 
         // Class 2 (robustness-lane seed class): groups*8 fits, but
         // pos + byte_len wraps. Repro wire: [04, ff*8, 3f] -> groups = 2^61-1,
         // byte_len = 2^64-8, pos = 10 -> checked_add overflows.
-        let page2: Vec<u8> = alloc::vec![
-            0x04, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F,
-        ];
+        let page2: Vec<u8> =
+            alloc::vec![0x04, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F,];
         assert_eq!(
             decode_into(&page2, &mut out),
-            Err(ParquetError::LiteralOverrun { claimed: usize::MAX - 7, available: 0 }),
+            Err(ParquetError::LiteralOverrun {
+                claimed: usize::MAX - 7,
+                available: 0
+            }),
             "pos+byte_len wrap must fail closed with LiteralOverrun in BOTH profiles"
         );
     }
@@ -536,7 +602,10 @@ mod wiring {
     impl Buf64 {
         fn new(len: usize) -> Self {
             if len == 0 {
-                return Buf64 { ptr: NonNull::dangling(), len: 0 };
+                return Buf64 {
+                    ptr: NonNull::dangling(),
+                    len: 0,
+                };
             }
             let layout = Layout::from_size_align(len, ALIGNMENT)
                 .unwrap_or_else(|e| panic!("invalid buffer layout: {e}"));
@@ -564,8 +633,15 @@ mod wiring {
         /// Typed read view — same contract as `avec_arrow::buffer::Buf::as_typed`.
         fn as_typed<T>(&self) -> &[T] {
             let (sz, an) = (core::mem::size_of::<T>(), core::mem::align_of::<T>());
-            assert!(an <= ALIGNMENT, "element alignment exceeds buffer alignment");
-            assert_eq!(self.len % sz, 0, "buffer length not a multiple of element size");
+            assert!(
+                an <= ALIGNMENT,
+                "element alignment exceeds buffer alignment"
+            );
+            assert_eq!(
+                self.len % sz,
+                0,
+                "buffer length not a multiple of element size"
+            );
             // SAFETY: 64-byte base + uniform element size -> aligned for T.
             unsafe { slice::from_raw_parts(self.as_ptr() as *const T, self.len / sz) }
         }
@@ -593,7 +669,11 @@ mod wiring {
         let page = rle_encode(&values, 8);
 
         let mut buf = Buf64::new(lanes * 4);
-        assert_eq!(buf.as_ptr() as usize % ALIGNMENT, 0, "charter M-03: 64-byte alignment");
+        assert_eq!(
+            buf.as_ptr() as usize % ALIGNMENT,
+            0,
+            "charter M-03: 64-byte alignment"
+        );
 
         // The wiring: mutable typed window derived from the buffer's byte
         // view (as_mut_slice/as_mut_ptr — avec-arrow has no as_typed_mut, so
@@ -619,8 +699,8 @@ mod bench_compare {
     use super::{decode_into, rle_decode, rle_encode};
     use alloc::vec::Vec;
     use std::hint::black_box;
-    use std::time::Instant;
     use std::println;
+    use std::time::Instant;
 
     fn literal_page(lanes: usize) -> (Vec<u32>, Vec<u8>) {
         let values: Vec<u32> = (0..lanes).map(|i| (i * 7 + 1) as u32).collect();
