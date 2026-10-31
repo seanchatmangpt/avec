@@ -192,26 +192,33 @@ evidence = "grep -c returns exactly 1 for '^## Open Questions'; 0 or 2+ is red"
 # PENDING-OPERATOR: recorded decisions, never flipped by a lane
 # (65-coordinator-handoff.md, The Three Operator Decisions)
 # ---------------------------------------------------------------------------
-[[entry]]
-id = "P-CTQ06-lsl-ratification"
-class = "pending"
-expect = "pending-holds"
-description = "CTQ-06 BLAKE3 LSL ratification is the operator's call (ctq_report.rs LSL_RATIFIED)"
-check = "grep -q 'const LSL_RATIFIED: Option<f64> = None;' crates/bench/src/bin/ctq_report.rs"
-evidence = "LSL_RATIFIED still None = PENDING (recorded, not FAIL); if flipped to Some -> STALE red, update manifest"
+# ---------------------------------------------------------------------------
+# Wave-12 ratifications EXECUTED (operator delegation 2026-10-31, receipt
+# 87-wave-12-13-receipt.md): the three pending-holds entries above are
+# superseded by these ratified checks. Per the manifest's own law, a landed
+# decision turns its pending check STALE red, forcing this manifest update.
+# ---------------------------------------------------------------------------
 
 [[entry]]
-id = "P-CTQ04-protocol-declaration"
-class = "pending"
-expect = "pending-holds"
-description = "CTQ-04 protocol (p99/p50 <= 1.30) declaration in PRD/harness-plan is the operator's call"
-check = "cd docs/jira/v26.10.31 && ! grep -qiE 'ctq-04.*ratified' 20-prd.md 29-benchmark-harness-plan.md"
-evidence = "no CTQ-04 ratified marker yet = PENDING; if a ratified marker lands -> STALE red, update manifest"
+id = "R-CTQ06-lsl-ratified"
+class = "ratified"
+expect = "pass"
+description = "CTQ-06 LSL ratified at 1.0/1.5/2.5 GiB/s/core NEON (decision 1); gate is REAL at 1.0"
+check = "grep -q 'const LSL_RATIFIED: Option<f64> = Some(1.0);' crates/bench/src/bin/ctq_report.rs && echo 'CTQ-06 LSL ratified at 1.0'"
+evidence = "LSL_RATIFIED = Some(1.0); 4 consecutive ctq_report PASS (gate-ctq06-ratified-pass.md); cpk C_pl 4.91 (gate-cpk-study-v4)"
 
 [[entry]]
-id = "P-INTEGRATION-commit"
-class = "pending"
-expect = "pending-holds"
-description = "Integration commit approval (atomic per-crate commits + one docs commit, no push)"
-check = "git status --porcelain | grep -q ."
-evidence = "dirty count > 0 = PENDING (yellow); clean tree = STALE red (commit landed, update manifest)"
+id = "R-CTQ04-protocol-ratified"
+class = "ratified"
+expect = "pass"
+description = "CTQ-04 p99/p50 <= 1.30 protocol RATIFIED (decision 2); 15% pin retired"
+check = "grep -q 'RATIFIED p99/p50 <= 1.30' crates/bench/src/bin/ctq_report.rs && echo 'CTQ-04 protocol ratified'"
+evidence = "pin_status strings carry the RATIFIED marker at both sites"
+
+[[entry]]
+id = "R-INTEGRATION-committed"
+class = "ratified"
+expect = "pass"
+description = "Integration commits landed and pushed (decision 3): ead4032..85cdb75 + wave-14"
+check = "git log --oneline -8 | grep -q 'feat(beam): zero-copy NIF membrane' && echo 'integration commits landed'"
+evidence = "11 atomic commits pushed ead4032..85cdb75; wave-14 commit bf4eee5"

@@ -34,21 +34,23 @@ Site line-counts, code-position `unsafe` only. Zero-site crates: `avec-git`,
 
 ```text
 audit        32   lib.rs 23 + alloc_counter.rs 9
-avec-arrow  127   blake3 32, c_abi_nested 34, c_abi 19, foreign 17,
+avec-arrow  131   blake3 32, c_abi_nested 33, c_abi 18, foreign 17,
                   slice 10, buffer 7, mmu_arena 5, chase_lev 4,
                   transpose 3, silicon 1, predicates 1
 avec-beam   135   lib 37, shm 33, ops_scan 24, resources 13,
                   ops_persist 10, resbin 7, pointer 6, spsc_ring 3,
                   alloc_spy 1, dtor_stats 1
 avec-blake3  66   lib 32, multi_chunk 34
-avec-ffi      5   lib.rs (5 production sites; +5 in #[cfg(test)])
+avec-ffi     10   lib.rs: 5 production + 5 in #[cfg(test)]
 avec-gpu      4   lib.rs (from_raw_parts, 2 callers, Drop)
-avec-parquet 37   dispatch_table 15, rle 14, scan 5, stream_compact 3
-bench        54   GlobalAlloc counters: main 5, ctq_report 9,
+avec-parquet 36   dispatch_table 15, rle 14, scan 4, stream_compact 3
+bench        49   GlobalAlloc counters: main 5, ctq_report 9,
                   arrow_accessors/byteslice/dict/packed_filter/
                   packing/page/parquet 5 each
-wasm-footpr.  8   lib.rs (BumpAlloc + 4 caller-contract slice helpers)
+wasm-footpr.  7   lib.rs (BumpAlloc + 4 caller-contract slice helpers)
 ```
+
+Workspace total: 470 code-position `unsafe` lines.
 
 ## forbid register
 
@@ -160,7 +162,7 @@ only.
 
 ### avec-arrow — PARTIAL
 
-127 sites across 11 files; crate carries
+131 sites across 11 files; crate carries
 `#![forbid(unsafe_op_in_unsafe_fn)]`.
 
 - blake3.rs (32) — raw-pointer kernel (SIMD). Invariant: target-gated
@@ -170,12 +172,12 @@ only.
   `pub mod blake3` (lib.rs:28) is an unwitnessed duplicate of avec-blake3's
   court-witnessed SIMD compress. O(N^2) drift risk between two copies of
   the same kernel.
-- c_abi.rs (19) — FFI. Invariant: release callbacks run at most once —
+- c_abi.rs (18) — FFI. Invariant: release callbacks run at most once —
   release slot swapped to null before the body; Box::from_raw of the
   private owner.
   Witness: inline tests c_abi.rs:209+; exercised via avec-ffi
   alloc_courts.rs:135 release_callback_is_zero_alloc.
-- c_abi_nested.rs (34) — FFI. Invariant: child schema/array release
+- c_abi_nested.rs (33) — FFI. Invariant: child schema/array release
   recursion reaches every child exactly once.
   Witness: inline courts c_abi_nested.rs:396/446/468 with counting release
   callbacks.
@@ -225,7 +227,7 @@ crate-external court; (c) chase_lev has no concurrent contention court.
 
 ### avec-parquet — PARTIAL
 
-37 sites; `#![forbid(unsafe_op_in_unsafe_fn)]`.
+36 sites; `#![forbid(unsafe_op_in_unsafe_fn)]`.
 
 - dispatch_table.rs (15) — raw-pointer kernel (fn-pointer jump table).
   Invariant: each kernel guards null/zero-length before slice
@@ -239,7 +241,7 @@ crate-external court; (c) chase_lev has no concurrent contention court.
   covers u32 elements.
   Witness: inline tests rle.rs:276+; tests/rle_court.rs;
   tests/page_zero_alloc.rs.
-- scan.rs (5) — FFI (mmap/munmap). Invariant: the only unsafe is the two
+- scan.rs (4) — FFI (mmap/munmap). Invariant: the only unsafe is the two
   syscalls plus the slice from a successful map; every derived access goes
   through bounds-checked `get`, so a corrupt footer yields a typed error,
   never UB; MAP_FAILED sentinel maps to a typed error (module doc
@@ -255,4 +257,131 @@ Verdict driver for PARTIAL: the rle.rs u32 rebind and the dispatch-table
 guards are inline-witnessed but have no external mutation court; scan.rs
 mmap is the best-witnessed FFI surface in the crate.
 
-<!-- PART2 -->
+### avec-blake3 — AIR-TIGHT
+
+66 sites, all raw-pointer/SIMD kernels: NEON + AVX2 intrinsic wrappers,
+vst1q stores, chunk-compress callers under `cfg(target_arch)` /
+`cfg(target_feature)` gates with fixed-size array parameters. Invariant at
+every site: the cfg gate proves instruction availability; slice lengths
+are 4x1024-byte chunk quanta with fixed 16-word state.
+Witness: tests/official_vectors.rs (RFC vectors through the SIMD paths),
+multi_chunk_vectors.rs, small_batch_vectors.rs, thread_differential.rs
+(new, wave-14), zero_alloc.rs. Receipt: gate-blake3-tests-v3
+(`cargo test -p avec-blake3`, exit 0, 2026-10-31).
+
+### audit — PARTIAL
+
+32 sites: 10 C-ABI raw-pointer exports in lib.rs (audit_mask_words,
+audit_mask_words_neon, audit_count_valid, audit_get_bit, audit_set_bit,
+audit_unpack_1|2|4|8bit, audit_is_inline) plus the GlobalAlloc counter in
+alloc_counter.rs.
+
+- Invariant: every export carries a `# Safety` line bounding `n` (or
+  `i/8+1`) against the readable/writable extent at each pointer; bodies
+  are pure pass-through to bounds-checked avec-arrow kernels.
+- Witness: alloc_counter.rs inline tests (:156+); the crate is consumed
+  and executed by integration/tests/error_paths.rs:20
+  (`avec_audit::alloc_counter::with_alloc_tracking`) and
+  bench/const_time_bench.rs.
+- Finding: lib.rs has no inline test module and no tests/ directory — the
+  C-ABI exports' n-bounding invariant has no direct court; the bench
+  exercises the happy path only.
+
+### bench — AIR-TIGHT (scope note)
+
+All 49 sites are one shape: `unsafe impl GlobalAlloc for CountingAlloc`
+forwarding to `std::alloc::System` with atomic counters. Invariant:
+forwarding is faithful and counter reads are atomics. Witness: the benches
+actually running in receipts (gate-ctq-report-v2, gate-divan-ctq,
+gate-cpk-study-v4). Scope note: bench code is not production surface; no
+separate court required.
+
+### cli, integration — AIR-TIGHT (vacuous)
+
+Zero unsafe sites (grep -c 0 in every file). Surrounding courts:
+cli/tests/mutation_kills.rs; integration/tests/{admission_e2e, cross_crate,
+error_paths, membranes}.rs with gate-e2e-integration-v3 exit 0.
+
+### wasm-footprint — PARTIAL
+
+7 sites: BumpAlloc GlobalAlloc (dealloc is a no-op "never free" bump
+discipline); 4 caller-contract slice helpers (`u64_slice`, `u64_slice_mut`,
+`u8_slice`, `u32_slice_mut`, lib.rs:172-208: len==0 short-circuits before
+any deref, else ptr bounds len); `rust_eh_personality` symbol stub.
+
+Witness: tests/no_std_core.rs (surfaces nameable + compiles no_std) and
+scripts/footprint.sh node-execution court (artifact bytes = manifest
+version). Finding: the caller-contract slice helpers are
+compile/link-witnessed only; no wasm node court feeds a null or overlong
+pointer to wasm_mask_words / wasm_unpack_1bit — the C-ABI callers are
+external by definition.
+
+## Summary
+
+| Crate | Sites | Class | Verdict |
+|---|---|---|---|
+| avec-git | 0 | — | AIR-TIGHT (forbid held) |
+| avec-ffi | 5+5t | FFI | AIR-TIGHT |
+| avec-blake3 | 66 | raw-ptr/SIMD | AIR-TIGHT |
+| bench | 49 | alloc plumbing | AIR-TIGHT |
+| cli | 0 | — | AIR-TIGHT (vacuous) |
+| integration | 0 | — | AIR-TIGHT (vacuous) |
+| avec-beam | 135 | FFI | PARTIAL |
+| avec-arrow | 131 | FFI + raw-ptr | PARTIAL |
+| avec-parquet | 36 | FFI + raw-ptr | PARTIAL |
+| avec-gpu | 4 | FFI (Metal) | PARTIAL |
+| audit | 32 | FFI/raw-ptr | PARTIAL |
+| wasm-footprint | 7 | FFI/allocator | PARTIAL |
+
+PARTIAL drivers: avec-beam (shm SPSC cross-process protocol
+same-process-only; spsc_ring Sync inline-only), avec-arrow (blake3.rs dead
+duplicate with zero witnesses; transpose/predicates inline-only; chase_lev
+no contention court), avec-parquet (rle u32-rebind + dispatch guards
+inline-only), avec-gpu (zero runtime witnesses), audit (C-ABI exports have
+no direct court), wasm-footprint (caller-contract helpers
+compile-witnessed only).
+
+## Findings register (ranked)
+
+1. **avec-arrow/src/blake3.rs is an unwitnessed dead duplicate** — 32 unsafe
+   sites, zero imports of `avec_arrow::blake3::` anywhere in the workspace;
+   avec-blake3 carries the court-witnessed copy of the same SIMD compress.
+   Drift between the two has no falsifier today. Close: delete the module
+   or bind it to official vectors.
+2. **avec-gpu Metal buffer lifetime never executed** — no tests dir, no
+   consumer; the from_raw_parts/Drop release-once invariants are prose
+   only. Close: Metal round-trip court or feature-gate.
+3. **audit C-ABI exports have no direct court** — `# Safety` n-bounds
+   documented, never asserted by a test. Close: port const_time_bench
+   coverage into a tests/ court with negative-n cases.
+4. **transpose/predicates kernels inline-witnessed only** — write-before-
+   read and sink-slot invariants would survive a cross-crate refactor
+   break. Close: name both modules in an integration court.
+5. **shm.rs SPSC protocol has no two-process court** — same-process inline
+   tests cannot witness the cross-process memory-ordering claim the
+   Send/Sync impls make. Close: fork-pair court driving producer/consumer.
+6. **wasm-footprint slice helpers compile-witnessed only** — no
+   hostile-pointer node court. Close: extend scripts/footprint.sh with a
+   null/overlong-pointer rejection case.
+7. **chase_lev.rs has no concurrent-steal stress court** — turnstile
+   contention resolution untested under racing consumers.
+
+## Receipt
+
+- Subject: unsafe airtightness across crates/*/src, /Users/sac/avec, one
+  canonical checkout, sources read-only (new file only: this document).
+- Method receipt: `grep -rn unsafe crates/*/src` per-file counts re-read at
+  write time; every counted site read in context; forbids re-confirmed on
+  disk before writing this document.
+- Court receipts cited: gate-git-tests-v3, gate-beam-bridge-v2,
+  gate-blake3-tests-v3, gate-parquet-tests, gate-workspace-check-v3,
+  gate-e2e-integration-v3, gate-ctq-report-v2 (all exit 0, 2026-10-31,
+  docs/jira/v26.10.31/receipts/).
+- Standing: AUDIT (read-only); verdicts are claims about invariants and
+  witnesses, each falsifiable by running the named court.
+
+## See Also
+
+- docs/jira/v26.10.31/78-panic-freedom-audit.md (companion hot-path audit)
+- docs/jira/v26.10.31/83-falsifier-register.md
+- docs/jira/v26.10.31/31-verification-ladder.md
