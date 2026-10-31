@@ -131,4 +131,37 @@ fn main() {
         "  in-register GF(2^128) folding rate | line rate: {:>7.2} GiB/s | 0 extra memory passes",
         fp_gib
     );
+    println!();
+
+    // 5. Sovereign #![no_std] BLAKE3 Merkle Tree & SIMD 4-Way Parent Reduction
+    println!("=== 5. Sovereign #![no_std] BLAKE3 (avec-blake3) ===");
+    let payload: Vec<u8> = (0..(64 * 1024)).map(|i| (i % 251) as u8).collect();
+    let secs_b3 = time_min_fixed(200, || {
+        let digest = avec_blake3::hash_wide_simd(&payload);
+        digest[0] as u64
+    });
+    let b3_gib = payload.len() as f64 / secs_b3 / GIB;
+    println!(
+        "  64 KiB (64-chunk Merkle tree)      | throughput: {:>7.2} GiB/s | 0 allocs",
+        b3_gib
+    );
+
+    let mut base_cvs = [[0u32; 8]; 64];
+    for (idx, cv) in base_cvs.iter_mut().enumerate() {
+        *cv = avec_blake3::IV;
+        cv[0] ^= idx as u32;
+    }
+    let secs_parent = time_min_fixed(50_000, || {
+        let mut cvs = base_cvs;
+        let mut count = 64usize;
+        avec_blake3::reduce_level_simd(&mut cvs, &mut count);
+        cvs[0][0] as u64
+    });
+    let parents_per_call = 32.0; // 64 child CVs -> 32 parent compressions (2048 bytes)
+    let parent_gib = (32.0 * 64.0) / secs_parent / GIB;
+    let mpairs = (parents_per_call / secs_parent) / 1e6;
+    println!(
+        "  SIMD 4-way NEON parent reduction   | throughput: {:>7.2} GiB/s | {:>7.1} Mparents/s | 0 allocs",
+        parent_gib, mpairs
+    );
 }

@@ -14,6 +14,7 @@
 //! METRIC LABELS (both forms report both, labeled):
 //! - `packed GiB/s`: packed input bytes / second — the wire-rate metric.
 //! - `Mrows/s`: logical rows filtered / second (= 8/w packed rows per byte).
+//!
 //! The `EFFECTIVE` summary line is the packed-domain form's logical-rows/s:
 //! end-to-end rows admitted per second with NO materialization.
 //!

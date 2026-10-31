@@ -15,6 +15,7 @@
 //! - `write_hdr`, `decode_hdr`: the header's own wire bytes (a header stage
 //!   processes only its few dozen bytes; per-wire-byte rate, batched 1024x
 //!   so timer overhead does not dominate).
+//!
 //! The `page lens` line carries the measured header/body wire lengths so
 //! stage times are derivable from the printed rates.
 

@@ -8,7 +8,8 @@ publish = false
 [dependencies]
 avec-arrow = { path = "../avec-arrow" }
 
-# Lane boundary note: this crate is its own workspace root so that lane
-# INTEGRATION never edits the parent members list (it owns crates/integration
-# only). To fold into the parent workspace: add "crates/integration" to the
-# root members list and delete this table.
+[dev-dependencies]
+avec-arrow = { path = "../avec-arrow" }
+avec-blake3 = { path = "../avec-blake3" }
+avec-parquet = { path = "../avec-parquet" }
+avec-git = { path = "../avec-git" }

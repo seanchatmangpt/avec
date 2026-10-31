@@ -9,4 +9,12 @@ publish = false
 
 [dependencies]
 avec-arrow = { path = "../avec-arrow" }
-avec-parquet = { path = "../avec-parquet" }
+avec-blake3 = { path = "../avec-blake3" }
+avec-parquet = { path = "../avec-parquet", features = ["std"] }
+
+[dev-dependencies]
+divan = "0.1.21"
+
+[[bench]]
+name = "v26_10_31"
+harness = false

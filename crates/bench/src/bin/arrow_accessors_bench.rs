@@ -55,8 +55,8 @@ const DECODE_ITERS: usize = 8;
 const VARLEN_ROW_W: usize = 64;
 const VARLEN_ROWS: usize = PAYLOAD / VARLEN_ROW_W;
 /// (b) per-shape row counts: rows ~= 64 MiB touched / (16 + p * 64) B.
-const INLINE_HEAVY_ROWS: usize = PAYLOAD * 10 / (10 * 16 + 1 * 64);
-const FOREIGN_HEAVY_ROWS: usize = PAYLOAD * 10 / (1 * 16 + 9 * 64);
+const INLINE_HEAVY_ROWS: usize = PAYLOAD * 10 / (10 * 16 + 64);
+const FOREIGN_HEAVY_ROWS: usize = PAYLOAD * 10 / (16 + 9 * 64);
 /// (b) widths: 12 B = max inline; 64 B foreign payload.
 const INLINE_W: usize = 12;
 const FOREIGN_W: usize = 64;
@@ -130,7 +130,7 @@ fn fixed_row<const W: usize>(i: usize) -> [u8; W] {
 
 /// Foreign-row count for the i%10 pattern (`on_zero`: foreign iff i%10==0).
 fn foreign_count(rows: usize, on_zero: bool) -> usize {
-    let zeros = (rows + 9) / 10; // i % 10 == 0 count
+    let zeros = rows.div_ceil(10); // i % 10 == 0 count
     if on_zero { zeros } else { rows - zeros }
 }
 

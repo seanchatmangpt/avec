@@ -13,11 +13,9 @@ publish = false
 # rle_encode / rle_encode_fast live in avec-parquet, not avec-arrow.
 avec-arrow = { path = "../avec-arrow" }
 avec-parquet = { path = "../avec-parquet" }
+avec-git = { path = "../avec-git" }
+avec-blake3 = { path = "../avec-blake3" }
 
-[profile.release]
-lto = "thin"
-codegen-units = 1
-panic = "abort"
-
-# Root-workspace member (folded by the coordinator at integration).
+# Profiles live at the workspace root (Cargo.toml [profile.release] is
+# identical); non-root [profile] sections are ignored and warn.
 

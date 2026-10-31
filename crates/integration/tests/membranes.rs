@@ -101,7 +101,7 @@ fn c_abi_roundtrip_i64_u64_f32_f64_bitwise_and_double_release() {
 /// `ForeignArray::take` -> bitwise validity/value buffer walk against
 /// input-derived expectations -> typed re-read -> release + double-release +
 /// shell drop + schema release.
-fn roundtrip_bitwise<T: Scalar>(rows: &[Option<T>], fmt: &CStr)
+fn roundtrip_bitwise<T>(rows: &[Option<T>], fmt: &CStr)
 where
     T: Scalar + PartialEq + core::fmt::Debug,
 {

@@ -159,7 +159,7 @@ fn cmd_align_test() {
     let mut aligned = 0usize;
     for len in sizes {
         let buf = Buf::new(len);
-        if buf.as_ptr() as usize % avec_arrow::buffer::ALIGNMENT == 0 {
+        if (buf.as_ptr() as usize).is_multiple_of(avec_arrow::buffer::ALIGNMENT) {
             aligned += 1;
         } else {
             eprintln!("align-test FAIL: len {len} misaligned");

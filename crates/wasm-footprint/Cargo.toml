@@ -15,6 +15,9 @@ crate-type = ["cdylib"]
 avec-arrow = { path = "../avec-arrow" }
 avec-parquet = { path = "../avec-parquet" }
 
+[dev-dependencies]
+avec-blake3 = { path = "../avec-blake3" }
+
 [profile.release]
 lto = "thin"
 codegen-units = 1

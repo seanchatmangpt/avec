@@ -129,9 +129,8 @@ fn main() {
 
     for card in [2usize, 16, 256] {
         let bits = required_bits(card).expect("card <= 256 is representable");
-        assert_eq!(
+        assert!(
             1usize << bits >= card,
-            true,
             "card={card}: width {bits} must carry the dict domain"
         );
 
