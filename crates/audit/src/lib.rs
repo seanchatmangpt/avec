@@ -3,6 +3,8 @@
 //! Each export wraps one kernel; the linker cannot elide what is exported,
 //! so the branch audit inspects the REAL compiled kernel machine code.
 
+pub mod alloc_counter;
+
 use avec_arrow::bitmap;
 use avec_arrow::silicon;
 use avec_arrow::views::is_inline;
@@ -11,7 +13,12 @@ use avec_parquet::unpack;
 /// # Safety
 /// n must bound the readable words at each pointer.
 #[no_mangle]
-pub unsafe extern "C" fn audit_mask_words(valid: *const u64, pred: *const u64, out: *mut u64, n: usize) {
+pub unsafe extern "C" fn audit_mask_words(
+    valid: *const u64,
+    pred: *const u64,
+    out: *mut u64,
+    n: usize,
+) {
     let (v, p, o) = unsafe {
         (
             core::slice::from_raw_parts(valid, n),

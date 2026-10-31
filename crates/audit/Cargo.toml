@@ -7,7 +7,11 @@ license.workspace = true
 publish = false
 
 [lib]
-crate-type = ["cdylib"]
+# rlib added by lane 18 (compile-freeze minimal unblock, disclosed in both
+# receipts): tests/alloc_courts.rs in avec-ffi links avec-audit as a dev-dep
+# to drive alloc_counter::with_alloc_tracking; a cdylib cannot be linked
+# into a test binary. cdylib build unchanged.
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 avec-arrow = { path = "../avec-arrow" }

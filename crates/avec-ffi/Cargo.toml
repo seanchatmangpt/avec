@@ -11,3 +11,12 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 avec-arrow = { path = "../avec-arrow" }
+
+[dev-dependencies]
+# Same crate as the normal dependency; needed only by tests/ to reach the
+# c_abi release callbacks and ForeignArray for lifecycle assertions.
+avec-arrow = { path = "../avec-arrow" }
+# Hot-path allocation courts (tests/alloc_courts.rs): linking avec_audit into
+# the test binary installs its CountingAlloc #[global_allocator] and exposes
+# with_alloc_tracking for the zero-alloc assertions.
+avec-audit = { path = "../audit" }

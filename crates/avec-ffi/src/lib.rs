@@ -157,8 +157,8 @@ unsafe fn digest_of_raw(array: *const ArrowArray) -> u64 {
     let validity_ptr = *buffers.add(0);
     if !validity_ptr.is_null() {
         let bytes_len = n.div_ceil(8); // bitmap_bytes(n_bits), canon: bitmap.rs
-        // SAFETY: live export; the validity buffer carries exactly
-        // ceil(length/8) bytes (Buf over Bitmap::from_bools).
+                                       // SAFETY: live export; the validity buffer carries exactly
+                                       // ceil(length/8) bytes (Buf over Bitmap::from_bools).
         let bytes = unsafe { core::slice::from_raw_parts(validity_ptr as *const u8, bytes_len) };
         let words = n.div_ceil(64); // bitmap_words(n_bits), canon: bitmap.rs
         let mut w = 0;
@@ -226,8 +226,8 @@ mod digest_ffi {
             &[None; 64],
             &[Some(0); 64],
             &(0..130)
-            .map(|i| if i % 3 == 2 { None } else { Some(i) })
-            .collect::<Vec<_>>(),
+                .map(|i| if i % 3 == 2 { None } else { Some(i) })
+                .collect::<Vec<_>>(),
         ];
         for rows in cases {
             let canon = {
@@ -290,7 +290,10 @@ mod digest_ffi {
                 .map(|i| if i == 63 { None } else { Some(0) })
                 .collect::<Vec<_>>(),
         );
-        let (dv, dn) = (super::avec_digest_of(all_valid), super::avec_digest_of(with_null));
+        let (dv, dn) = (
+            super::avec_digest_of(all_valid),
+            super::avec_digest_of(with_null),
+        );
         assert_ne!(dv, dn, "validity state must be load-bearing in the digest");
     }
 }
