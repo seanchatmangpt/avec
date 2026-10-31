@@ -1,0 +1,15 @@
+[package]
+name = "avec-blake3"
+version.workspace = true
+edition.workspace = true
+description = "Sovereign, zero-dependency #![no_std] BLAKE3 cryptographic tree hash with 4-way NEON & 8-way AVX2 parent Merkle reduction."
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = true
+
+[features]
+default = []
+std = []
+
+[dependencies]
