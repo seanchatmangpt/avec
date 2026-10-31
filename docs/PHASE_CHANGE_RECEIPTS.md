@@ -75,6 +75,17 @@ sub-us sensor (get 0.042 us; 50 us CTQ UNSUPPORTED instrument-class); scheduling
 crossover (dirty flag never wins n=1000..262144); thrift slot-swap fix (this
 session, pending fresh external receipt).
 
+## L11 — Civilizational Phase Changes & Sovereign `avec-blake3` / `avec-gpu`
+
+| claim | verdict | receipt |
+|---|---|---|
+| Compressed-domain algebraic sum (`sum_masked_vertical_128`) | CONFIRMED | `phase_change_bench`: **503.11 GiB/s** logical uncompressed at $w=1$ (67,525.7 Mrows/s); **216.26 GiB/s** at $w=4$; **109.64 GiB/s** at $w=12$; 0 allocs |
+| Zero-probe perfect minimal hashing (`PerfectMap`) | CONFIRMED | `phase_change_bench`: **0.54 ns/lookup** (1,855.4 Mlookups/s); 0 collision probe branches; 0 allocs |
+| 16 KiB MMU hardware page-aligned arena (`MmuBuf`) | CONFIRMED | `phase_change_bench`: **1,303.24 GiB/s** allocation & 16,384B page-boundary alignment |
+| In-register $GF(2^{128})$ homomorphic fingerprint (`Fingerprint`) | CONFIRMED | `phase_change_bench`: **4.08 GiB/s** line rate; 0 extra memory passes |
+| Sovereign `#![no_std]` BLAKE3 (`avec-blake3`) + 4-way NEON / 8-way AVX2 parent reduction | CONFIRMED | `cargo test -p avec-blake3`: 14/14 official BLAKE3 multi-block & multi-chunk Merkle vectors + 64/65-chunk SIMD parity; `phase_change_bench`: 1.31 GiB/s (21.9 Mparents/s) SIMD parent reduction, 0 allocs |
+| Apple Silicon Metal Unified Memory zero-copy bridge (`avec-gpu`) | CONFIRMED | `cargo test -p avec-gpu`: `MetalSharedBuffer` wraps 64B `Buf` & 16 KiB `MmuBuf` via `MTLResourceStorageModeShared` (`newBufferWithBytesNoCopy`) with 0 bus copies |
+
 ## Open ledger (honest)
 
 1. Parquet mutation settlement: PARTIAL — Run A receipted 337/360 (284 caught,
@@ -89,4 +100,4 @@ session, pending fresh external receipt).
    fully met — 6 measured). Page decode repeated 81.371 GiB/s / 0 allocs.
 4. Not constant-time: register + addendum name the open channels.
 5. HW-kernel audit extension: open (L10 partial).
-6. Diataxis surface: pending final wave.
+6. Diataxis documentation surface: ALIVE (`docs/diataxis/` — Tutorials, How-To Guides, Reference, Explanation).

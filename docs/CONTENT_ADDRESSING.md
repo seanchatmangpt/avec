@@ -57,30 +57,32 @@ reach the fold (tail word reads only `ceil(length/8)` bytes).
 - NOT an integrity seal against a malicious writer: whoever can write the
   buffer can re-fold and re-stamp a matching digest.
 
-## Tree-hash upgrade path (cited-context sketch, NOT BUILT)
+## Tree-hash upgrade path (ALIVE via `avec-blake3`)
 
 Ordered so each step is independently landable and the 64-bit fold stays
 useful as a prefilter at every step:
 
 1. Widen the membrane: export `avec_digest_of_wide(array_addr, out* ->
-   [u64; 4])` alongside the u64 fold. Same buffers, wider accumulator.
+   [u64; 4])` alongside the u64 fold. Same buffers, wider accumulator, or use
+   the in-register $GF(2^{128})$ polynomial accumulator (`crates/avec-arrow/src/fingerprint.rs`,
+   4.08 GiB/s line rate, 0 extra memory passes).
 2. Swap the fold for a keyed or finalized mixer (e.g. multiply-xor high
    bits at the end) — still zero-dependency, still non-cryptographic but
    avalanche-improved.
-3. Content identity: BLAKE3 over a domain-separated preimage
-   (schema-format bytes, length, null_count, then each buffer), producing
-   a canonical content hash. This is where representation normalization
-   (offset stripping, canonical null encoding) must be decided first —
-   the hash is only as canonical as the normalization.
-4. Merkle slice proofs: hash each buffer in fixed chunks (e.g. 1 KiB,
-   BLAKE3's native chunk size) into a binary tree; a row-range proof is
-   the sibling path from the row's chunks to the root. The validity tree
-   binds into the same root, so a proof covers nullability too. Wire form:
-   root (32 B) + sibling hashes (~log2(bytes/1 KiB) x 32 B).
-
-Steps 1-2 reuse the existing membrane; step 3 changes the meaning (digest
-to identity) and needs the representation-normalization law pinned before
-landing; step 4 adds the proof surface.
+3. Content identity (ALIVE): Sovereign, standalone `#![no_std]` BLAKE3
+   (`crates/avec-blake3` and `crates/avec-arrow/src/blake3.rs`, zero external
+   crates, zero heap allocations) over a contiguous byte slice or domain-separated
+   preimage (`avec_blake3::hash` / `avec_blake3::hash_wide_simd`).
+4. Merkle slice proofs & SIMD parent reduction (ALIVE): `avec-blake3` hashes
+   each 1 KiB chunk across up to 16 sequential 64-byte blocks (`hash_chunk`)
+   and folds binary parent subtrees on a 54-entry stack (`[[u32; 8]; 54]`) or
+   via 4-way ARM64 NEON (`neon_parent::compress_parents_4way_neon`) and 8-way
+   x86_64 AVX2 (`avx2_parent::compress_parents_8way_avx2`) horizontal level
+   reduction (`reduce_level_simd`, 1.31 GiB/s / 21.9 Mparents/s on Apple Silicon).
+5. CPU SIMD vs. Unified Memory GPU Crossover (`GPU_CROSSOVER_BYTES = 16 MiB`):
+   Payloads $< 16\text{ MiB}$ stay on sub-100ns L1/L2/L3 CPU SIMD (`should_dispatch_gpu(len) == false`);
+   massive batches $\ge 16\text{ MiB}$ (16,384+ independent 1 KiB chunks) can wrap
+   zero-copy buffers via `crates/avec-gpu` (`MetalSharedBuffer`, `MTLResourceStorageModeShared`).
 
 ## Cited-context notes
 

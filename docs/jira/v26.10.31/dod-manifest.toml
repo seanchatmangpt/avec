@@ -1,0 +1,217 @@
+# dod-manifest.toml — machine-checkable Definition of Done, milestone v26.10.31
+# Specs: docs/jira/v26.10.31/31-verification-ladder.md (R8 machine report),
+#        36-release-checklist.md, 65-coordinator-handoff.md (operator decisions)
+# Checker: scripts/dod.sh (bash-native awk parser, audit-gate style)
+#
+# PARSER DISCIPLINE (line-oriented, like the branchless gate manifest reader;
+# NOT a full TOML parser):
+#   - single-line double-quoted values, one field per line
+#   - no double quotes inside values (parser strips surrounding quotes)
+#   - no tabs inside values; backslashes byte-exact (no escape decoding)
+#
+# expect semantics (fail-closed unless stated):
+#   pass          exit 0 = PASS (green); ANY other exit incl. command-not-found
+#                 = FAIL (red). No silent skips.
+#   advisory      exit 0 = PASS; exit 2 = ADV-SKIP (yellow, non-failing; the
+#                 perf_guard SKIP-NOISY contract); any other exit = FAIL red.
+#   pending-holds exit 0 = PENDING (yellow, non-failing; the recorded operator
+#                 decision has not landed); any other exit = STALE (red:
+#                 reality moved, the manifest must be updated to retire the
+#                 entry). A lane never flips a pending entry.
+#
+# Pending law: PENDING entries RECORD the operator decisions of
+# 65-coordinator-handoff.md ("The Three Operator Decisions"). They are
+# recorded, not adjudicated. When a decision lands, its check goes red STALE,
+# which forces a manifest update: the entry retires into a court/receipt
+# entry backed by its own receipt.
+
+[meta]
+milestone = "v26.10.31"
+spec_ladder = "docs/jira/v26.10.31/31-verification-ladder.md"
+spec_handoff = "docs/jira/v26.10.31/65-coordinator-handoff.md"
+gate = "scripts/dod.sh"
+updated = "wave-10 lane 1: manifest minted; 3 operator decisions recorded as PENDING, none flipped"
+
+# ---------------------------------------------------------------------------
+# Verify ladder (coarse): one entry for the whole 10-gate battery
+# ---------------------------------------------------------------------------
+[[entry]]
+id = "L1-verify-ladder"
+class = "ladder"
+expect = "pass"
+description = "10-gate verify ladder: check-workspace, 5 package tests, beam, branchless, cli-verify, audit"
+check = "scripts/verify_v26.10.31.sh"
+evidence = "exit 0 and verify-latest.md gate table with no FAIL row; skips/pre-existing disclosed there"
+
+# ---------------------------------------------------------------------------
+# Standalone courts
+# ---------------------------------------------------------------------------
+[[entry]]
+id = "C1-shacl-antivacuity"
+class = "court"
+expect = "pass"
+description = "SHACL engine validation of the canonical ontology + anti-vacuity mutant court"
+check = "scripts/validate_ontology.sh"
+evidence = "Conforms: True plus ANTI-VACUITY PASS on stdout; engine absence or mutant acceptance is red"
+
+[[entry]]
+id = "C2-branchless-selftest"
+class = "court"
+expect = "pass"
+description = "Branchless ABI gate positive control (must detect branches) + clean-fixture scope demo"
+check = "scripts/audit_branchless.sh --selftest"
+evidence = "positive control FIRED and scope demo 0 hits; SELFTEST PASS; exit 2 vacuous is red"
+
+[[entry]]
+id = "C3-cfg-homology-mutant"
+class = "court"
+expect = "pass"
+description = "CFG homology mutant court: clean fixture PASSes, branchy fixture FAILs the tight delta"
+check = "scripts/cfg_homology.sh --mutant"
+evidence = "MUTANT COURT FLIPPED line on stdout; exit 2 (court did not flip) is red vacuous"
+
+[[entry]]
+id = "C4-perf-guard-advisory"
+class = "court"
+expect = "advisory"
+description = "CTQ-05 advisory canary (30us early-warning ceiling; spec gate stays ctq_report at 35us)"
+check = "scripts/perf_guard.sh"
+evidence = "exit 0 canary quiet; exit 2 SKIP-NOISY is ADV-SKIP yellow (no timing verdict issued); exit 1 red"
+
+# ---------------------------------------------------------------------------
+# Receipt classes: gate receipt exists + Standing row present
+# ---------------------------------------------------------------------------
+[[entry]]
+id = "R1-gate-branchless-manifest-v3"
+class = "receipt"
+expect = "pass"
+description = "Branchless manifest gate receipt v3 exists with a Standing row"
+check = "F=docs/jira/v26.10.31/receipts/gate-branchless-manifest-v3.md; test -s $F && printf 'Standing=%s\n' $(awk -F'|' '/^\| Standing \|/{print $3; exit}' $F | tr -d ' ')"
+evidence = "file non-empty and '| Standing | <value> |' row present; the Standing value is printed"
+
+[[entry]]
+id = "R2-gate-cfg-homology-v2"
+class = "receipt"
+expect = "pass"
+description = "CFG homology gate receipt v2 exists with a Standing row"
+check = "F=docs/jira/v26.10.31/receipts/gate-cfg-homology-v2.md; test -s $F && printf 'Standing=%s\n' $(awk -F'|' '/^\| Standing \|/{print $3; exit}' $F | tr -d ' ')"
+evidence = "file non-empty and '| Standing | <value> |' row present; the Standing value is printed"
+
+[[entry]]
+id = "R3-gate-shacl-v3"
+class = "receipt"
+expect = "pass"
+description = "SHACL gate receipt v3 exists with a Standing row"
+check = "F=docs/jira/v26.10.31/receipts/gate-shacl-v3.md; test -s $F && printf 'Standing=%s\n' $(awk -F'|' '/^\| Standing \|/{print $3; exit}' $F | tr -d ' ')"
+evidence = "file non-empty and '| Standing | <value> |' row present; the Standing value is printed"
+
+[[entry]]
+id = "R4-gate-gage-rr"
+class = "receipt"
+expect = "pass"
+description = "Gage R&R gate receipt exists with a Standing row"
+check = "F=docs/jira/v26.10.31/receipts/gate-gage-rr.md; test -s $F && printf 'Standing=%s\n' $(awk -F'|' '/^\| Standing \|/{print $3; exit}' $F | tr -d ' ')"
+evidence = "file non-empty and '| Standing | <value> |' row present; the Standing value is printed"
+
+[[entry]]
+id = "R5-gate-e2e-ctq05"
+class = "receipt"
+expect = "pass"
+description = "E2E CTQ-05 gate receipt exists with a Standing row"
+check = "F=docs/jira/v26.10.31/receipts/gate-e2e-ctq05.md; test -s $F && printf 'Standing=%s\n' $(awk -F'|' '/^\| Standing \|/{print $3; exit}' $F | tr -d ' ')"
+evidence = "file non-empty and '| Standing | <value> |' row present; the Standing value is printed"
+
+# ---------------------------------------------------------------------------
+# Doc classes: milestone docs exist
+# ---------------------------------------------------------------------------
+[[entry]]
+id = "D-058-final-verdict-v2"
+class = "doc"
+expect = "pass"
+description = "58-final-verdict-v2.md exists non-empty"
+check = "F=docs/jira/v26.10.31/58-final-verdict-v2.md; test -s $F && printf 'lines=%s\n' $(wc -l < $F | tr -d ' ')"
+evidence = "file non-empty; line count printed"
+
+[[entry]]
+id = "D-061-final-verdict-v3"
+class = "doc"
+expect = "pass"
+description = "61-final-verdict-v3.md exists non-empty"
+check = "F=docs/jira/v26.10.31/61-final-verdict-v3.md; test -s $F && printf 'lines=%s\n' $(wc -l < $F | tr -d ' ')"
+evidence = "file non-empty; line count printed"
+
+[[entry]]
+id = "D-062-wave-9-receipt"
+class = "doc"
+expect = "pass"
+description = "62-wave-9-receipt.md exists non-empty"
+check = "F=docs/jira/v26.10.31/62-wave-9-receipt.md; test -s $F && printf 'lines=%s\n' $(wc -l < $F | tr -d ' ')"
+evidence = "file non-empty; line count printed"
+
+[[entry]]
+id = "D-063-test-census"
+class = "doc"
+expect = "pass"
+description = "63-test-census.md exists non-empty"
+check = "F=docs/jira/v26.10.31/63-test-census.md; test -s $F && printf 'lines=%s\n' $(wc -l < $F | tr -d ' ')"
+evidence = "file non-empty; line count printed"
+
+[[entry]]
+id = "D-064-receipts-inventory-final"
+class = "doc"
+expect = "pass"
+description = "64-receipts-inventory-final.md exists non-empty"
+check = "F=docs/jira/v26.10.31/64-receipts-inventory-final.md; test -s $F && printf 'lines=%s\n' $(wc -l < $F | tr -d ' ')"
+evidence = "file non-empty; line count printed"
+
+[[entry]]
+id = "D-065-coordinator-handoff"
+class = "doc"
+expect = "pass"
+description = "65-coordinator-handoff.md exists non-empty"
+check = "F=docs/jira/v26.10.31/65-coordinator-handoff.md; test -s $F && printf 'lines=%s\n' $(wc -l < $F | tr -d ' ')"
+evidence = "file non-empty; line count printed"
+
+[[entry]]
+id = "D-069-validation-receipt"
+class = "doc"
+expect = "pass"
+description = "69-validation-receipt.md exists non-empty"
+check = "F=docs/jira/v26.10.31/69-validation-receipt.md; test -s $F && printf 'lines=%s\n' $(wc -l < $F | tr -d ' ')"
+evidence = "file non-empty; line count printed"
+
+[[entry]]
+id = "D-000-index-openq-unique"
+class = "doc"
+expect = "pass"
+description = "00-index.md exists and has exactly one Open Questions heading (no duplicate)"
+check = "F=docs/jira/v26.10.31/00-index.md; test -s $F && [ $(grep -c '^## Open Questions' $F) -eq 1 ]"
+evidence = "grep -c returns exactly 1 for '^## Open Questions'; 0 or 2+ is red"
+
+# ---------------------------------------------------------------------------
+# PENDING-OPERATOR: recorded decisions, never flipped by a lane
+# (65-coordinator-handoff.md, The Three Operator Decisions)
+# ---------------------------------------------------------------------------
+[[entry]]
+id = "P-CTQ06-lsl-ratification"
+class = "pending"
+expect = "pending-holds"
+description = "CTQ-06 BLAKE3 LSL ratification is the operator's call (ctq_report.rs LSL_RATIFIED)"
+check = "grep -q 'const LSL_RATIFIED: Option<f64> = None;' crates/bench/src/bin/ctq_report.rs"
+evidence = "LSL_RATIFIED still None = PENDING (recorded, not FAIL); if flipped to Some -> STALE red, update manifest"
+
+[[entry]]
+id = "P-CTQ04-protocol-declaration"
+class = "pending"
+expect = "pending-holds"
+description = "CTQ-04 protocol (p99/p50 <= 1.30) declaration in PRD/harness-plan is the operator's call"
+check = "cd docs/jira/v26.10.31 && ! grep -qiE 'ctq-04.*ratified' 20-prd.md 29-benchmark-harness-plan.md"
+evidence = "no CTQ-04 ratified marker yet = PENDING; if a ratified marker lands -> STALE red, update manifest"
+
+[[entry]]
+id = "P-INTEGRATION-commit"
+class = "pending"
+expect = "pending-holds"
+description = "Integration commit approval (atomic per-crate commits + one docs commit, no push)"
+check = "git status --porcelain | grep -q ."
+evidence = "dirty count > 0 = PENDING (yellow); clean tree = STALE red (commit landed, update manifest)"

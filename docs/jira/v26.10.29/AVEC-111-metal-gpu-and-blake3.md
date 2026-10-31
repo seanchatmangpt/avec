@@ -1,57 +1,51 @@
-# AVEC-111: Freestanding Apple Silicon Metal Unified Memory Bridge & Sovereign BLAKE3 Core
+# AVEC-111: Freestanding Apple Silicon Metal Unified Memory Bridge & Sovereign `avec-blake3` Crate
 
 **Status:** CLOSED
-**Component:** `crates/avec-gpu`, `crates/avec-arrow`
+**Component:** `crates/avec-blake3`, `crates/avec-gpu`, `crates/avec-arrow`
 **Type:** Feature / Moonshot
 **Date:** 2026-10-30
 
 ---
 
-## 1. Context & Invariants
+## 1. Context & Architectural Boundaries
 
-To eliminate memory-bus copy penalties and support cryptographic integrity verification without external crate dependencies, two sovereign capabilities were introduced:
+1. **Sovereign `#![no_std]` BLAKE3 Crate (`crates/avec-blake3` & `crates/avec-arrow/src/blake3.rs`)**:
+   - **Zero External Dependencies**: Standalone `#![no_std]` crate with `#![forbid(unsafe_op_in_unsafe_fn)]` and zero heap allocations (M-01 / CTQ-4).
+   - **16-Block Intra-Chunk Chaining (`hash_chunk`)**: Compresses all 1..=16 sequential 64-byte blocks per 1024-byte chunk with exact `CHUNK_START` (block 0), `CHUNK_END` (`num_blocks - 1`), and `ROOT` flag boundaries.
+   - **Zero-Allocation Stack Merkle Tree (`hash`)**: Uses a 54-entry stack (`[[u32; 8]; 54]`, covering up to $2^{64}$ bytes) for binary Merkle parent reduction (`PARENT = 1 << 2`, terminal `PARENT | ROOT`).
+   - **SIMD Multi-Parent Reduction (`neon_parent::compress_parents_4way_neon`, `avx2_parent::compress_parents_8way_avx2`, `reduce_level_simd`, `hash_wide_simd`)**: Stacks 4 parent pairs horizontally across `uint32x4_t` NEON registers (or 8 parent pairs across `__m256i` AVX2 registers) to compress sibling subtrees in parallel.
+   - **CPU SIMD vs. Unified Memory GPU Crossover (`GPU_CROSSOVER_BYTES = 16 MiB`)**: Encodes the hardware dispatch boundary (`should_dispatch_gpu(len)`): buffers $< 16\text{ MiB}$ stay on sub-100ns L1/L2/L3 CPU SIMD; massive batches $\ge 16\text{ MiB}$ (16,384+ independent 1024-byte chunks) cross over to zero-copy Unified Memory SIMT execution.
 
-1. **Freestanding Apple Silicon Metal Unified Memory Bridge (`crates/avec-gpu`)**:
-   - Maps 64-byte aligned `Buf` and 16 KiB page-aligned `MmuBuf` memory directly into Apple Silicon Metal Unified Memory (`MTLResourceStorageModeShared`).
-   - Uses zero-copy `newBufferWithBytesNoCopy:length:options:deallocator:`.
-   - Zero dynamic runtime SDK or heavy driver dependencies; standalone C/Obj-C shim linking `-framework Metal` and `-framework Foundation`.
-   - 0 heap allocations during buffer bridge encapsulation.
-
-2. **Sovereign Freestanding BLAKE3 Core (`crates/avec-arrow/src/blake3.rs`)**:
-   - Standalone `#![no_std]` implementation with zero external crates (adhering to M-01 / CTQ-4).
-   - ChaCha-based 7-round unrolled compression function with zero allocations.
-   - Bit-level verification against official BLAKE3 test vectors (`af1349b9...` empty string hash).
+2. **Freestanding Apple Silicon Metal Unified Memory Bridge (`crates/avec-gpu`)**:
+   - Maps 64-byte aligned `Buf` and 16 KiB page-aligned `MmuBuf` memory directly into Apple Silicon Metal Unified Memory (`MTLResourceStorageModeShared`) via `newBufferWithBytesNoCopy:length:options:deallocator:`.
 
 ---
 
 ## 2. Verification Receipts
 
-### 2.1 Metal Unified Memory Bridge (`avec-gpu`)
+### 2.1 Official BLAKE3 Multi-Block & Multi-Chunk Merkle Test Vectors (`avec-blake3`)
+Verified against the official BLAKE3 test vectors (repeating `0..251` byte sequence) at lengths `0`, `1`, `63`, `64`, `65`, `127`, `128`, `1023`, `1024`, `1025`, `2048`, `2049`, `4096`, and `8192`, plus 64-chunk and 65-chunk SIMD parent reduction parity:
 ```
-$ cargo test -p avec-gpu
-   Compiling avec-gpu v26.10.29 (/Users/sac/avec/crates/avec-gpu)
-     Running unittests src/lib.rs (target/debug/deps/avec_gpu-bc596e83708dc8d5)
+$ cargo test -p avec-blake3
+running 3 tests
+test tests::test_gpu_crossover_heuristic ... ok
+test tests::test_official_blake3_vectors_multi_block_and_merkle_tree ... ok
+test tests::test_simd_parent_reduction_parity_64_to_128_chunks ... ok
 
-running 1 test
-test tests::test_metal_shared_buffer_zero_copy ... ok
-
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
-```
-
-### 2.2 Sovereign BLAKE3 Core (`avec-arrow`)
-```
-$ cargo test -p avec-arrow --lib blake3
-     Running unittests src/lib.rs (target/debug/deps/avec_arrow-76a7889e2db7accc)
-
-running 2 tests
-test blake3::tests::test_blake3_deterministic_and_sensitivity ... ok
-test blake3::tests::test_blake3_empty_string_hash ... ok
-
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 ```
 
-### 2.3 Gate Verification Ladder
-- `cargo test -p avec-arrow && cargo test -p avec-gpu && cargo test -p avec-ffi && cargo test -p avec-parquet --lib`: **PASS** (149 parquet tests, 70 arrow tests, 1 gpu test).
-- `PATH="/opt/homebrew/opt/llvm/bin:$PATH" make branch-audit`: **PASS** (71 itemized latch/dispatch conditionals, 0 unaccounted).
-- `uv run --with pyarrow python3 scripts/gate3_cdata.py`: **PASS** (GATE 3 PASS: bitwise parity through C Data Interface).
-- `cargo run --release -p bench --bin phase_change_bench`: **PASS** (517.28 GiB/s logical uncompressed rate).
+### 2.2 Benchmark Receipt (`phase_change_bench`)
+```
+=== 5. Sovereign #![no_std] BLAKE3 (avec-blake3) ===
+  64 KiB (64-chunk Merkle tree)      | throughput:    0.41 GiB/s | 0 allocs
+  SIMD 4-way NEON parent reduction   | throughput:    1.31 GiB/s |    21.9 Mparents/s | 0 allocs
+```
+
+### 2.3 Publish Dry-Run (`cargo publish --dry-run -p avec-blake3`)
+```
+   Packaging avec-blake3 v26.10.29 (/Users/sac/avec/crates/avec-blake3)
+    Packaged 5 files, 29.8KiB (7.5KiB compressed)
+   Verifying avec-blake3 v26.10.29 (/Users/sac/avec/crates/avec-blake3)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.11s
+```

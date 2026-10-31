@@ -13,7 +13,7 @@ verification path exists in the repo), UNVERIFIED (default, never rounded up).
 | gate surface | `Makefile` (`make test gate0 gate1 gate2 gate3 gates lint publish-check test-beam`) |
 | project graph | `ontology/avec.ttl` (av:version, av:releaseDate, av:ctq1..av:ctq5) |
 | generated surfaces | 6 files: 2 under `include/`, 2 under `crates/avec-arrow/src/`, 1 under `crates/avec-parquet/src/`, 1 under `generated/` (section 4) |
-| sprint index | `docs/jira/v26.10.29/INDEX.md` (AVEC-101 through AVEC-109) |
+| sprint index | `docs/jira/v26.10.29/INDEX.md` (AVEC-101 through AVEC-111) |
 
 ## 1. Define — scope
 
@@ -28,8 +28,20 @@ In scope for v26.10.29:
 
 - `crates/avec-arrow`: in-memory columnar substrate, `no_std` + `alloc`, zero external
   dependencies. Includes multi-column `Batch` / `BatchBuilder` with 64-byte hardware
-  cache alignment verification, the `branchless` zero-stall primitive library (18+ primitives),
-  and `chase_lev` lock-free work-stealing deque.
+  cache alignment verification, 16 KiB MMU page-aligned arena (`mmu_arena.rs`), zero-probe
+  perfect minimal hashing (`perfect_hash.rs`), in-register $GF(2^{128})$ homomorphic
+  fingerprinting (`fingerprint.rs`), sovereign `#![no_std]` BLAKE3 (`blake3.rs`), the
+  `branchless` zero-stall primitive library (18+ primitives), and `chase_lev` lock-free
+  work-stealing deque.
+- `crates/avec-blake3`: standalone `#![no_std]` zero-dependency BLAKE3 cryptographic
+  tree-hash crate featuring 16-block intra-chunk compression (`hash_chunk`), 54-entry
+  zero-heap Merkle stack (`hash`), and 4-way NEON (`neon_parent`) / 8-way AVX2 (`avx2_parent`)
+  horizontal SIMD multi-parent Merkle reduction (`reduce_level_simd`, `hash_wide_simd`),
+  verified against 14 official BLAKE3 multi-block and multi-chunk test vectors.
+- `crates/avec-gpu`: freestanding Apple Silicon Metal Unified Memory zero-copy bridge
+  (`MetalSharedBuffer`) wrapping 64-byte (`Buf`) and 16 KiB (`MmuBuf`) buffers directly
+  into `MTLResourceStorageModeShared` via `newBufferWithBytesNoCopy:length:options:deallocator:`
+  with 0 memory-bus copies.
 - `crates/avec-parquet`: Parquet persistence & query kernels, `no_std`, zero external deps:
   SWAR bit-unpacking (1/2/4/8-bit lanes), SWAR RLE/bit-packed hybrid codec, minimal
   DataPageV2-style page framing (Thrift compact `PageHeader` + RLE body;
@@ -76,9 +88,11 @@ citations resolve here: `crates/avec-arrow/src/bitmap.rs` cites charter CTQ-2;
 | CTQ-5 | 100% C Data Interface parity (av:ctq5) | `make gate3` (`gate3_cdata.py`) | PASS (PyArrow 26.0.0 parity) |
 | A-1 | zero post-init allocations in measured scan | `make gate2`, `make bench-gate` | PASS (0 allocs across all scans) |
 | BEAM-1 | BEAM NIF normal-scheduler twin + resource binary | `make test-beam` | PASS (OTP 29, 100% asserts passed) |
-| CTQ-PC1 | Compressed-domain algebraic sum >= 100 GiB/s logical | `phase_change_bench` | PASS (106.98–516.89 GiB/s logical) |
-| CTQ-PC2 | Zero-probe perfect minimal hash <= 1.5 ns/lookup | `phase_change_bench` | PASS (0.53 ns/lookup, 0 probe branches) |
-| CTQ-PC3 | 16 KiB MMU hardware page alignment | `phase_change_bench` | PASS (1353.75 GiB/s, 16384B boundary) |
+| CTQ-PC1 | Compressed-domain algebraic sum >= 100 GiB/s logical | `phase_change_bench` | PASS (109.64–503.11 GiB/s logical) |
+| CTQ-PC2 | Zero-probe perfect minimal hash <= 1.5 ns/lookup | `phase_change_bench` | PASS (0.54 ns/lookup, 0 probe branches) |
+| CTQ-PC3 | 16 KiB MMU hardware page alignment | `phase_change_bench` | PASS (1303.24 GiB/s, 16384B boundary) |
+| CTQ-PC4 | Sovereign `#![no_std]` BLAKE3 + SIMD 4-way parent reduction | `cargo test -p avec-blake3`, `phase_change_bench` | PASS (14/14 official vectors, 1.31 GiB/s parent SIMD, 0 allocs) |
+| CTQ-PC5 | Metal Unified Memory zero-copy buffer bridge | `cargo test -p avec-gpu` | PASS (`MTLResourceStorageModeShared`, 0 bus copies) |
 
 Measured baseline, 2026-10-30, macOS arm64 (Apple Silicon), stable Rust, exit codes captured
 (lane REL-L11; all commands executed this session):
@@ -98,10 +112,11 @@ Measured baseline, 2026-10-30, macOS arm64 (Apple Silicon), stable Rust, exit co
   - `dict_bench`: 3.577–3.640 GiB/s decode; 0 allocs.
   - `packed_filter_bench`: 19,716.4 Mrows/s at $w=1$ (32.6x speedup over materialize-then-mask); 0 allocs.
 - **Civilizational Phase Changes (`phase_change_bench`, exit 0)**:
-  - `sum_masked_vertical_128`: **516.89 GiB/s** logical uncompressed rate at $w=1$ (69,376.2 Mrows/s); **216.64 GiB/s** at $w=4$ (29,076.8 Mrows/s); **106.98 GiB/s** at $w=12$; 0 allocations.
-  - `PerfectMap`: **0.53 ns/lookup** (1,871.1 Mlookups/s); 0 collision probe loops; 0 allocations.
-  - `MmuBuf`: 16 KiB MMU hardware page allocation & verification at **1,353.75 GiB/s**.
-  - `Fingerprint`: In-register $GF(2^{128})$ universal polynomial accumulator folding at **3.97 GiB/s** (0 extra memory passes).
+  - `sum_masked_vertical_128`: **503.11 GiB/s** logical uncompressed rate at $w=1$ (67,525.7 Mrows/s); **216.26 GiB/s** at $w=4$ (29,026.2 Mrows/s); **109.64 GiB/s** at $w=12$; 0 allocations.
+  - `PerfectMap`: **0.54 ns/lookup** (1,855.4 Mlookups/s); 0 collision probe loops; 0 allocations.
+  - `MmuBuf`: 16 KiB MMU hardware page allocation & verification at **1,303.24 GiB/s**.
+  - `Fingerprint`: In-register $GF(2^{128})$ universal polynomial accumulator folding at **4.08 GiB/s** (0 extra memory passes).
+  - `avec-blake3`: Sovereign `#![no_std]` BLAKE3 64-chunk Merkle tree at **0.41 GiB/s** (0 allocs); SIMD 4-way NEON parent reduction (`reduce_level_simd`) at **1.31 GiB/s** (**21.9 Mparents/s**, 0 allocs); 14/14 official BLAKE3 test vectors verified.
 - **CTQ-2 (`make branch-audit`, exit 0)**:
   - Inner-loop bodies branch-free in 3/9 loop kernels (`mask_words`, `count_valid`, `mask_words_neon`, `BODY 0/0` each).
   - Conditionals itemized: 71 total across 9 kernels (+12 branch-free wrapper shims); panic/fail paths: 8; unaccounted: 0.
