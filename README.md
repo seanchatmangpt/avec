@@ -93,6 +93,15 @@ Observed drift: the generated version constant still reads 26.10.29
 (`ontology/avec.ttl`, `crates/avec-arrow/src/generated_version.rs`) while the milestone
 is named v26.10.31.
 
+## License
+
+MIT for the source code; use/execution of the substrate is governed by the
+P28 Sovereign Invariant License (P28-SIL v2.1.0,
+`urn:avec:license:p28-sil:v2.1.0-sovereign`): $50M universal safe harbor,
+covenant not to sue upon commercial regularization, ASC 450 / SOX
+302/404 evidentiary enforcement. See [LICENSE.md](LICENSE.md) and
+[LICENSE-P28-SIL.md](LICENSE-P28-SIL.md).
+
 ## Documentation map
 
 - `docs/GETTING_STARTED.md` — walkthrough (pending, wave-10 docs lanes; not yet on disk)
