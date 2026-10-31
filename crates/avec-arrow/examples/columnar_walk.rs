@@ -125,7 +125,7 @@ fn varlen_walk() {
     for i in 0..v.len() {
         let row = v.row(i);
         let s = core::str::from_utf8(row).map_or("<invalid utf8>", |s| s);
-        let valid = v.validity().map_or(true, |bm| bm.get(i));
+        let valid = v.validity().is_none_or(|bm| bm.get(i));
         println!(
             "     row {} ({} bytes, valid={}) = {:?}",
             i,
@@ -149,7 +149,7 @@ fn view_walk() {
 
     println!("     len              = {}", v.len());
     for i in 0..v.len() {
-        let valid = v.validity().map_or(true, |bm| bm.get(i));
+        let valid = v.validity().is_none_or(|bm| bm.get(i));
         let class = if !valid {
             "null"
         } else if avec_arrow::views::is_inline(v.row(i).len() as u32) == 1 {

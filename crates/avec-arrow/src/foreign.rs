@@ -132,7 +132,7 @@ pub unsafe fn primitive_view<'a, T: Scalar>(
     }
     let ptr = slot as *const T;
     let align = core::mem::align_of::<T>();
-    if (ptr as usize) % align != 0 {
+    if !(ptr as usize).is_multiple_of(align) {
         return Err(ForeignError::Misaligned {
             required: align,
             got: ptr as usize,
@@ -180,11 +180,11 @@ pub unsafe fn is_valid(
 
 #[cfg(test)]
 mod tests {
-    use core::ffi::c_char;
     use super::*;
     use crate::c_abi::export;
     use crate::primitive::PrimitiveBuilder;
     use alloc::vec::Vec;
+    use core::ffi::c_char;
 
     /// Build a nullable i32 array, export it through the C Data Interface,
     /// and read it back through the typed foreign view: values and
@@ -204,14 +204,9 @@ mod tests {
         let found = unsafe { format_of(&schema) }.unwrap();
         assert_eq!(found, "i");
 
-        let view = unsafe {
-            primitive_view::<i32>(
-                &schema,
-                &array,
-                3 * core::mem::size_of::<i32>(),
-            )
-        }
-        .unwrap();
+        let view =
+            unsafe { primitive_view::<i32>(&schema, &array, 3 * core::mem::size_of::<i32>()) }
+                .unwrap();
         assert_eq!(view, &[7, 0, -9]);
 
         let validity: Vec<bool> = (0..3)
@@ -229,10 +224,9 @@ mod tests {
         let arr = PrimitiveBuilder::<i64>::new().finish();
         let format = b"l\0".as_ptr() as *const c_char;
         let (array, schema) = export(arr, format);
-        let error = unsafe {
-            primitive_view::<i32>(&schema, &array, 8 * core::mem::size_of::<i32>())
-        }
-        .unwrap_err();
+        let error =
+            unsafe { primitive_view::<i32>(&schema, &array, 8 * core::mem::size_of::<i32>()) }
+                .unwrap_err();
         assert_eq!(
             error,
             ForeignError::FormatMismatch {
@@ -249,8 +243,7 @@ mod tests {
         let arr = b.finish();
         let format = b"i\0".as_ptr() as *const c_char;
         let (array, schema) = export(arr, format);
-        let error =
-            unsafe { primitive_view::<i32>(&schema, &array, 0) }.unwrap_err();
+        let error = unsafe { primitive_view::<i32>(&schema, &array, 0) }.unwrap_err();
         assert_eq!(
             error,
             ForeignError::BufferTooShort {

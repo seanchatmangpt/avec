@@ -50,9 +50,8 @@ struct OwnedStructSchema {
 /// `release == NULL` and return without touching memory. The parent shell
 /// itself is freed by whoever boxed the returned struct.
 unsafe fn release_struct_array(array: *mut ArrowArray) {
-    let slot: &AtomicPtr<c_void> = unsafe {
-        &*(core::ptr::addr_of_mut!((*array).release) as *mut AtomicPtr<c_void>)
-    };
+    let slot: &AtomicPtr<c_void> =
+        unsafe { &*(core::ptr::addr_of_mut!((*array).release) as *mut AtomicPtr<c_void>) };
     let prev = slot.swap(core::ptr::null_mut(), Ordering::AcqRel);
     if prev.is_null() {
         // Already released: typed no-op, never a double free.
@@ -84,9 +83,8 @@ unsafe fn release_struct_array(array: *mut ArrowArray) {
 /// parent schema shell is NOT freed here — same convention as the array
 /// side: whoever boxes the returned struct frees it after release.
 unsafe fn release_struct_schema(schema: *mut ArrowSchema) {
-    let slot: &AtomicPtr<c_void> = unsafe {
-        &*(core::ptr::addr_of_mut!((*schema).release) as *mut AtomicPtr<c_void>)
-    };
+    let slot: &AtomicPtr<c_void> =
+        unsafe { &*(core::ptr::addr_of_mut!((*schema).release) as *mut AtomicPtr<c_void>) };
     let prev = slot.swap(core::ptr::null_mut(), Ordering::AcqRel);
     if prev.is_null() {
         // Already released: typed no-op, never a double free.
@@ -154,8 +152,12 @@ pub fn export_struct(
         children: schema_shells.into_boxed_slice(),
     }));
     // SAFETY: both arenas are live boxes; read their interior pointers.
-    let (children_ptr, buffers_ptr) =
-        unsafe { ((*owned_arr).children.as_mut_ptr(), (*owned_arr).buffers.as_mut_ptr()) };
+    let (children_ptr, buffers_ptr) = unsafe {
+        (
+            (*owned_arr).children.as_mut_ptr(),
+            (*owned_arr).buffers.as_mut_ptr(),
+        )
+    };
     // SAFETY: live box.
     let schema_children_ptr = unsafe { (*owned_schema).children.as_mut_ptr() };
     let array = ArrowArray {
@@ -256,7 +258,7 @@ mod tests {
             assert_eq!((*child0).n_children, 0);
             let v0 = *(*child0).buffers.add(0) as *const u8; // validity
             let d0 = *(*child0).buffers.add(1) as *const u8; // values
-            // LSB-first validity bits: rows 0,2,3 valid -> 0b0000_1101.
+                                                             // LSB-first validity bits: rows 0,2,3 valid -> 0b0000_1101.
             assert_eq!(core::slice::from_raw_parts(v0, 1), &[0x0D]);
             // Bitwise value bytes, little-endian, null slots carry ZERO.
             assert_eq!(
@@ -334,9 +336,8 @@ mod tests {
     static SCHEMA_NULL_SWAPS: AtomicUsize = AtomicUsize::new(0);
 
     unsafe fn counting_child_release(array: *mut ArrowArray) {
-        let slot: &AtomicPtr<c_void> = unsafe {
-            &*(core::ptr::addr_of_mut!((*array).release) as *mut AtomicPtr<c_void>)
-        };
+        let slot: &AtomicPtr<c_void> =
+            unsafe { &*(core::ptr::addr_of_mut!((*array).release) as *mut AtomicPtr<c_void>) };
         let prev = slot.swap(core::ptr::null_mut(), Ordering::AcqRel);
         if prev.is_null() {
             return;
@@ -351,9 +352,8 @@ mod tests {
     }
 
     unsafe fn counting_child_schema_release(schema: *mut ArrowSchema) {
-        let slot: &AtomicPtr<c_void> = unsafe {
-            &*(core::ptr::addr_of_mut!((*schema).release) as *mut AtomicPtr<c_void>)
-        };
+        let slot: &AtomicPtr<c_void> =
+            unsafe { &*(core::ptr::addr_of_mut!((*schema).release) as *mut AtomicPtr<c_void>) };
         let prev = slot.swap(core::ptr::null_mut(), Ordering::AcqRel);
         if prev.is_null() {
             return;

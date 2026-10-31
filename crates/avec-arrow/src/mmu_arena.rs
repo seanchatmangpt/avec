@@ -54,7 +54,11 @@ impl MmuBuf {
             return false;
         }
         unsafe {
-            core::ptr::copy_nonoverlapping(src.as_ptr(), self.ptr.as_ptr().add(self.len), src.len());
+            core::ptr::copy_nonoverlapping(
+                src.as_ptr(),
+                self.ptr.as_ptr().add(self.len),
+                src.len(),
+            );
         }
         self.len += src.len();
         true
@@ -70,6 +74,12 @@ impl MmuBuf {
     #[inline(always)]
     pub fn as_mut_ptr(&mut self) -> *mut u8 {
         self.ptr.as_ptr()
+    }
+
+    /// Length in active bytes.
+    #[inline(always)]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
     }
 
     /// Length in active bytes.

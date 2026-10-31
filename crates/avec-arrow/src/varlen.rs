@@ -39,8 +39,15 @@ impl Offset for u32 {
     }
 }
 
-trait U32Ext { fn to_le_bytes_w(self) -> [u8; 4]; }
-impl U32Ext for u32 { #[inline] fn to_le_bytes_w(self) -> [u8; 4] { u32::to_le_bytes(self) } }
+trait U32Ext {
+    fn to_le_bytes_w(self) -> [u8; 4];
+}
+impl U32Ext for u32 {
+    #[inline]
+    fn to_le_bytes_w(self) -> [u8; 4] {
+        u32::to_le_bytes(self)
+    }
+}
 
 impl Offset for u64 {
     #[inline]
@@ -208,7 +215,6 @@ impl<O: Offset> VarlenBuilder<O> {
         v
     }
 }
-
 
 #[cfg(test)]
 mod tests {

@@ -167,19 +167,14 @@ pub fn reverse_bits_swar(mut x: u64) -> u64 {
     x = ((x >> 4) & 0x0F0F0F0F0F0F0F0F) | ((x & 0x0F0F0F0F0F0F0F0F) << 4);
     x = ((x >> 8) & 0x00FF00FF00FF00FF) | ((x & 0x00FF00FF00FF00FF) << 8);
     x = ((x >> 16) & 0x0000FFFF0000FFFF) | ((x & 0x0000FFFF0000FFFF) << 16);
-    (x >> 32) | (x << 32)
+    x.rotate_left(32)
 }
 
 // --- 5. Memory & Compaction Primitives ------------------------------------
 
 /// Branchless output compaction step: unconditionally stores, then conditionally advances index.
 #[inline(always)]
-pub fn branchless_compact_step(
-    val: u64,
-    is_valid: bool,
-    out: &mut [u64],
-    write_head: &mut usize,
-) {
+pub fn branchless_compact_step(val: u64, is_valid: bool, out: &mut [u64], write_head: &mut usize) {
     out[*write_head] = val;
     *write_head += is_valid as usize;
 }
@@ -294,7 +289,9 @@ mod tests {
         assert_eq!(head, 2);
         assert_eq!(&out[0..2], &[10, 30]);
 
-        let tbl = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160];
+        let tbl = [
+            10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160,
+        ];
         assert_eq!(oblivious_gather_u32(&tbl, 5), 60);
         assert_eq!(oblivious_gather_u32(&tbl, 15), 160);
         assert_eq!(oblivious_gather_u32(&tbl, 16), 0); // Out of domain -> 0

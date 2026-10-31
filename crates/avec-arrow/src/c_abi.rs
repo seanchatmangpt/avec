@@ -82,9 +82,8 @@ unsafe fn release_array<T: Scalar>(array: *mut ArrowArray) {
     // Option<unsafe fn> is a nullable pointer with a niche: identical layout
     // to *mut c_void. AtomicPtr<c_void> is repr(transparent) over *mut c_void,
     // so an in-place atomic view of the release slot is a pointer pun.
-    let slot: &AtomicPtr<c_void> = unsafe {
-        &*(core::ptr::addr_of_mut!((*array).release) as *mut AtomicPtr<c_void>)
-    };
+    let slot: &AtomicPtr<c_void> =
+        unsafe { &*(core::ptr::addr_of_mut!((*array).release) as *mut AtomicPtr<c_void>) };
     let prev = slot.swap(core::ptr::null_mut(), Ordering::AcqRel);
     if prev.is_null() {
         // Already released (or NULL release): typed no-op, never a double free.
@@ -102,14 +101,9 @@ unsafe fn release_array<T: Scalar>(array: *mut ArrowArray) {
 ///
 /// Ownership transfers to the importer: when done it calls `release` on both
 /// structs (spec contract), which frees the arena exactly once.
-pub fn export<T: Scalar>(
-    arr: Primitive<T>,
-    format: *const c_char,
-) -> (ArrowArray, ArrowSchema) {
+pub fn export<T: Scalar>(arr: Primitive<T>, format: *const c_char) -> (ArrowArray, ArrowSchema) {
     let (validity, values, len) = arr.into_parts();
-    let null_count = validity
-        .as_ref()
-        .map_or(0i64, |bm| bm.null_count() as i64);
+    let null_count = validity.as_ref().map_or(0i64, |bm| bm.null_count() as i64);
     let bufs: Vec<*const c_void> = alloc::vec![
         match &validity {
             Some(bm) => bm.as_ptr() as *const c_void,

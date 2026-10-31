@@ -34,13 +34,16 @@ pub mod chase_lev;
 pub mod digest;
 pub mod fingerprint;
 pub mod foreign;
+pub mod layout;
 pub mod mmu_arena;
 pub mod perfect_hash;
+pub mod predicates;
 pub mod primitive;
 pub mod runend;
 pub mod silicon;
 pub mod slice;
 pub mod timestamps;
+pub mod transpose;
 pub mod varlen;
 pub mod views;
 

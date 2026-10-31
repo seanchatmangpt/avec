@@ -99,7 +99,10 @@ impl Buf {
     #[must_use]
     pub fn as_typed<T>(&self) -> &[T] {
         let (sz, an) = (core::mem::size_of::<T>(), core::mem::align_of::<T>());
-        assert!(an <= ALIGNMENT, "element alignment exceeds buffer alignment");
+        assert!(
+            an <= ALIGNMENT,
+            "element alignment exceeds buffer alignment"
+        );
         assert_eq!(
             self.len % sz,
             0,

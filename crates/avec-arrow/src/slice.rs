@@ -132,11 +132,7 @@ pub fn slice<'a, T: Scalar>(
     len: usize,
 ) -> Result<Sliced<'a, T>, SliceError> {
     match offset.checked_add(len) {
-        Some(end) if end <= array.len() => Ok(Sliced {
-            array,
-            offset,
-            len,
-        }),
+        Some(end) if end <= array.len() => Ok(Sliced { array, offset, len }),
         _ => Err(SliceError::RangeOutOfBounds {
             offset,
             len,
@@ -215,11 +211,7 @@ mod tests {
     fn parent_with_nulls(n: usize) -> Primitive<i64> {
         let mut b = PrimitiveBuilder::<i64>::new();
         for i in 0..n {
-            b.push(if i % 7 == 3 {
-                None
-            } else {
-                Some(i as i64)
-            });
+            b.push(if i % 7 == 3 { None } else { Some(i as i64) });
         }
         b.finish()
     }
@@ -284,8 +276,7 @@ mod tests {
         }
         // iter() agrees with the per-row recompute, in order.
         let itered: Vec<Option<i64>> = s.iter().collect();
-        let expected: Vec<Option<i64>> =
-            (0..len).map(|i| expect_row(&arr, offset, i)).collect();
+        let expected: Vec<Option<i64>> = (0..len).map(|i| expect_row(&arr, offset, i)).collect();
         assert_eq!(itered, expected);
         // Nulls and values both occur inside this window (proof both
         // branches of the coherence law were exercised).
@@ -320,11 +311,10 @@ mod tests {
             assert_eq!(s.get(i), expect_row(&arr, 3, i), "row {i}");
             // The aliased parent cell lives at base + (offset + i) * WIDTH:
             // the exact address arithmetic a copy-free read performs.
-            assert_eq!(
-                &arr.values()[abs] as *const i64,
-                unsafe { arr.values_ptr().add(abs * core::mem::size_of::<i64>()) }
-                    as *const i64
-            );
+            assert_eq!(&arr.values()[abs] as *const i64, unsafe {
+                arr.values_ptr().add(abs * core::mem::size_of::<i64>())
+            }
+                as *const i64);
         }
         // Absolute row 3 is the parent's first null (3 % 7 == 3): the
         // window's logical row 0 must surface it as None, not Some(3).

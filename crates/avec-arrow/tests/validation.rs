@@ -523,7 +523,7 @@ fn bitmap_word_tail_mask_law() {
             ones,
             bm.null_count()
         );
-        let get_bits: u64 = (0..n_bits).map(|i| u64::from(bm.get(i) as u64)).sum();
+        let get_bits: u64 = (0..n_bits).map(|i| (bm.get(i) as u64)).sum();
         assert_eq!(
             get_bits, ones,
             "n_bits {}: per-bit get() popcount != count_one_bits",

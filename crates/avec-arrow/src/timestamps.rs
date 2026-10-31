@@ -77,7 +77,7 @@ mod tests {
         assert_eq!(arr.values()[1], TimestampMicro(0));
         assert_eq!(arr.values()[2], TimestampMicro(-1));
         // Null slot is the deterministic zero.
-        assert!(!arr.validity().map_or(true, |bm| bm.get(1)));
+        assert!(!arr.validity().is_none_or(|bm| bm.get(1)));
     }
 
     #[test]

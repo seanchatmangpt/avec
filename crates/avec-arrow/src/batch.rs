@@ -136,10 +136,11 @@ impl fmt::Display for BatchError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             BatchError::DuplicateColumn { name } => write!(f, "duplicate column {name:?}"),
-            BatchError::LengthMismatch { column, expected, got } => write!(
-                f,
-                "column {column:?} has {got} rows; batch has {expected}"
-            ),
+            BatchError::LengthMismatch {
+                column,
+                expected,
+                got,
+            } => write!(f, "column {column:?} has {got} rows; batch has {expected}"),
         }
     }
 }
@@ -169,10 +170,7 @@ impl Batch {
     pub fn try_new(columns: Vec<(&'static str, Column)>) -> Result<Self, BatchError> {
         let row_count = columns.first().map_or(0, |(_, c)| c.len());
         for (index, (name, column)) in columns.iter().enumerate() {
-            if columns[..index]
-                .iter()
-                .any(|(prior, _)| *prior == *name)
-            {
+            if columns[..index].iter().any(|(prior, _)| *prior == *name) {
                 return Err(BatchError::DuplicateColumn {
                     name: String::from(*name),
                 });
@@ -185,10 +183,7 @@ impl Batch {
                 });
             }
         }
-        Ok(Self {
-            columns,
-            row_count,
-        })
+        Ok(Self { columns, row_count })
     }
 
     /// The row count.
@@ -255,6 +250,12 @@ pub enum ColumnBuilder {
 impl ColumnBuilder {
     /// Rows appended so far.
     #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Rows appended so far.
+    #[must_use]
     pub fn len(&self) -> usize {
         match self {
             ColumnBuilder::Int8(b) => b.len(),
@@ -294,10 +295,59 @@ impl ColumnBuilder {
     }
 }
 
+impl BatchBuilder {
+    /// An empty builder.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Add one named column builder (any subtype).
+    #[must_use]
+    pub fn with_column(mut self, name: &'static str, builder: ColumnBuilder) -> Self {
+        self.columns.push((name, builder));
+        self
+    }
+
+    /// A named column's builder, for pushes.
+    #[must_use]
+    pub fn column_mut(&mut self, name: &str) -> Option<&mut ColumnBuilder> {
+        self.columns
+            .iter_mut()
+            .find(|(column_name, _)| *column_name == name)
+            .map(|(_, builder)| builder)
+    }
+
+    /// Rows appended so far (the first column's count).
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.columns.first().map_or(0, |(_, b)| b.len())
+    }
+
+    /// True when no columns are attached.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.columns.is_empty()
+    }
+
+    /// Freeze every column and apply [`Batch`]'s law.
+    ///
+    /// # Errors
+    /// [`BatchError::DuplicateColumn`] or [`BatchError::LengthMismatch`].
+    pub fn finish(&self) -> Result<Batch, BatchError> {
+        let columns = self
+            .columns
+            .iter()
+            .map(|(name, builder)| (*name, builder.finish()))
+            .collect();
+        Batch::try_new(columns)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use alloc::vec;
     use super::*;
+    use alloc::vec;
 
     /// Three typed columns built through the batch builder; the frozen
     /// batch preserves names, insertion order, format codes, and values.
@@ -352,7 +402,11 @@ mod tests {
             bs.push(Some(2));
         }
         match b.finish() {
-            Err(BatchError::LengthMismatch { column, expected, got }) => {
+            Err(BatchError::LengthMismatch {
+                column,
+                expected,
+                got,
+            }) => {
                 assert_eq!(column, "b");
                 assert_eq!((expected, got), (1, 2));
             }
@@ -377,10 +431,7 @@ mod tests {
         let batch = Batch::try_new(vec![
             ("i", Column::Int32(PrimitiveBuilder::<i32>::new().finish())),
             ("u", Column::Utf8(VarlenBuilder::<u32>::new().finish())),
-            (
-                "vu",
-                Column::Utf8View(ViewVecBuilder::new().finish()),
-            ),
+            ("vu", Column::Utf8View(ViewVecBuilder::new().finish())),
             (
                 "+r",
                 Column::RunEnd(RunEndEncodedBuilder::<i32>::new().finish()),
@@ -393,54 +444,5 @@ mod tests {
             .map(|(_, c)| c.format_code())
             .collect();
         assert_eq!(codes, ["i", "u", "vu", "+r"]);
-    }
-}
-
-impl BatchBuilder {
-    /// An empty builder.
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Add one named column builder (any subtype).
-    #[must_use]
-    pub fn with_column(mut self, name: &'static str, builder: ColumnBuilder) -> Self {
-        self.columns.push((name, builder));
-        self
-    }
-
-    /// A named column's builder, for pushes.
-    #[must_use]
-    pub fn column_mut(&mut self, name: &str) -> Option<&mut ColumnBuilder> {
-        self.columns
-            .iter_mut()
-            .find(|(column_name, _)| *column_name == name)
-            .map(|(_, builder)| builder)
-    }
-
-    /// Rows appended so far (the first column's count).
-    #[must_use]
-    pub fn len(&self) -> usize {
-        self.columns.first().map_or(0, |(_, b)| b.len())
-    }
-
-    /// True when no columns are attached.
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.columns.is_empty()
-    }
-
-    /// Freeze every column and apply [`Batch`]'s law.
-    ///
-    /// # Errors
-    /// [`BatchError::DuplicateColumn`] or [`BatchError::LengthMismatch`].
-    pub fn finish(&self) -> Result<Batch, BatchError> {
-        let columns = self
-            .columns
-            .iter()
-            .map(|(name, builder)| (*name, builder.finish()))
-            .collect();
-        Batch::try_new(columns)
     }
 }

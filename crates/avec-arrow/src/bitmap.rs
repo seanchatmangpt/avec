@@ -89,7 +89,6 @@ pub fn word_at(bytes: &[u8], word_idx: usize) -> u64 {
     u64::from_ne_bytes(w)
 }
 
-
 /// Owned LSB-first validity bitmap over a 64-byte aligned buffer.
 #[derive(Debug)]
 pub struct Bitmap {
@@ -120,7 +119,10 @@ impl Bitmap {
     /// From raw LSB-first bytes.
     #[must_use]
     pub fn from_bytes(bytes: crate::buffer::Buf, n_bits: usize) -> Bitmap {
-        Bitmap { bits: bytes, n_bits }
+        Bitmap {
+            bits: bytes,
+            n_bits,
+        }
     }
 
     /// Row count covered.
@@ -187,7 +189,11 @@ impl Bitmap {
         let tail = self.n_bits % 64;
         if tail > 0 {
             let word = self.word(full_words);
-            let tail_mask: u64 = if tail == 64 { u64::MAX } else { (1 << tail) - 1 };
+            let tail_mask: u64 = if tail == 64 {
+                u64::MAX
+            } else {
+                (1 << tail) - 1
+            };
             ones += u64::from((word & tail_mask).count_ones());
         }
         ones == self.n_bits as u64

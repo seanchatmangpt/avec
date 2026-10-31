@@ -91,7 +91,7 @@ impl<I: Scalar> RunEndEncoded<I> {
     /// 64-byte aligned.
     #[must_use]
     pub fn buffers_aligned_64(&self) -> bool {
-        (self.run_ends.as_ptr() as usize) % crate::buffer::ALIGNMENT == 0
+        (self.run_ends.as_ptr() as usize).is_multiple_of(crate::buffer::ALIGNMENT)
             && self.values.buffers_aligned_64()
     }
 
@@ -332,7 +332,7 @@ mod tests {
         assert_eq!(ends_ptr as usize % 64, 0, "run_ends buffer misaligned");
         assert_eq!(ends_view, &[3, 4]);
         // ...and on the values child (values + validity).
-        assert!(arr.values().values_ptr() as usize % 64 == 0);
+        assert!((arr.values().values_ptr() as usize).is_multiple_of(64));
         assert!(arr.values().buffers_aligned_64());
         assert!(arr.buffers_aligned_64());
         // Larger, builder-heavy case keeps the law (allocation path varies).
