@@ -86,6 +86,7 @@ lint:
 
 publish-check:
 	cargo publish --dry-run --allow-dirty -p avec-arrow
+	cargo publish --dry-run --allow-dirty -p avec-blake3
 	cargo publish --dry-run --allow-dirty -p avec-parquet
 
 # --- OPT-L9 additions ---------------------------------------------------------

@@ -1,0 +1,137 @@
+# =============================================================================
+# avec CI — local-first mirror of the developer gate.
+#
+# PHILOSOPHY: CI MIRRORS the local gate; it never replaces it. The canonical
+# gate is `scripts/verify_v26.10.31.sh` run on the developer's machine — a
+# green run here is corroborating evidence, not the gate of record. Anything
+# this workflow cannot see (Metal/GPU phases, BEAM behaviors proven only on
+# the host so far) stays owned by the local gate.
+#
+# Jobs:
+#   verify     — runs scripts/verify_v26.10.31.sh verbatim (the local gate,
+#                unmodified). BEAM (Erlang/OTP) is installed best-effort with
+#                continue-on-error until the avec-beam gate is proven on a CI
+#                runner; the gap is annotated loudly either way.
+#   courts     — adversarial courts: ontology SHACL validation (+ anti-vacuity
+#                mutant), branchless-kernel ABI selftest, CFG-homology mutant
+#                court. Each court must be able to FAIL: a court that cannot
+#                flip is FAIL.
+#   fmt-clippy — NON-BLOCKING until a dedicated fmt/clippy pass lands.
+#                Measured 2026-10-30: `cargo fmt --check` reports 7390 lines
+#                of drift, so this job is continue-on-error. To promote it to
+#                blocking: land the fmt pass, delete continue-on-error.
+# =============================================================================
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  verify:
+    name: verify (scripts/verify_v26.10.31.sh — local gate, verbatim)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      # BEAM gate: avec-beam spawns a real BEAM VM, so the gate needs
+      # erlang/otp. OTP setup is best-effort (continue-on-error) until the
+      # gate is proven on a CI runner. A missing `erl` makes test-avec-beam
+      # fail or timeout-skip LOUDLY inside the verify script (it is
+      # timeout-guarded at 600s there) — never silently.
+      - name: Install Erlang/OTP (best-effort — BEAM gate unproven on CI)
+        uses: erlef/setup-beam@v1
+        continue-on-error: true
+        with:
+          otp-version: '27'
+          install-hex: false
+          install-rebar: false
+
+      # Loud annotation either way, so the BEAM gate's CI provenance is never
+      # read as established when it is not.
+      - name: BEAM gate provenance annotation
+        if: always()
+        run: |
+          if command -v erl >/dev/null 2>&1; then
+            echo "::warning::BEAM gate: OTP installed best-effort. test-avec-beam is UNPROVEN on CI runners until a green run witnesses it — the local gate stays canonical."
+          else
+            echo "::warning::BEAM gate: OTP NOT available — test-avec-beam inside verify_v26.10.31.sh is expected to fail/skip. Disclosed gap; qualify OTP on CI before treating CI as authoritative for avec-beam."
+          fi
+
+      # Known transport note (pre-existing, owner: scripts lane I20): the
+      # script's classify branch uses BSD sed (`sed -i ''`), which GNU sed
+      # misparses; that branch is only reachable when check-workspace FAILs.
+      - name: Run the local gate
+        run: bash scripts/verify_v26.10.31.sh
+        timeout-minutes: 55
+
+  courts:
+    name: courts (ontology SHACL, branchless ABI, cfg-homology)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (stable) — courts build avec crates and fixtures
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install court tooling (llvm-objdump, pyshacl, rdflib)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm     # llvm-objdump for the disassembly courts
+          python3 -m venv .venv-courts     # venv: ubuntu-latest is PEP 668 externally-managed
+          .venv-courts/bin/pip install pyshacl rdflib
+          echo "$PWD/.venv-courts/bin" >> "$GITHUB_PATH"
+
+      - name: Court — ontology SHACL validation + anti-vacuity mutant
+        run: bash scripts/validate_ontology.sh
+
+      - name: Court — branchless kernel ABI selftest
+        run: bash scripts/audit_branchless.sh --selftest
+
+      - name: Court — CFG homology mutant
+        run: bash scripts/cfg_homology.sh --mutant
+
+  fmt-clippy:
+    name: fmt + clippy (NON-BLOCKING until dedicated fmt pass)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Measured 2026-10-30: cargo fmt --check exits 1 with 7390 lines of diff.
+    # Promote to blocking by landing the fmt pass and deleting this line.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (stable, rustfmt + clippy)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets

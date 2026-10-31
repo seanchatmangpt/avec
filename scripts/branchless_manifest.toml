@@ -1,0 +1,248 @@
+# branchless_manifest.toml — kernel inventory for the branchless ABI audit gate
+# Spec: docs/jira/v26.10.31/27-branchless-kernel-abi.md §5
+# Remainder policy: ADR-14 (docs/jira/v26.10.31/22-adr-register.md)
+# Gate script: scripts/audit_branchless.sh (BRANCHLESS_SCOPE must cover the
+# scope_pattern of every kernel declared here)
+#
+# Schema (per [[kernel]]):
+#   scope_pattern    : unanchored regex matched against the bare symbol name
+#                      (leading mach-o underscore stripped), same matching the
+#                      gate uses with BRANCHLESS_SCOPE
+#   accepted_remainder: classes of banned opcodes tolerated in this kernel under
+#                      ADR-14 (hot data paths remain 0 data-dependent branches)
+#   expected_max_count: maximum accepted remainder sites; audit above this
+#                      count is a violation even in INFORMATIONAL mode
+#   gate_mode        : ENFORCED — gate exit 1 on hits beyond expected_max_count
+#                      INFORMATIONAL — gate reports hits honestly, exit 1 only
+#                      when count > expected_max_count
+#   observed_mnemonics: the machine opcodes this remainder class set actually
+#                      covers (verified audit-profile disassembly); a hit whose
+#                      mnemonic is absent from this list is a FAIL even under
+#                      the ceiling — an unclassified opcode is not accepted
+#                      remainder
+#
+# Inventory-completeness law (spec §5): every hot-path kernel must appear here;
+# a kernel present in lib hot paths but absent from this manifest is a gate
+# violation on the inventory check.
+#
+# Scope gap (documented, wave-9): the default BRANCHLESS_SCOPE in
+# audit_branchless.sh (`ladder|predicates|transpose|ct_`) does NOT match the
+# 6lookup / 6offset / chunks_4way scope_patterns below — those kernels
+# adjudicate only when the gate runs under an explicit BRANCHLESS_SCOPE
+# covering them. The blake3 entry likewise adjudicates only under explicit
+# scope. This is a documented gap, not a silent one.
+
+[meta]
+spec = "docs/jira/v26.10.31/27-branchless-kernel-abi.md"
+adr = "docs/jira/v26.10.31/22-adr-register.md#adr-14"
+gate = "scripts/audit_branchless.sh"
+updated = "8-kernel inventory: V2-closure added quad untranspose (documented blind spot; ltmp0 rendering)"
+
+# ---------------------------------------------------------------------------
+# V2-validation closure (2026-10-30, lane G3): QuadColumns::untranspose — 7
+# branch sites (3 cbz + 1 cbnz + 1 b + 1 b.ne + 1 b.ls). DOCUMENTED BLIND
+# SPOT, not a gate-covered kernel: in the audit-profile rlib the untranspose
+# body renders as <ltmp0> under BOTH Apple objdump AND homebrew llvm-objdump
+# 21.1.7 (/opt/homebrew/opt/llvm/bin), while nm sees the mangled global text
+# symbol __RNvMNtCs9DwzS8jbwzX_10avec_arrow9transposeNtB2_11QuadColumns11untranspose
+# (T, 0x0..0x124, next symbol at 0x124). The gate therefore attributes 0
+# in-scope instructions to this kernel — the region lands in the loud
+# skipped_out_of_scope count, never in the hits. Authoritative count
+# provenance: direct disassembly of the nm-bounded ltmp0 region; both
+# disassemblers byte-identical; 7 sites. The scope_pattern below matches the
+# nm-visible mangled name and becomes live automatically if a future objdump
+# renders the symbol.
+#
+# ORDERING LAW: gate adjudication is first-match (the script walks manifest
+# rows in file order and breaks on the first scope hit), and the untranspose
+# mangled name contains the substring "transpose" — so this entry MUST
+# precede the "quad transpose / unpack" entry, or that entry's scope
+# ("transpose") claims the symbol and its narrower mnemonic list (no
+# cbnz/b.ls) fails the row.
+[[kernel]]
+name = "quad untranspose"
+owner = "crates/avec-arrow/src/transpose.rs"
+scope_pattern = "untranspose"
+accepted_remainder = [
+  "CAPACITY_OVERFLOW_GUARD",  # b.ls — len*64 byte-size overflow check selecting
+                              #    the alloc-error path in the entry block
+  "ALLOCATOR_NULL_CHECK",     # cbz — alloc returned null -> retry/error path
+  "ZERO_TRIP_GUARD",          # cbz x2 + cbnz + b — byte-len==0 skips the alloc,
+                              #    len==0 skips the copy loop (both paths, incl.
+                              #    the len-0 exit edge into the epilogue)
+  "LOOP_LATCH",               # b.ne — dynamic back-edge (cmp count,4*len; b.ne);
+                              #    no latch-free design exists yet
+]
+# 7 unique sites, witnessed 2026-10-30 by direct disassembly of the audit
+# rlib's nm-bounded untranspose region (renders <ltmp0>; see blind-spot note
+# above): 3 cbz + 1 cbnz + 1 b + 1 b.ne + 1 b.ls. llvm-objdump 21.1.7 and
+# Apple objdump agree byte-for-byte. The in-loop 32B digest copy is a fixed
+# ldp/stp q0,q1 pair — straight-line; 0 data-dependent branches on the data
+# path (ADR-14/ADR-17). Ceiling observed+1.
+expected_max_count = 8
+gate_mode = "INFORMATIONAL"
+observed_mnemonics = ["cbz", "cbnz", "b", "b.ne", "b.ls"]
+
+# ---------------------------------------------------------------------------
+[[kernel]]
+name = "quad transpose / unpack"
+owner = "crates/avec-arrow/src/transpose.rs"
+scope_pattern = "transpose"
+accepted_remainder = [
+  "ALLOCATOR_NULL_CHECK",  # 9x cbz — allocator null-checks the toolchain emits
+                           #    for the Vec allocations in the entry path
+  "ZERO_TRIP_GUARD",       # cbz — zero-trip guard emitted before the loop
+  "LOOP_LATCH",            # entry b + latch b.ne — dynamic back-edge; no
+                           #    latch-free design exists yet
+  "CAPACITY_ASSERT",       # (none observed in transpose today; reserved class)
+]
+# Verified 2026-10-30 (BRANCHLESS_SCOPE='transpose|predicates',
+# scripts/audit_branchless.sh, audit profile, aarch64):
+# 12 unique sites — 9x allocator cbz (0x16c..0x284) + zero-trip cbz (0x150)
+# + entry b (0x228) + latch b.ne (0x2dc). The previously-cited 24 was the
+# same 12 counted across both audited artifact copies (libavec_arrow.rlib
+# and its deps/ duplicate); ceiling kept at 24 to cover that counting mode.
+expected_max_count = 24
+gate_mode = "INFORMATIONAL"
+observed_mnemonics = ["cbz", "b", "b.ne"]
+
+[[kernel]]
+name = "equality masks (quad equality)"
+owner = "crates/avec-arrow/src/predicates.rs"
+scope_pattern = "predicates"
+accepted_remainder = [
+  "CAPACITY_ASSERT",  # b.lo — capacity assert guard
+  "LOOP_LATCH",       # b.ne — dynamic back-edge; no latch-free design exists yet
+]
+expected_max_count = 2
+gate_mode = "INFORMATIONAL"
+observed_mnemonics = ["b.lo", "b.ne"]
+
+# ---------------------------------------------------------------------------
+# avec-git kernels (wave-8 lane 3, inventory-completeness closure, spec 27 §6).
+# NOTE: the gate's default artifact set is avec-arrow + avec-blake3 only;
+# these kernels are adjudicated by passing the avec-git audit-profile rlib
+# explicitly, e.g.
+#   CARGO_TARGET_DIR=<tmp> cargo build --profile audit -p avec-git
+#   BRANCHLESS_SCOPE='6lookup|6offset' PATH=/opt/homebrew/opt/llvm/bin:$PATH \
+#     scripts/audit_branchless.sh <tmp>/audit/libavec_git.rlib
+# (llvm-objdump required: Apple objdump renders mach-o symbols as <ltmp0>,
+#  which defeats name scoping entirely.)
+# The default BRANCHLESS_SCOPE already contains "ladder"; ladder_search's own
+# symbol is LOCAL in the audit rlib (renders as <ltmp0>) and is reached through
+# IdxV2::lookup, whose mangled name carries the 6lookup scope below.
+
+[[kernel]]
+name = "git idx constant-time ladder lookup"
+owner = "crates/avec-git/src/ladder.rs (emitted as avec_git::idx_read::IdxV2::lookup)"
+scope_pattern = "6lookup"
+accepted_remainder = [
+  "ALLOCATOR_NULL_CHECK",   # cbz — entry-path null/truncation checks on the
+                            #    mapped idx (Result/expect guard paths)
+  "PARTITION_GUARD",        # b.hi/b.ls/b.hs/b.eq — first-byte partition and
+                            #    window bounds guards around the ladder
+  "RESULT_ERROR_GUARD",     # cbz/tbnz — typed GitError return paths
+  "LOOP_LATCH",             # b — dynamic back-edges; no latch-free design yet
+  # RETIRED CLASS REGEX_TRANSPORT_FP (bic) — FIXED 2026-10-30: the gate now
+  # transports BANNED_RE via ENVIRON (scripts/audit_branchless.sh:62-79), so
+  # `b\\.[a-z]+` arrives byte-exact and the old awk -v decode (`b.[a-z]+`,
+  # matching bic at 0x758/0x854 in IdxV2::lookup) can no longer occur. Any
+  # bic observed post-fix is a genuine opcode — an unaccepted remainder.
+]
+# wave-9 post-regex-fix 2026-10-30 (BRANCHLESS_SCOPE='6lookup|6offset', audit
+# profile, homebrew llvm-objdump 21.1.7, aarch64): IdxV2::lookup = 22 unique
+# sites (cbz x4, b x5, b.ne x2, b.eq x1, b.hi x5, b.ls x4, b.hs x1, tbnz x1;
+# the wave-8 bic hit was the regex-transport FP, eliminated at the gate
+# script). Ceiling observed+1.
+expected_max_count = 23
+gate_mode = "INFORMATIONAL"
+observed_mnemonics = ["cbz", "b", "b.ne", "b.eq", "b.hi", "b.ls", "b.hs", "tbnz"]
+
+[[kernel]]
+name = "offset-MSB large-offset select"
+owner = "crates/avec-git/src/idx_read.rs (avec_git::idx_read::IdxV2::offset)"
+scope_pattern = "6offset"
+accepted_remainder = [
+  "TRUNCATION_GUARD",    # b.ls — small_off+4>len and large_end<=len bounds
+                         #    guards (typed Truncated error, never a panic)
+  "RESULT_ERROR_GUARD",  # b — early-return join into the error path
+  # RETIRED CLASS REGEX_TRANSPORT_FP (bic) — FIXED via the ENVIRON transport
+  # in scripts/audit_branchless.sh:62-79; see the 6lookup entry for the
+  # witness. Post-fix a bic here is a genuine opcode, not an accepted class.
+]
+# wave-9 post-regex-fix 2026-10-30: IdxV2::offset = 3 unique sites (b.ls x2 at
+# 0x800/0x83c, b x1 at 0x844; the wave-8 bic at 0x854 was the regex-transport
+# FP, eliminated at the gate script). The MSB select itself is arithmetic
+# (neg/csel-class) — 0 data-dependent branches in the select. Ceiling
+# observed+1.
+expected_max_count = 4
+gate_mode = "INFORMATIONAL"
+observed_mnemonics = ["b.ls", "b"]
+
+# ---------------------------------------------------------------------------
+# avec-blake3 kernel (wave-8 lane 3). Lane 1 is editing multi_chunk.rs
+# concurrently — counts below are wave-8-observed at multi_chunk.rs
+# sha256 dccfa01149c300b3ac7a73e2e5c243d0c787de2f, 2026-10-30T20:43-0700.
+
+[[kernel]]
+name = "blake3 4-way chunk compressor"
+owner = "crates/avec-blake3/src/multi_chunk.rs"
+scope_pattern = "chunks_4way"
+accepted_remainder = [
+  "ZERO_TRIP_GUARD",  # cbz — block-count zero-trip guard before the loop
+  "LOOP_LATCH",       # b / b.ne — outer block-loop latch (0x3ad0) and the
+                      #    8x output-store unroll latch (0x3b94); no
+                      #    latch-free design exists yet
+]
+# wave-8-observed 2026-10-30: compress_chunks_4way_x2 = 3 unique sites (cbz
+# 0x3a64, b 0x3ad0, b.ne 0x3b94). compress_chunks_4way / _neon / _x2_neon
+# emitted 0 hits in the same audit. round4/g4 are #[inline(always)] — no
+# separate symbols, covered inside these. Ceiling observed+1.
+expected_max_count = 4
+gate_mode = "INFORMATIONAL"
+observed_mnemonics = ["cbz", "b", "b.ne"]
+
+# ---------------------------------------------------------------------------
+# Default-scope collision register (wave-8 lane 3). The default scope's `ct_`
+# alternative substring-matches "stru(ct_)" in these avec-arrow FFI/map
+# symbols, so the default gate pulls them into scope although they are not
+# hot-path kernels. They were failing as unlisted symbols under the pre-wave
+# manifest too (verified by replaying the default gate against the 2-kernel
+# manifest — same 3 FAIL rows), so they are registered here under ADR-14 as
+# guard-class remainder until their owning lanes manifest them properly.
+# blr rows were the REGEX_TRANSPORT_FP class — FIXED in the gate script (see
+# the 6lookup entry); post-fix neither symbol shows blr.
+
+[[kernel]]
+name = "default-scope collision: c_abi_nested FFI release helpers"
+owner = "crates/avec-arrow/src/c_abi_nested.rs (owner lane to reclaim)"
+scope_pattern = "release_struct_(array|schema)"
+accepted_remainder = [
+  "ALLOCATOR_NULL_CHECK",  # cbz — entry null-checks
+  "RESULT_ERROR_GUARD",    # b/b.eq — error-path guards
+  # RETIRED CLASS REGEX_TRANSPORT_FP (blr) — FIXED via the ENVIRON transport
+  # in scripts/audit_branchless.sh:62-79; see the 6lookup entry. Post-fix a
+  # blr here is a genuine opcode, not an accepted class.
+]
+# wave-9 post-regex-fix 2026-10-30, default gate run: release_struct_array =
+# 10 (cbz, b, b.eq), release_struct_schema = 9 (same classes; the wave-8 blr
+# rows were the regex-transport FP, eliminated at the gate script). Ceiling
+# observed+1 per symbol.
+expected_max_count = 11
+gate_mode = "INFORMATIONAL"
+observed_mnemonics = ["cbz", "b", "b.eq"]
+
+[[kernel]]
+name = "default-scope collision: perfect_hash try_build"
+owner = "crates/avec-arrow/src/perfect_hash.rs (owner lane to reclaim)"
+scope_pattern = "9try_build"
+accepted_remainder = [
+  "ALLOCATOR_NULL_CHECK",  # cbz — entry null-checks
+  "PARTITION_GUARD",       # b.eq/b.ne — table-shape guards
+  "LOOP_LATCH",            # b — dynamic back-edge
+]
+# wave-8-observed 2026-10-30, default gate run: PerfectMap::try_build = 11
+# (cbz, b.eq, b.ne, b). Ceiling observed+1.
+expected_max_count = 12
+gate_mode = "INFORMATIONAL"
+observed_mnemonics = ["cbz", "b", "b.eq", "b.ne"]

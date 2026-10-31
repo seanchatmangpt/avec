@@ -1,0 +1,23 @@
+[package]
+name = "sovereign-e2e"
+version = "26.10.29"
+edition = "2021"
+description = "Minimal runnable demo of the avec thesis: one dataset, three planes, one receipt."
+license = "Apache-2.0"
+repository = "https://github.com/seanchatmangpt/avec"
+authors = ["Sean Chatman <info@chatmangpt.com>"]
+publish = false
+
+[dependencies]
+avec-arrow = { path = "../../crates/avec-arrow" }
+avec-blake3 = { path = "../../crates/avec-blake3" }
+avec-parquet = { path = "../../crates/avec-parquet", features = ["std"] }
+avec-git = { path = "../../crates/avec-git" }
+
+# Standalone manifest, deliberately NOT a member of the root workspace (the
+# coordinator owns the root Cargo.toml; same pattern as crates/wasm-footprint).
+# The empty [workspace] table makes this crate its own workspace root, so a
+# build from inside this directory is self-contained: crate-local Cargo.lock
+# and crate-local target/ dir. Path deps resolve the root workspace's
+# `workspace.package` inheritance because those crates remain members there.
+[workspace]
