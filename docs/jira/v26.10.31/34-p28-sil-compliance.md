@@ -139,3 +139,13 @@ revenue) remains unreconciled — 19-ontology-ttl.md still uses
 
 - 18-dflss-charter.md
 - 19-ontology-ttl.md
+
+## Instrument of Record (wave 13, 2026-10-31)
+
+The P28-SIL v2.1.0 canonical text now exists in this repository:
+[LICENSE-P28-SIL.md](../../../LICENSE-P28-SIL.md) (adapted from the
+graphlaw canonical; URN `urn:avec:license:p28-sil:v2.1.0-sovereign`).
+LICENSE.md carries the MIT code base + P28-SIL execution overlay
+(graphlaw dual structure); workspace SPDX is MIT. The AUM-vs-revenue
+measure reconciliation and the N-14 ODRL boundary-corpus items remain
+the open items on this doc.

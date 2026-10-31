@@ -40,7 +40,7 @@ at scan time.
 <https://avec.chatman.dev/ontology/26.10.31> a owl:Ontology ;
     owl:versionInfo "26.10.31" ;
     dcterms:title "AVEC Canonical Ontology"@en ;
-    dcterms:license <https://avec.chatman.dev/license/P28-SIL> ;
+    dcterms:license <urn:avec:license:p28-sil:v2.1.0-sovereign> ; # instrument of record: LICENSE-P28-SIL.md (repo root)
     dcterms:publisher <https://avec.chatman.dev> .
 
 ### ---------- Classes ----------
