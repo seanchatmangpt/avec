@@ -3,7 +3,6 @@ name = "avec-audit"
 version.workspace = true
 edition.workspace = true
 description = "CC=1 branch-audit cdylib: forces every kernel into the artifact so machine code can be inspected."
-license.workspace = true
 publish = false
 
 [lib]

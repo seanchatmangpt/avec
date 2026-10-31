@@ -1,5 +1,7 @@
 [workspace]
-# License: MIT (code) + P28-SIL v2.1.0 (execution) — see LICENSE.md / LICENSE-P28-SIL.md
+# License: governed by LICENSE-P28-SIL.md (P28-SIL v2.1.0,
+# urn:avec:license:p28-sil:v2.1.0-sovereign); see LICENSE.md. No SPDX
+# expression — the instrument is identified by URN (§9).
 
 resolver = "2"
 members = [
@@ -19,7 +21,6 @@ members = [
 [workspace.package]
 version = "26.10.29"
 edition = "2021"
-license = "MIT"
 repository = "https://github.com/seanchatmangpt/avec"
 authors = ["Sean Chatman <info@chatmangpt.com>"]
 
