@@ -2,10 +2,12 @@
 resolver = "2"
 members = [
     "crates/avec-arrow",
+    "crates/avec-blake3",
     "crates/avec-parquet",
     "crates/avec-ffi",
     "crates/avec-beam",
     "crates/avec-gpu",
+    "crates/avec-git",
     "crates/bench",
     "crates/audit",
     "crates/integration",
