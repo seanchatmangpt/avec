@@ -19,7 +19,9 @@
 //! `_enif_open_resource_type_x`, `_enif_alloc_resource`,
 //! `_enif_release_resource`, `_enif_make_resource`, `_enif_get_resource`.
 
-use crate::{enif_get_long, enif_make_long, lock_registry, make_atom, Batch, ErlNifEnv, ErlNifTerm};
+use crate::{
+    enif_get_long, enif_make_long, lock_registry, make_atom, Batch, ErlNifEnv, ErlNifTerm,
+};
 use std::os::raw::{c_char, c_int, c_void};
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicPtr, Ordering};
@@ -171,6 +173,9 @@ extern "C" fn batch_envelope_dtor(_env: *mut ErlNifEnv, obj: *mut c_void) {
     // allocation. drop_in_place releases the Batch but leaves the block's
     // memory to the VM, which frees it after dtors complete.
     unsafe { std::ptr::drop_in_place(obj.cast::<BatchEnvelope>()) };
+    // Exactly-once observability: the VM guarantees at-most-once dtors; this
+    // counter makes the guarantee BEAM-visible (crate::dtor_stats).
+    crate::dtor_stats::note_envelope_dtor();
 }
 
 /// Open the `BatchEnvelope` resource type with the init-struct open call.
@@ -205,11 +210,14 @@ fn open_batch_envelope_type(env: *mut ErlNifEnv) -> bool {
 /// NIF library load callback (`ErlNifEntry.load`): opens the resource type
 /// before any NIF can run. Returning nonzero fails the whole `load_nif`.
 pub(crate) extern "C" fn nif_load(
-    env: *mut ErlNifEnv,
+    at_load_env: *mut ErlNifEnv,
     _priv_data: *mut *mut c_void,
     _load_info: ErlNifTerm,
 ) -> c_int {
-    if open_batch_envelope_type(env) {
+    // [wave-8 lane-7 unblock] ops_scan's BatchView type must also open at
+    // load: this OTP refuses enif_open_resource_type_x outside load/upgrade
+    // (falsified on the real BEAM; see ops_scan.rs). Fail-closed boot.
+    if crate::ops_scan::open_batch_view_type(at_load_env) && open_batch_envelope_type(at_load_env) {
         0
     } else {
         -1
@@ -234,16 +242,17 @@ pub(crate) fn alloc_envelope(batch: Batch) -> Result<*mut c_void, Batch> {
     if obj.is_null() {
         return Err(batch);
     }
+    // Allocation spy (alloc_spy.rs): this is an instrumented crate alloc site.
+    crate::alloc_spy::record_alloc(std::mem::size_of::<BatchEnvelope>());
     // SAFETY: `obj` is a fresh size_of::<BatchEnvelope>() block from the VM's
     // resource allocator, never written before this call.
     unsafe {
-        obj.cast::<BatchEnvelope>()
-            .write(BatchEnvelope {
-                ptr,
-                len,
-                bit_width,
-                batch,
-            });
+        obj.cast::<BatchEnvelope>().write(BatchEnvelope {
+            ptr,
+            len,
+            bit_width,
+            batch,
+        });
     }
     Ok(obj)
 }
@@ -251,7 +260,7 @@ pub(crate) fn alloc_envelope(batch: Batch) -> Result<*mut c_void, Batch> {
 /// Cached metadata of a batch: `(ptr, len, bit_width)`. The pointer is
 /// `Primitive::values_ptr()` — the aligned payload the envelope decouples
 /// its readers from the `Batch` variant with.
-fn envelope_metadata_of(batch: &Batch) -> (NonNull<u8>, usize, u32) {
+pub(crate) fn envelope_metadata_of(batch: &Batch) -> (NonNull<u8>, usize, u32) {
     let raw = match batch {
         Batch::I32(arr) => arr.values_ptr(),
         Batch::I64(arr) => arr.values_ptr(),
@@ -305,7 +314,11 @@ pub(crate) fn envelope_of(
 ///
 /// Non-integer, negative, unknown, or already-consumed ids are the atom
 /// `error` (the `avec_len`/`avec_free` convention, not `avec_get`'s badarg).
-pub(crate) extern "C" fn avec_envelope_new(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNifTerm) -> ErlNifTerm {
+pub(crate) extern "C" fn avec_envelope_new(
+    env: *mut ErlNifEnv,
+    argc: c_int,
+    argv: *const ErlNifTerm,
+) -> ErlNifTerm {
     let args = unsafe { std::slice::from_raw_parts(argv, argc.max(0) as usize) };
     let mut id = 0i64;
     if argc != 1 || unsafe { enif_get_long(env, args[0], &mut id) } == 0 || id < 0 {
@@ -347,7 +360,11 @@ pub(crate) extern "C" fn avec_envelope_new(env: *mut ErlNifEnv, argc: c_int, arg
 ///
 /// Reads only the cached envelope metadata: no `Batch` variant match, no
 /// registry access. Non-resource terms are the atom `error`.
-pub(crate) extern "C" fn avec_envelope_len(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNifTerm) -> ErlNifTerm {
+pub(crate) extern "C" fn avec_envelope_len(
+    env: *mut ErlNifEnv,
+    argc: c_int,
+    argv: *const ErlNifTerm,
+) -> ErlNifTerm {
     let args = unsafe { std::slice::from_raw_parts(argv, argc.max(0) as usize) };
     if argc != 1 {
         return make_atom(env, "error");

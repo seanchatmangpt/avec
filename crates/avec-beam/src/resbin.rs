@@ -185,9 +185,8 @@ pub(crate) extern "C" fn avec_batch_binary(
         // SAFETY: obj is the live resource the binary term will pin; ptr is
         // the envelope's cached payload base, valid for `size` bytes for the
         // envelope's lifetime (which the binary term now carries).
-        let term = unsafe {
-            enif_make_resource_binary(env, obj, ptr.as_ptr().cast::<c_void>(), size)
-        };
+        let term =
+            unsafe { enif_make_resource_binary(env, obj, ptr.as_ptr().cast::<c_void>(), size) };
         // Refcount ledger: the allocation held one NIF-local reference;
         // enif_make_resource_binary added the binary term's own keep-alive.
         // Releasing the NIF-local reference leaves the binary term (and any
@@ -213,12 +212,7 @@ pub(crate) extern "C" fn avec_batch_binary(
             // keep-alive. ptr/size read above are the envelope's cached
             // projection surface.
             let term = unsafe {
-                enif_make_resource_binary(
-                    env,
-                    obj,
-                    envelope.ptr.as_ptr().cast::<c_void>(),
-                    size,
-                )
+                enif_make_resource_binary(env, obj, envelope.ptr.as_ptr().cast::<c_void>(), size)
             };
             // Deliberately NO enif_release_resource here: enif_get_resource
             // added no reference — releasing would drop a reference owned by

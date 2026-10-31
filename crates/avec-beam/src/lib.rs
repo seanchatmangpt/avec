@@ -23,9 +23,19 @@ use avec_arrow::{Primitive, PrimitiveBuilder, VERSION};
 use std::os::raw::{c_char, c_int, c_void};
 use std::sync::{Mutex, OnceLock};
 
+mod alloc_spy;
+
 mod resources;
 
 mod resbin;
+
+mod pointer;
+
+mod ops_scan;
+
+mod dtor_stats;
+
+mod ops_persist;
 
 pub mod shm;
 pub mod spsc_ring;
@@ -82,12 +92,9 @@ struct ErlNifEntry {
     funcs: *mut ErlNifFunc,
     load: Option<extern "C" fn(*mut ErlNifEnv, *mut *mut c_void, ErlNifTerm) -> c_int>,
     reload: Option<extern "C" fn(*mut ErlNifEnv, *mut *mut c_void, ErlNifTerm) -> c_int>,
-    upgrade: Option<extern "C" fn(
-        *mut ErlNifEnv,
-        *mut *mut c_void,
-        *mut *mut c_void,
-        ErlNifTerm,
-    ) -> c_int>,
+    upgrade: Option<
+        extern "C" fn(*mut ErlNifEnv, *mut *mut c_void, *mut *mut c_void, ErlNifTerm) -> c_int,
+    >,
     unload: Option<extern "C" fn(*mut ErlNifEnv, *mut c_void)>,
     /// Added in 2.1
     vm_variant: *const c_char,
@@ -104,9 +111,9 @@ use resources::ErlNifResourceTypeInit;
 /// `ErlNifBinary` (erl_nif.h:159-168): `size`, `data`, internals `ref_bin`
 /// plus two spare pointers.
 #[repr(C)]
-struct ErlNifBinary {
-    size: usize,
-    data: *mut u8,
+pub(crate) struct ErlNifBinary {
+    pub(crate) size: usize,
+    pub(crate) data: *mut u8,
     ref_bin: *mut c_void,
     __spare__: [*mut c_void; 2],
 }
@@ -127,7 +134,11 @@ extern "C" {
     // _enif_get_int64), so bind the *long names directly; ErlNifSInt64 ==
     // signed long on this ABI.
     /// `int enif_get_long(ErlNifEnv*, ERL_NIF_TERM term, long* ip);`
-    pub(crate) fn enif_get_long(env: *mut ErlNifEnv, term: ErlNifTerm, ip: *mut ErlNifSInt64) -> c_int;
+    pub(crate) fn enif_get_long(
+        env: *mut ErlNifEnv,
+        term: ErlNifTerm,
+        ip: *mut ErlNifSInt64,
+    ) -> c_int;
     /// `ERL_NIF_TERM enif_make_long(ErlNifEnv*, long);`
     pub(crate) fn enif_make_long(env: *mut ErlNifEnv, value: ErlNifSInt64) -> ErlNifTerm;
     /// `ERL_NIF_TERM enif_make_uint(ErlNifEnv*, unsigned i);`
@@ -237,7 +248,10 @@ extern "C" fn avec_new(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNifTerm
         i += 1;
     }
     let arr = builder.finish();
-    debug_assert!(arr.buffers_aligned_64(), "avec-arrow violated M-03 alignment");
+    debug_assert!(
+        arr.buffers_aligned_64(),
+        "avec-arrow violated M-03 alignment"
+    );
     let mut reg = lock_registry();
     let id = reg.len() as i64;
     reg.push(Some(Batch::I32(arr)));
@@ -252,7 +266,11 @@ extern "C" fn avec_new(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNifTerm
 /// `test/sched_crossover.escript`): same allocation work, two dispatch
 /// regimes. Correctness surface (ramp, caps, `error` cases) is shared by
 /// construction; only the thread that runs it differs.
-extern "C" fn avec_new_fast(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNifTerm) -> ErlNifTerm {
+extern "C" fn avec_new_fast(
+    env: *mut ErlNifEnv,
+    argc: c_int,
+    argv: *const ErlNifTerm,
+) -> ErlNifTerm {
     let args = unsafe { std::slice::from_raw_parts(argv, argc.max(0) as usize) };
     let (mut n, mut fill) = (0i64, 0i64);
     if argc != 2
@@ -271,7 +289,10 @@ extern "C" fn avec_new_fast(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNi
         i += 1;
     }
     let arr = builder.finish();
-    debug_assert!(arr.buffers_aligned_64(), "avec-arrow violated M-03 alignment");
+    debug_assert!(
+        arr.buffers_aligned_64(),
+        "avec-arrow violated M-03 alignment"
+    );
     let mut reg = lock_registry();
     let id = reg.len() as i64;
     reg.push(Some(Batch::I32(arr)));
@@ -285,7 +306,11 @@ extern "C" fn avec_new_fast(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNi
 /// overflow-checked here — the i32 gate needs no such check because its
 /// `fill` is already clamped to the i32 range. Same dirty-CPU class as
 /// `avec_new/2` (see NIF_FUNCS).
-extern "C" fn avec_new_i64(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNifTerm) -> ErlNifTerm {
+extern "C" fn avec_new_i64(
+    env: *mut ErlNifEnv,
+    argc: c_int,
+    argv: *const ErlNifTerm,
+) -> ErlNifTerm {
     let args = unsafe { std::slice::from_raw_parts(argv, argc.max(0) as usize) };
     let (mut n, mut fill) = (0i64, 0i64);
     if argc != 2
@@ -303,7 +328,10 @@ extern "C" fn avec_new_i64(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNif
         i += 1;
     }
     let arr = builder.finish();
-    debug_assert!(arr.buffers_aligned_64(), "avec-arrow violated M-03 alignment");
+    debug_assert!(
+        arr.buffers_aligned_64(),
+        "avec-arrow violated M-03 alignment"
+    );
     let mut reg = lock_registry();
     let id = reg.len() as i64;
     reg.push(Some(Batch::I64(arr)));
@@ -376,7 +404,11 @@ extern "C" fn avec_get(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNifTerm
 /// i64 twin of `avec_get/2`, same error split (badarg for non-integer
 /// arguments; `error` for unknown handle, out-of-range index, or an
 /// i32-registered batch).
-extern "C" fn avec_get_i64(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNifTerm) -> ErlNifTerm {
+extern "C" fn avec_get_i64(
+    env: *mut ErlNifEnv,
+    argc: c_int,
+    argv: *const ErlNifTerm,
+) -> ErlNifTerm {
     let args = unsafe { std::slice::from_raw_parts(argv, argc.max(0) as usize) };
     let (mut id, mut idx) = (0i64, 0i64);
     if argc != 2
@@ -412,7 +444,11 @@ extern "C" fn avec_free(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNifTer
 }
 
 /// `avec_version() -> Version :: binary()` — the avec-arrow version string.
-extern "C" fn avec_version(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNifTerm) -> ErlNifTerm {
+extern "C" fn avec_version(
+    env: *mut ErlNifEnv,
+    argc: c_int,
+    argv: *const ErlNifTerm,
+) -> ErlNifTerm {
     let _ = argv;
     if argc != 0 {
         return make_atom(env, "error");
@@ -427,6 +463,8 @@ extern "C" fn avec_version(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNif
     if unsafe { enif_alloc_binary(bytes.len(), &mut bin) } == 0 {
         return make_atom(env, "error");
     }
+    // Allocation spy (alloc_spy.rs): this is an instrumented crate alloc site.
+    alloc_spy::record_alloc(bytes.len());
     // SAFETY: enif_alloc_binary handed us `bytes.len()` writable bytes.
     unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), bin.data, bytes.len()) };
     unsafe { enif_make_binary(env, &mut bin) }
@@ -439,7 +477,7 @@ extern "C" fn avec_version(env: *mut ErlNifEnv, argc: c_int, argv: *const ErlNif
 /// `ERL_NIF_DIRTY_JOB_CPU_BOUND` (erl_drv_nif.h:50: `= 1`), i.e. 0x01.
 const ERL_NIF_DIRTY_JOB_CPU_BOUND: u32 = 0x01;
 
-static NIF_FUNCS: [ErlNifFunc; 12] = [
+static NIF_FUNCS: [ErlNifFunc; 21] = [
     // n >= 16384 fills build a >= 64 KiB aligned buffer; run it dirty.
     ErlNifFunc {
         name: b"avec_new\0".as_ptr() as *const c_char,
@@ -521,6 +559,81 @@ static NIF_FUNCS: [ErlNifFunc; 12] = [
         fptr: resbin::avec_batch_binary,
         flags: 0,
     },
+    // Pointer identity (pointer.rs): exposes the cached payload address
+    // (borrowing on both id and envelope paths) so the zero-copy projection
+    // can be proven aliased, not copied. Pure metadata read, normal scheduler.
+    ErlNifFunc {
+        name: b"pointer_of\0".as_ptr() as *const c_char,
+        arity: 1,
+        fptr: pointer::avec_pointer_of,
+        flags: 0,
+    },
+    // Test probe: the data pointer a binary term carries (enif_inspect_binary)
+    // — equality with pointer_of is the pointer-identity court.
+    ErlNifFunc {
+        name: b"avec_binary_data_pointer\0".as_ptr() as *const c_char,
+        arity: 1,
+        fptr: pointer::avec_binary_data_pointer,
+        flags: 0,
+    },
+    // Destructor-exactly-once observability (dtor_stats.rs): {Drops} from the
+    // global envelope-dtor counter. Pure counter read, normal scheduler.
+    ErlNifFunc {
+        name: b"avec_dtor_stats\0".as_ptr() as *const c_char,
+        arity: 0,
+        fptr: dtor_stats::avec_dtor_stats,
+        flags: 0,
+    },
+    // Allocation spy (alloc_spy.rs, FR-07 acceptance #2): {total_allocs,
+    // total_bytes} from crate-owned alloc-site counters — proves the read hot
+    // path allocates nothing. Pure counter read, normal scheduler.
+    ErlNifFunc {
+        name: b"avec_alloc_stats\0".as_ptr() as *const c_char,
+        arity: 0,
+        fptr: alloc_spy::avec_alloc_stats,
+        flags: 0,
+    },
+    // Persistence ops (ops_persist.rs, ops 3-5 of 5, wave-8 lane 8): the
+    // level-free flush builds a >= page-sized parquet file and writes it;
+    // the seal packs it (deflate + sha1) — both CPU-bound, dirty. The
+    // receipt query is a pure digest read, normal scheduler.
+    ErlNifFunc {
+        name: b"avec_flush_to_parquet\0".as_ptr() as *const c_char,
+        arity: 1,
+        fptr: ops_persist::avec_flush_to_parquet,
+        flags: ERL_NIF_DIRTY_JOB_CPU_BOUND,
+    },
+    ErlNifFunc {
+        name: b"avec_seal_to_packfile\0".as_ptr() as *const c_char,
+        arity: 1,
+        fptr: ops_persist::avec_seal_to_packfile,
+        flags: ERL_NIF_DIRTY_JOB_CPU_BOUND,
+    },
+    ErlNifFunc {
+        name: b"avec_receipt_query\0".as_ptr() as *const c_char,
+        arity: 1,
+        fptr: ops_persist::avec_receipt_query,
+        flags: 0,
+    },
+    // Open/attach read-view (ops_scan.rs, ops 1-2 of 5, wave-8 lane 7):
+    // attach to an existing batch — 0 bytes copied, the view keeps the
+    // parent payload alive. One small counted resource alloc; O(1), normal
+    // scheduler.
+    ErlNifFunc {
+        name: b"avec_open\0".as_ptr() as *const c_char,
+        arity: 1,
+        fptr: ops_scan::avec_open,
+        flags: 0,
+    },
+    // Zero-copy scan (ops_scan.rs): resource-binary slice view over the
+    // parent payload's [start, start+len) bytes — no new buffer, 0 counted
+    // allocs, fail-closed bounds. Normal scheduler.
+    ErlNifFunc {
+        name: b"avec_scan\0".as_ptr() as *const c_char,
+        arity: 3,
+        fptr: ops_scan::avec_scan,
+        flags: 0,
+    },
 ];
 
 /// OTP 26+ no-argument entry point. The BEAM resolves this symbol when
@@ -535,7 +648,7 @@ static NIF_ENTRY: ErlNifEntry = ErlNifEntry {
     major: ERL_NIF_MAJOR_VERSION,
     minor: ERL_NIF_MINOR_VERSION,
     name: b"avec_beam\0".as_ptr() as *const c_char,
-    num_of_funcs: 12,
+    num_of_funcs: 21,
     funcs: NIF_FUNCS.as_ptr() as *mut ErlNifFunc,
     load: Some(resources::nif_load),
     reload: None,

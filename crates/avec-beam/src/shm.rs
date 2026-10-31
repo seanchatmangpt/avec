@@ -23,6 +23,7 @@
 //!   slot write; `head.store(Release)` publishes the slot bytes.
 //! * consumer: `head.load(Acquire)` acquires the slot bytes; slot read;
 //!   `tail.store(Release)` declares the slot reusable.
+//!
 //! Each counter has exactly one writer, so release/acquire pairs suffice;
 //! counters are monotonic u64 and slot index is `counter & (NUM_SLOTS-1)`
 //! (NUM_SLOTS is a power of two, so the mask stays correct across wrap).
@@ -41,6 +42,7 @@
 //!   duplicated CLOEXEC-free with `fcntl(F_DUPFD)` before spawn);
 //!   see the `cli` module's `serve-*` modes driving the producer/consumer
 //!   children).
+//!
 //! `ShmRing::open` (name reopen) remains in the API because the contract
 //! names `shm_open`, but on this Darwin it is only dependable BEFORE
 //! `ftruncate`; nothing in the tests or helpers depends on the unreliable
@@ -101,7 +103,7 @@ const HEADER_VERSION_OFF: usize = 8;
 const HEADER_NUM_SLOTS_OFF: usize = 16;
 const HEADER_SLOT_SIZE_OFF: usize = 24;
 
-const _: () = assert!(HEAD_OFF % 8 == 0 && TAIL_OFF % 8 == 0);
+const _: () = assert!(HEAD_OFF.is_multiple_of(8) && TAIL_OFF.is_multiple_of(8));
 const _: () = assert!(TAIL_OFF - HEAD_OFF == CACHE_LINE && CTRL_SIZE - TAIL_OFF == CACHE_LINE);
 const _: () = assert!(CTRL_SIZE + NUM_SLOTS * SLOT_SIZE == MAP_SIZE);
 
@@ -163,7 +165,9 @@ pub fn validate_name(name: &str) -> io::Result<()> {
     let ok = name.len() > 1
         && name.starts_with('/')
         && !name[1..].contains('/')
-        && name[1..].bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_');
+        && name[1..]
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_');
     if ok {
         Ok(())
     } else {
@@ -203,7 +207,12 @@ impl ShmRing {
             return Err(e);
         }
         let ptr = map_fd(fd)?;
-        let ring = ShmRing { ptr, len: MAP_SIZE, fd, name: Some(name.to_string()) };
+        let ring = ShmRing {
+            ptr,
+            len: MAP_SIZE,
+            fd,
+            name: Some(name.to_string()),
+        };
         // Header init; counters are 0 from ftruncate's zero-fill.
         unsafe {
             ptr_u64(ring.ptr, HEADER_MAGIC_OFF).store(MAGIC, Ordering::Relaxed);
@@ -216,9 +225,23 @@ impl ShmRing {
 
     /// Wrap an INHERITED fd (an open door into an already-sized segment,
     /// handed over by a parent via exec) into a handle: map + verify header.
+    ///
+    /// # Safety
+    ///
+    /// `fd` must be a valid, open file descriptor referring to an existing
+    /// avec-beam SHM segment already sized to [`MAP_SIZE`] bytes (as
+    /// inherited across exec from [`ShmRing::create`]); `fd` must not be
+    /// concurrently closed by another thread for the lifetime of the
+    /// returned handle. Header validity itself is re-checked (and a bad
+    /// header refused) inside this constructor.
     pub unsafe fn from_fd(fd: c_int) -> io::Result<ShmRing> {
         let ptr = map_fd(fd)?;
-        let ring = ShmRing { ptr, len: MAP_SIZE, fd, name: None };
+        let ring = ShmRing {
+            ptr,
+            len: MAP_SIZE,
+            fd,
+            name: None,
+        };
         ring.verify_header()?;
         Ok(ring)
     }
@@ -288,7 +311,11 @@ impl ShmRing {
         if src.len() != SLOT_SIZE {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                format!("try_send needs exactly SLOT_SIZE={} bytes, got {}", SLOT_SIZE, src.len()),
+                format!(
+                    "try_send needs exactly SLOT_SIZE={} bytes, got {}",
+                    SLOT_SIZE,
+                    src.len()
+                ),
             ));
         }
         let head = unsafe { ptr_u64(self.ptr, HEAD_OFF) };
@@ -312,7 +339,11 @@ impl ShmRing {
         if dst.len() < SLOT_SIZE {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                format!("try_recv needs dst >= SLOT_SIZE={}, got {}", SLOT_SIZE, dst.len()),
+                format!(
+                    "try_recv needs dst >= SLOT_SIZE={}, got {}",
+                    SLOT_SIZE,
+                    dst.len()
+                ),
             ));
         }
         let head = unsafe { ptr_u64(self.ptr, HEAD_OFF) };
@@ -340,7 +371,7 @@ impl ShmRing {
                 Err(e) => return Err(e),
             }
             spins = spins.wrapping_add(1);
-            if spins % SPIN_CHECK == 0 && Instant::now() >= deadline {
+            if spins.is_multiple_of(SPIN_CHECK) && Instant::now() >= deadline {
                 return Err(io::Error::new(io::ErrorKind::TimedOut, "send deadline"));
             }
             std::hint::spin_loop();
@@ -357,7 +388,7 @@ impl ShmRing {
                 Err(e) => return Err(e),
             }
             spins = spins.wrapping_add(1);
-            if spins % SPIN_CHECK == 0 && Instant::now() >= deadline {
+            if spins.is_multiple_of(SPIN_CHECK) && Instant::now() >= deadline {
                 return Err(io::Error::new(io::ErrorKind::TimedOut, "recv deadline"));
             }
             std::hint::spin_loop();
@@ -386,7 +417,16 @@ impl Drop for ShmRing {
 }
 
 fn map_fd(fd: c_int) -> io::Result<*mut u8> {
-    let p = unsafe { mmap(std::ptr::null_mut(), MAP_SIZE, PROT_READ_WRITE, MAP_SHARED, fd, 0) };
+    let p = unsafe {
+        mmap(
+            std::ptr::null_mut(),
+            MAP_SIZE,
+            PROT_READ_WRITE,
+            MAP_SHARED,
+            fd,
+            0,
+        )
+    };
     // MAP_FAILED is (void*)-1; that is the only mmap failure sentinel.
     if p as isize == -1 {
         Err(io::Error::last_os_error())
@@ -520,7 +560,9 @@ mod tests {
         for _ in 0..NUM_SLOTS {
             ring.try_send(&slot).expect("fill ring");
         }
-        let e = ring.try_send(&slot).expect_err("9th send must be WouldBlock");
+        let e = ring
+            .try_send(&slot)
+            .expect_err("9th send must be WouldBlock");
         assert_eq!(e.kind(), io::ErrorKind::WouldBlock);
         let mut out = vec![0u8; SLOT_SIZE];
         ring.try_recv(&mut out).expect("drain one");
@@ -529,7 +571,10 @@ mod tests {
             ring.try_recv(&mut out).expect("drain");
             assert!(out.iter().all(|b| *b == 0xAB));
         }
-        assert_eq!(ring.try_recv(&mut out).unwrap_err().kind(), io::ErrorKind::WouldBlock);
+        assert_eq!(
+            ring.try_recv(&mut out).unwrap_err().kind(),
+            io::ErrorKind::WouldBlock
+        );
         assert!(ShmRing::unlink(&name).is_ok());
     }
 
@@ -538,7 +583,9 @@ mod tests {
         let name = unique_name("hdr");
         let ring = ShmRing::create(&name).expect("create");
         unsafe { ptr_u64(ring.ptr, HEADER_MAGIC_OFF) }.store(0xdead, Ordering::Relaxed);
-        let err = ring.try_clone().expect_err("corrupt magic must fail handle init");
+        let err = ring
+            .try_clone()
+            .expect_err("corrupt magic must fail handle init");
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
         assert!(ShmRing::unlink(&name).is_ok());
     }
@@ -547,9 +594,13 @@ mod tests {
     fn payload_too_large_and_too_small_rejected() {
         let name = unique_name("size");
         let ring = ShmRing::create(&name).expect("create");
-        let e = ring.try_send(&[0u8; 8]).expect_err("short slot must be rejected");
+        let e = ring
+            .try_send(&[0u8; 8])
+            .expect_err("short slot must be rejected");
         assert_eq!(e.kind(), io::ErrorKind::InvalidInput);
-        let e = ring.try_recv(&mut [0u8; 8]).expect_err("short dst must be rejected");
+        let e = ring
+            .try_recv(&mut [0u8; 8])
+            .expect_err("short dst must be rejected");
         assert_eq!(e.kind(), io::ErrorKind::InvalidInput);
         assert!(ShmRing::unlink(&name).is_ok());
     }
@@ -571,7 +622,8 @@ mod tests {
                 let t0 = Instant::now();
                 for seq in 0..N {
                     fill_slot(&mut slot, seq);
-                    ring.send_blocking(&slot, deadline()).expect("producer send");
+                    ring.send_blocking(&slot, deadline())
+                        .expect("producer send");
                 }
                 t0.elapsed()
             })
@@ -580,7 +632,9 @@ mod tests {
         let mut out = vec![0u8; SLOT_SIZE];
         let t0 = Instant::now();
         for seq in 0..N {
-            consumer.recv_blocking(&mut out, deadline()).expect("consumer recv");
+            consumer
+                .recv_blocking(&mut out, deadline())
+                .expect("consumer recv");
             verify_slot(&out, seq).unwrap_or_else(|(e, f, off)| {
                 panic!("corrupt slot {seq}: got {e} at {off} (seq field {f})")
             });
@@ -592,7 +646,9 @@ mod tests {
         let gib = bytes as f64 / 1024.0 / 1024.0 / 1024.0;
         println!(
             "THROUGHPUT cross-thread: msgs={} slot={}B total={:.1}MiB",
-            N, SLOT_SIZE, bytes as f64 / 1024.0 / 1024.0
+            N,
+            SLOT_SIZE,
+            bytes as f64 / 1024.0 / 1024.0
         );
         println!(
             "THROUGHPUT producer: sec={:.4} msgs/s={:.0} gibps={:.2}",
@@ -629,7 +685,9 @@ mod tests {
             let mut inb = vec![0u8; SLOT_SIZE];
             let mut out = vec![0u8; SLOT_SIZE];
             for seq in 0..(WARMUP + N) {
-                req_b.recv_blocking(&mut inb, deadline()).expect("pong recv");
+                req_b
+                    .recv_blocking(&mut inb, deadline())
+                    .expect("pong recv");
                 verify_slot(&inb, seq).expect("pong verify");
                 fill_slot(&mut out, seq);
                 rsp_b.send_blocking(&out, deadline()).expect("pong send");
@@ -643,7 +701,9 @@ mod tests {
             fill_slot(&mut out, seq);
             let t0 = Instant::now();
             req_a.send_blocking(&out, deadline()).expect("ping send");
-            rsp_a.recv_blocking(&mut inb, deadline()).expect("ping recv");
+            rsp_a
+                .recv_blocking(&mut inb, deadline())
+                .expect("ping recv");
             let rtt = t0.elapsed();
             verify_slot(&inb, seq).expect("ping verify echo");
             if seq >= WARMUP {
@@ -731,12 +791,18 @@ mod cli {
             [cmd, fd, n] if cmd == "child-consume" => {
                 child_consume(parse(fd) as c_int, parse(n), deadline)
             }
-            [cmd, req_fd, rsp_fd, n] if cmd == "child-ping" => {
-                child_ping(parse(req_fd) as c_int, parse(rsp_fd) as c_int, parse(n), deadline)
-            }
-            [cmd, req_fd, rsp_fd, n] if cmd == "child-pong" => {
-                child_pong(parse(req_fd) as c_int, parse(rsp_fd) as c_int, parse(n), deadline)
-            }
+            [cmd, req_fd, rsp_fd, n] if cmd == "child-ping" => child_ping(
+                parse(req_fd) as c_int,
+                parse(rsp_fd) as c_int,
+                parse(n),
+                deadline,
+            ),
+            [cmd, req_fd, rsp_fd, n] if cmd == "child-pong" => child_pong(
+                parse(req_fd) as c_int,
+                parse(rsp_fd) as c_int,
+                parse(n),
+                deadline,
+            ),
             _ => usage(),
         }
     }
@@ -756,7 +822,9 @@ mod cli {
         extern "C" {
             fn fcntl(fd: c_int, cmd: c_int, arg: c_int) -> c_int;
         }
-        let h = unsafe { fcntl(fd, 0 /* F_DUPFD */, 0) };
+        let h = unsafe {
+            fcntl(fd, 0 /* F_DUPFD */, 0)
+        };
         if h < 0 {
             return Err(io::Error::last_os_error());
         }
@@ -796,7 +864,7 @@ mod cli {
         if !status.success() {
             eprintln!("{label}: child exited {status}");
             eprintln!("{label}: child output:\n{text}");
-            return Err(io::Error::new(io::ErrorKind::Other, format!("{label} child failed")));
+            return Err(io::Error::other(format!("{label} child failed")));
         }
         print!("{text}");
         Ok(())

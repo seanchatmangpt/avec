@@ -37,7 +37,12 @@ impl<T: Copy> Default for SpscRing<T> {
 
 impl<T: Copy> SpscRing<T> {
     pub const fn new() -> Self {
-        const { assert!(RING_CAPACITY.is_power_of_two(), "Capacity must be power of two") };
+        const {
+            assert!(
+                RING_CAPACITY.is_power_of_two(),
+                "Capacity must be power of two"
+            )
+        };
         Self {
             head: CachePadded {
                 value: AtomicU64::new(0),
@@ -70,7 +75,9 @@ impl<T: Copy> SpscRing<T> {
         }
 
         // Advance monotonic counter; wraps naturally at u64::MAX without branch
-        self.head.value.store(current_head.wrapping_add(1), Ordering::Release);
+        self.head
+            .value
+            .store(current_head.wrapping_add(1), Ordering::Release);
         true
     }
 
@@ -86,7 +93,9 @@ impl<T: Copy> SpscRing<T> {
         let slot = (current_tail & RING_MASK) as usize;
         let item = unsafe { (*self.slots[slot].get()).assume_init() };
 
-        self.tail.value.store(current_tail.wrapping_add(1), Ordering::Release);
+        self.tail
+            .value
+            .store(current_tail.wrapping_add(1), Ordering::Release);
         Some(item)
     }
 
