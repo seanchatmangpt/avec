@@ -1,0 +1,167 @@
+# ctq-registry
+# Machine-readable conversion of the v26.11.1 DFLSS charter.
+# Source of truth: docs/jira/v26.11.1/dflss/00-dflss-charter-source.md
+#   - Section 3 (VOC -> CTQ flowdown table) -> rows ctq-01..ctq-06
+#   - Section 4 Phase 5 (five terminal gates) -> GATE-1..GATE-5 below
+# Standing law: every target carries standing TARGET (directional design
+# nominal to be characterized in the Measure/Analyze phases). No entry in
+# this registry is MEASURED. Graduation TARGET -> MEASURED happens only
+# through the anti-vacuity Divan membrane (charter Section 4 Phase 2) and is
+# recorded in a benchmark receipt; this file is never edited to claim a
+# measurement.
+
+meta:
+  project: v26.11.1 Sovereign Compute Substrate
+  methodology: DMADV
+  charter_standing: CHARTERED / IN-FLIGHT
+  source_of_truth: docs/jira/v26.11.1/dflss/00-dflss-charter-source.md
+  source_sections: [section-3-voc-ctq-table, section-4-phase-5-five-gates]
+  generated: "2026-11-01"
+  canonical_seed: "0xBF58_476D_1CE4_E5B9"
+  # canonical_seed is the SplitMix64 multiplier pinned by charter Sections 2
+  # and 4 Phase 2. Digit drift away from the canonical constant in any
+  # artifact is the known corruption class -> REFUSED (charter Section 6).
+  standing_vocabulary: [ALIVE, PARTIAL, BLOCKED, REFUSED, UNSUPPORTED, UNVERIFIED]
+  instrument_status_semantics:
+    LANDING: cited command verified to exist on disk this session (ls/test/run)
+    PENDING-LAND: no runnable command on disk; planned_command is intent only
+
+gates:
+  - id: GATE-1
+    name: Workspace Purity
+    phase_ref: charter section 4, Phase 5, gate 1 of 5 (sequential)
+  - id: GATE-2
+    name: Binary/Symbol Purity
+    phase_ref: charter section 4, Phase 5, gate 2 of 5 (sequential)
+  - id: GATE-3
+    name: 1M-Row Sovereign Ledger Proof
+    phase_ref: charter section 4, Phase 5, gate 3 of 5 (sequential)
+  - id: GATE-4
+    name: 640-Bit Spoliation & Liability Metering
+    phase_ref: charter section 4, Phase 5, gate 4 of 5 (sequential)
+  - id: GATE-5
+    name: Bare-Metal Silicon Fit
+    phase_ref: charter section 4, Phase 5, gate 5 of 5 (sequential)
+
+ctqs:
+  - id: ctq-01
+    voc: Wire-Speed Ingress Security
+    requirement: Drop malformed frames at the DMA boundary without CPU stall
+    metric: Frame admission latency & throughput
+    lanes: [A04, A14]
+    target: "~4.0 ns / frame target; flat p99 tail distribution"
+    instrument:
+      name: Divan per-iteration latency distribution over cgap_admit_frame
+      planned_command: cargo bench -p bench --bench ctq01_admit_frame -- --color never
+      pending_note: >-
+        no bench target named ctq01_admit_frame exists on disk (crates/bench/
+        benches/ contains only v26_10_31.rs; ls exit 0 this session); the FFI
+        symbol exists at crates/cgap-ffi/src/sovereign.rs (grep exit 0) and
+        the Divan substrate is landed at crates/bench (divan = "0.1.21")
+    instrument_status: PENDING-LAND
+    gate_ref: GATE-3
+    gate_rationale: Gate-3 exercises the frame ingress path at ledger scale
+    standing: TARGET
+
+  - id: ctq-02
+    voc: Garbage-Collection Immunity
+    requirement: Execute hot-path analytics and decoding with zero memory churn
+    metric: Dynamic heap allocations on hot path
+    lanes: [A01, A02]
+    target: "0 Bytes allocated on fast path"
+    instrument:
+      name: Divan global allocation-counting column + symbol table (nm)
+      planned_command: cargo bench -p bench --bench ctq02_alloc -- --color never
+      pending_note: >-
+        no A01/A02 allocation-counting bench exists; crates/bench/benches/
+        contains only v26_10_31.rs (ls exit 0 this session). nm is present
+        (command -v nm exit 0) but no bench harness invokes it yet
+    instrument_status: PENDING-LAND
+    gate_ref: none
+    gate_rationale: no terminal gate measures allocation counts (Divan membrane is Phase 2, not a Verify gate)
+    standing: TARGET
+
+  - id: ctq-03
+    voc: Line-Speed Deductive Reasoning
+    requirement: Evaluate ontological rules and variable bindings at L1/L2 cache speed
+    metric: 24-byte statement scan & unification throughput
+    lanes: [A06, A11, A12, A13]
+    target: "> 1.0 GB/s sequential scan; sub-microsecond pair unify"
+    instrument:
+      name: Divan throughput table across const-generic sizes (N in [64, 1M])
+      planned_command: cargo bench -p bench --bench ctq03_bn3_scan -- --color never
+      pending_note: >-
+        no BN3 scan/unify bench exists on disk (grep -rln unify over
+        crates/bench exit 1 this session); lane subjects landed at
+        crates/cgap-bn3 and crates/cgap-bosym per docs/jira/v26.11.1/lanes/
+        A11-bn3-arena.md, A12-simd-unifier.md, A13-bn3-builtins.md
+    instrument_status: PENDING-LAND
+    gate_ref: GATE-3
+    gate_rationale: Gate-3 scans the 1M-row sovereign ledger through the BN3 statement path
+    standing: TARGET
+
+  - id: ctq-04
+    voc: Tamper-Evident Governance
+    requirement: Detect license spoliation and meter liability with zero runtime drag
+    metric: 640-bit attestation verify & FFI boundary overhead
+    lanes: [A17, A19]
+    target: "Sub-microsecond 640-bit verify; minimal extern \"C\" round-trip delta"
+    instrument:
+      name: Divan latency table + exhaustive 640-bit single-bit-flip court
+      planned_command: cargo bench -p bench --bench ctq04_p28_verify -- --color never
+      pending_note: >-
+        subject exists at crates/cgap-p28/src/attestation.rs (ls exit 0 this
+        session); no Divan latency bench and no exhaustive single-bit-flip
+        court command exists on disk yet
+    instrument_status: PENDING-LAND
+    gate_ref: GATE-4
+    gate_rationale: Gate-4 name matches the charter CTQ row (640-bit spoliation metering)
+    standing: TARGET
+
+  - id: ctq-05
+    voc: Edge & Bare-Metal Portability
+    requirement: Execute in place on embedded 32-bit silicon without an OS
+    metric: Static binary footprint & RAM envelope on riscv32imc
+    lanes: []
+    target: "< 64 KB Flash image; < 32 KB static SRAM; 0 .rodata domain strings"
+    instrument:
+      name: llvm-size over 32-bit ELF + zero_string_gate.py
+      command: python3 scripts/zero_string_gate.py --self-check
+      planned_command: >-
+        cargo build --release --target riscv32imc-unknown-none-elf <crate> &&
+        xcrun llvm-size -t <elf> — no riscv size script landed yet
+    instrument_status: LANDING
+    gate_ref: GATE-5
+    gate_rationale: Gate-5 name matches the charter CTQ row (Bare-Metal Silicon Fit)
+    notes: >-
+      charter row names no lane, so lanes is empty. The Phase-1 32-bit
+      blockers named by the charter live in
+      crates/cgap-arrow/src/{chase_lev,c_abi_nested}.rs. The 0-.rodata-strings
+      clause is additionally verified by GATE-2. Toolchain witnessed this
+      session: xcrun -f llvm-size exit 0; rustup target list --installed
+      contains riscv32imc-unknown-none-elf (grep exit 0);
+      zero_string_gate.py --self-check ran PASS exit 0.
+    standing: TARGET
+
+  - id: ctq-06
+    voc: Manufacturing Efficiency
+    requirement: Reduce token burn across successive autonomous build waves
+    metric: Machinery Share & Projection Coverage
+    lanes: []
+    target: "Monotonic upward trend in graph-projected bytes & retired hops"
+    instrument:
+      name: projection_coverage.py + workflow journal hop ratio
+      planned_command: >-
+        python3 scripts/projection_coverage.py --format json &&
+        python3 scripts/hop_ratio.py docs/jira/v26.11.1/waves/ — neither
+        script exists on disk; the journal of record is the live workflow
+        journal.jsonl (no waves/journal.jsonl committed; ls exit 1)
+      pending_note: >-
+        scripts/projection_coverage.py does not exist (ls exit 1 this
+        session). C10/C11 in the charter row are composition-catalog orders
+        (retirement compounding; one admission kernel), not A-lanes, so
+        lanes is empty and the composition refs are recorded here.
+    instrument_status: PENDING-LAND
+    gate_ref: none
+    gate_rationale: no terminal Verify gate measures machinery share or projection coverage
+    standing: TARGET

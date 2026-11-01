@@ -2056,9 +2056,14 @@ fn a04_identity_court() {
         "[SKIP] tier=arrow reason=disk-tier view owned by lane A17; \
          2-tier mode per A04 §10"
     );
+    // tier=parquet [SKIP] RETIRED (seal lane, GATE-3 repair): the 1M-row
+    // corpus now crosses the real disk tier — committed through the frozen
+    // cgap_commit_parquet signature and verified back through the real
+    // post-commit read-back check — in `a19_seal_1m_ledger_court` below.
     println!(
-        "[SKIP] tier=parquet reason=disk-tier page view owned by lane A19; \
-         2-tier mode per A04 §10"
+        "tier=parquet: retired [SKIP] — 1M-row disk persistence exercised \
+         by a19_seal_1m_ledger_court (frozen cgap_commit_parquet / \
+         cgap_verify_p28 + footer read-back + decode)"
     );
 
     let sweep_region = leak_region::<A04_REGION_BYTES>();
@@ -2115,3 +2120,585 @@ fn a04_identity_court() {
     );
     assert!(report.is_zero(), "1M-row identity sweep allocated: {report:?}");
 }
+
+// ===========================================================================
+// SEAL (GATE-3) — one-million-row sovereign ledger harness (seal lane).
+//
+// The coordinates the gate named (gate evidence: exit=3 standing=PARTIAL):
+//   1. tests/court_verdict.rs [SKIP] tier=parquet (a04_identity_court) —
+//      parquet persistence of the 1M corpus unexercised. RETIRED above:
+//      the corpus is committed through the frozen cgap_commit_parquet
+//      signature to a real file and verified back from disk here.
+//   2. crates/cgap-ffi/src/sovereign.rs CgapCommitParquetFn (:183) /
+//      CgapVerifyP28Fn (:194) — invoked by no test in the repo. Both are
+//      invoked THROUGH the frozen aliases below: coercing the court's
+//      bodies to the aliases is the compile-time signature pin, and the
+//      calls go through the fn pointers, never the fn items directly.
+//
+// Chicago discipline: every collaborator is the real owning-lane kernel —
+// cgap_gate::penstock::ingress (A14 admission provenance over all 1M rows),
+// cgap_blake3 (per-row digests + the P28 digest predicate), cgap-parquet
+// StaticPageWriter/FooterSealer/verify_seal/rle_decode (A02+A03 persistence
+// + post-commit read-back + decode), cgap-p28 attestation predicates (A17),
+// cgap-crypto keyed receipt sealing under a real Lease (A16). No mocks;
+// final state asserted: file bytes on disk, verify verdicts, decoded lane
+// values, receipt wire round trip.
+//
+// Anti-vacuity, per leg (each names the mutation that flips it):
+// - generator drift: corpus() asserts the pinned §5.1 sha256 receipt before
+//   any leg runs (corpus_determinism_receipt's committed SHIM class), so a
+//   generator mutation flips this court before its own asserts.
+// - commit/read-back: one flipped BODY byte in a real file copy flips
+//   verify_seal to ChecksumMismatch{region: Body}; one flipped FOOTER/META
+//   byte flips it to ChecksumMismatch{region: Footer}; a wrong content
+//   handle flips it to DigestMismatch. A commit that wrote nothing, a
+//   partial flush, or a mis-addressed block cannot pass.
+// - lane identity: rle_decode over the committed page bodies, read back
+//   from DISK, must reproduce the derived lanes exactly for the first AND
+//   last row groups; any encode/decode drift or offset shift flips it.
+// - determinism: two commits of the same batch through the frozen ABI
+//   produce byte-identical files (any nondeterminism flips).
+// - receipt: a flipped block-digest byte in the delta flips
+//   verify_unsealed to DigestMismatch.
+// - verify_p28: every A17 §5 field law (magic, version, lineage zero/two
+//   bits, reserved bit, ceiling, ROOT-with-receipt, DERIVATIVE-no-receipt)
+//   plus truncated (79 B) and extended (81 B) records flip to
+//   CGAP_ERR_P28_SPOLIATION (A17 §4.2: a non-80-byte input collapses to
+//   the §5 spoliation class).
+// ===========================================================================
+
+mod a19_seal {
+    use super::{
+        blake3_hash, corpus, encode_row, ingress, CgapFrameHeader, CGAP_ERR_INVALID_MAGIC,
+        CGAP_ERR_P28_SPOLIATION, CGAP_OK, CORPUS_ROWS, FLAG_BN3, FRAME_HEADER_LEN, FRAME_MAGIC,
+        FRAME_VERSION, P28LicenseAttestation, ROW_ENCODING_BYTES, SAFE_HARBOR_CEILING_CENTS_MAX,
+    };
+    use cgap_crypto::chatman::{
+        admissions_root, seal_unsealed, verify_unsealed, DeltaS, UnsealedReceipt, VerifyError,
+    };
+    use cgap_crypto::lease::Lease;
+    use cgap_ffi::sovereign::{CgapCommitParquetFn, CgapVerifyP28Fn};
+    use cgap_p28::attestation::{
+        P28LicenseAttestation as SealAttestation, ATTESTATION_VERSION, FLAG_DERIVATIVE,
+        FLAG_ROOT, LICENSE_MAGIC as ATTEST_MAGIC, SAFE_HARBOR_CEILING_MAX_CENTS,
+    };
+    use cgap_parquet::footer::{block_digest, verify_seal, CorruptRegion, SealError};
+    use cgap_parquet::mmap_writer::{FileSink, SlabView, StaticPageWriter};
+    use cgap_parquet::rle::{rle_decode, rle_encode};
+    use std::ffi::CStr;
+
+    /// Row groups in the sealed block: 8 × 125,000 = 1,000,000 rows
+    /// (MAX_ROW_GROUPS is 64 — 8 is well inside the writer's capacity).
+    const SEAL_ROW_GROUPS: usize = 8;
+    const SEAL_ROWS_PER_GROUP: u32 = (CORPUS_ROWS / SEAL_ROW_GROUPS as u64) as u32;
+    /// Tier B buffer for the 1M-row block (body ≈ 1.0 MB + footer ≈ 150 B).
+    const SEAL_BLOCK_CAP: usize = 4 * 1024 * 1024;
+
+    /// The committed lane for one corpus row: a deterministic fold of the
+    /// row's content (notional ^ instrument_id, byte 3), kept inside the
+    /// hybrid packer's kernel width (bits = 8 → values < 256) so the
+    /// commit → read-back is lossless for this batch.
+    fn lane_of(row: &super::SettlementRow) -> u32 {
+        (((row.notional ^ row.instrument_id) >> 3) & 0xFF) as u32
+    }
+
+    /// The ROOT P28 attestation sealing the ledger, built through BOTH
+    /// pinned A17 mirrors — cgap_core::frame (the A04 frame view) and
+    /// cgap_p28::attestation (the A17 canonical record). The parity leg
+    /// below asserts the two encodings are byte-identical, so the seal
+    /// covers exactly one record, whichever mirror a consumer reads.
+    fn seal_attestation() -> [u8; 80] {
+        let origin = blake3_hash(b"cgap seal lane origin authority v1");
+        let core_att = P28LicenseAttestation {
+            license_magic: super::LICENSE_MAGIC,
+            version: 1,
+            attestation_flags: super::LICENSE_FLAG_ROOT,
+            safe_harbor_ceiling_cents: SAFE_HARBOR_CEILING_CENTS_MAX,
+            origin_authority_digest: origin,
+            upstream_receipt: [0u8; 32], // ROOT: zero receipt (A17 §2.2)
+        };
+        let seal_att = SealAttestation {
+            license_magic: ATTEST_MAGIC,
+            version: ATTESTATION_VERSION,
+            attestation_flags: FLAG_ROOT,
+            safe_harbor_ceiling_cents: SAFE_HARBOR_CEILING_MAX_CENTS,
+            origin_authority_digest: origin,
+            upstream_receipt: [0u8; 32],
+        };
+        // Mirror parity + the frozen pin constants agree across crates.
+        assert_eq!(super::LICENSE_MAGIC, ATTEST_MAGIC, "P28S magic drift");
+        assert_eq!(FLAG_ROOT, super::LICENSE_FLAG_ROOT, "ROOT bit drift");
+        let mut wire = [0u8; 80];
+        core_att.encode_into(&mut wire).expect("80 B out buffer");
+        assert_eq!(wire, seal_att.to_bytes(), "A17 mirror encodings diverged");
+        wire
+    }
+
+    /// The court's `cgap_commit_parquet` body: the A02+A03 owner kernels
+    /// (StaticPageWriter → FooterSealer → Tier H FileSink) composed behind
+    /// the FROZEN signature. Host-only allocation (A19 §2): one reusable
+    /// u32 chunk buffer + the block buffer + the sealer's metadata Vec.
+    /// Null pointer / empty batch → the membrane's INVALID_MAGIC overload
+    /// (the penstock row-1 class: "not a committable batch").
+    unsafe extern "C" fn seal_commit_parquet(
+        lanes: *const i32,
+        lane_count: usize,
+        path: *const core::ffi::c_char,
+    ) -> u32 {
+        if lanes.is_null() || path.is_null() || lane_count == 0 {
+            return CGAP_ERR_INVALID_MAGIC;
+        }
+        let path = CStr::from_ptr(path)
+            .to_str()
+            .expect("NUL-terminated UTF-8 path (A19 §2 caller contract)");
+        let file = std::fs::File::create(path).expect("create ledger file");
+        let mut buf = vec![0u8; SEAL_BLOCK_CAP];
+        let mut writer = StaticPageWriter::new(&mut buf);
+        let mut chunk: Vec<u32> = Vec::with_capacity(SEAL_ROWS_PER_GROUP as usize);
+        let batch = core::slice::from_raw_parts(lanes, lane_count);
+        let mut start = 0usize;
+        while start < lane_count {
+            let end = (start + SEAL_ROWS_PER_GROUP as usize).min(lane_count);
+            chunk.clear();
+            chunk.extend(batch[start..end].iter().map(|&v| (v as u32) & 0xFF));
+            writer
+                .write_slab(&SlabView {
+                    lanes: &[chunk.as_slice()],
+                    rows: (end - start) as u32,
+                    bits: 8,
+                })
+                .expect("seal block buffer sized for 8 row groups of 1M rows");
+            start = end;
+        }
+        let sealed = writer
+            .seal(Some(&seal_attestation()))
+            .expect("seal the 1M-row ledger block");
+        let scratch = vec![0u8; SEAL_BLOCK_CAP].into_boxed_slice();
+        sealed
+            .flush_to(FileSink::new(file, scratch))
+            .expect("Tier H file commit of the sealed block");
+        CGAP_OK
+    }
+
+    /// The court's `cgap_verify_p28` body: the A17 owner kernel's two
+    /// predicates behind the FROZEN signature — parse (`from_bytes`, §4.2:
+    /// any non-80-byte input is the §5 spoliation class) + license
+    /// predicate (`validate_intrinsic`, §5.2-§5.5/§5.8) — then the digest
+    /// predicate (real BLAKE3 over the evidence, first word LE). Read-only,
+    /// allocation-free (A19 §2).
+    unsafe extern "C" fn seal_verify_p28(
+        evidence: *const u8,
+        len: usize,
+        out_digest: *mut u64,
+    ) -> u32 {
+        if evidence.is_null() {
+            return CGAP_ERR_INVALID_MAGIC;
+        }
+        let ev = core::slice::from_raw_parts(evidence, len);
+        let Ok(record) = SealAttestation::from_bytes(ev) else {
+            return CGAP_ERR_P28_SPOLIATION;
+        };
+        if record.validate_intrinsic().is_err() {
+            return CGAP_ERR_P28_SPOLIATION;
+        }
+        if !out_digest.is_null() {
+            let digest = blake3_hash(ev);
+            *out_digest = u64::from_le_bytes(digest[0..8].try_into().expect("8 of 32 B"));
+        }
+        CGAP_OK
+    }
+
+    /// THE SEAL COURT: the 1M-row sovereign ledger, end to end —
+    /// admit (A14) → lanes (pinned corpus) → commit (frozen
+    /// cgap_commit_parquet ABI) → disk read-back + verify_seal + decode →
+    /// keyed receipt (cgap-crypto) → verify (frozen cgap_verify_p28 ABI).
+    #[test]
+    fn a19_seal_1m_ledger_court() {
+        // -- 1. Deterministic seeded corpus (pinned receipt asserted inside
+        //       corpus() before any leg of this court runs). -----------------
+        let rows = corpus();
+        assert_eq!(rows.len() as u64, CORPUS_ROWS);
+
+        // -- 2. Committed lanes: the deterministic content fold over all 1M
+        //       rows, inside the packer's kernel width. The histogram floor
+        //       binds the fold to corpus content (a constant fold flips). ---
+        let lanes: Vec<i32> = rows.iter().map(|r| lane_of(r) as i32).collect();
+        assert_eq!(lanes.len() as u64, CORPUS_ROWS);
+        assert!(
+            lanes.iter().all(|&v| (0..=255).contains(&v)),
+            "lanes must fit the declared 8-bit page width"
+        );
+        let mut seen = [0u64; 256];
+        for &v in &lanes {
+            seen[v as usize] += 1;
+        }
+        let distinct = seen.iter().filter(|&&c| c > 0).count();
+        assert!(
+            distinct >= 128,
+            "lane fold degenerate: only {distinct}/256 buckets populated"
+        );
+
+        // -- 3. A14 admission provenance: the frame of every committed row
+        //       through the REAL ingress boundary; all 1M must be CGAP_OK,
+        //       allocation-free. A removed/reordered penstock check flips
+        //       the per-row pin. ------------------------------------------------
+        let frame_attestation = P28LicenseAttestation {
+            license_magic: super::LICENSE_MAGIC,
+            version: 1,
+            attestation_flags: super::LICENSE_FLAG_ROOT,
+            safe_harbor_ceiling_cents: SAFE_HARBOR_CEILING_CENTS_MAX,
+            origin_authority_digest: blake3_hash(b"cgap seal lane origin authority v1"),
+            upstream_receipt: [0u8; 32],
+        };
+        let template_header = CgapFrameHeader {
+            magic: FRAME_MAGIC,
+            version: FRAME_VERSION,
+            flags: FLAG_BN3,
+            reserved: [0; 2],
+            payload_byte_len: ROW_ENCODING_BYTES as u64,
+            oabi_digest: [0u8; 32], // patched per row with the real digest
+            attestation: frame_attestation,
+        };
+        let mut template = vec![0u8; FRAME_HEADER_LEN + ROW_ENCODING_BYTES];
+        template_header
+            .encode_into(&mut template)
+            .expect("template frame encode");
+        let (admitted, report) =
+            cgap_audit::alloc_counter::with_alloc_tracking(|| {
+                let mut admitted = 0u64;
+                let mut row_enc = [0u8; ROW_ENCODING_BYTES];
+                for row in rows.iter() {
+                    encode_row(row, &mut row_enc);
+                    template[16..48].copy_from_slice(&blake3_hash(&row_enc));
+                    assert_eq!(
+                        ingress(&template, template.len(), None),
+                        CGAP_OK,
+                        "every committed row's frame must be admitted"
+                    );
+                    admitted += 1;
+                }
+                admitted
+            });
+        assert_eq!(admitted, CORPUS_ROWS, "provenance: all 1M frames admitted");
+        assert!(report.is_zero(), "provenance sweep allocated: {report:?}");
+
+        // -- 4. COMMIT through the frozen cgap_commit_parquet signature.
+        //       The coercion below is the compile-time signature pin; the
+        //       call goes through the fn pointer (the frozen ABI itself). ---
+        let ledger_path = std::env::temp_dir()
+            .join(format!("cgap-seal-gate3-{}.par2", std::process::id()));
+        let _ = std::fs::remove_file(&ledger_path);
+        let ledger_cpath = format!("{}\0", ledger_path.display());
+        let commit: CgapCommitParquetFn = seal_commit_parquet;
+        let status =
+            unsafe { commit(lanes.as_ptr(), lanes.len(), ledger_cpath.as_ptr().cast()) };
+        assert_eq!(
+            status, CGAP_OK,
+            "cgap_commit_parquet refused the 1M-row admitted batch"
+        );
+
+        // -- 5. Disk read-back: the committed file is the deterministic
+        //       block. A second commit through the SAME ABI must be
+        //       byte-identical (determinism), and the file must equal it. ---
+        let twin_path = std::env::temp_dir()
+            .join(format!("cgap-seal-gate3-twin-{}.par2", std::process::id()));
+        let _ = std::fs::remove_file(&twin_path);
+        let twin_cpath = format!("{}\0", twin_path.display());
+        let status = unsafe { commit(lanes.as_ptr(), lanes.len(), twin_cpath.as_ptr().cast()) };
+        assert_eq!(status, CGAP_OK, "twin commit refused");
+        let file_bytes = std::fs::read(&ledger_path).expect("read committed ledger");
+        let twin_bytes = std::fs::read(&twin_path).expect("read twin ledger");
+        assert_eq!(
+            file_bytes, twin_bytes,
+            "two commits of the same batch diverged — nondeterministic block"
+        );
+        assert!(
+            file_bytes.len() > CORPUS_ROWS as usize / 2,
+            "block implausibly small for 1M rows: {} B",
+            file_bytes.len()
+        );
+
+        // -- 6. The real post-commit read-back check (A05/A03 contract) over
+        //       the FILE bytes. The content address is recomputed from the
+        //       file itself: the trailer is checksum(8)+magic(4)+len(4), so
+        //       content [0, B+M+80) ends 16 bytes before EOF. -----------------
+        let l = file_bytes.len();
+        assert!(l > 16 + 96 + 80, "sealed block trailer geometry");
+        let content_end = l - 16;
+        let digest = block_digest(&file_bytes[..content_end]);
+        let verified =
+            verify_seal(&file_bytes, &digest).expect("committed ledger must verify from disk");
+        assert_eq!(verified.rows, CORPUS_ROWS, "footer rows == 1M");
+        assert_eq!(
+            verified.row_groups as usize, SEAL_ROW_GROUPS,
+            "footer row groups"
+        );
+        assert_eq!(verified.spans_len, SEAL_ROW_GROUPS, "span table");
+        assert!(verified.attestation_present, "P28 attestation in the seal");
+        assert_eq!(
+            verified.body_len + verified.meta_len + 80,
+            content_end,
+            "region arithmetic (B + M + 80 + 16 == file length)"
+        );
+
+        // -- 6b. The attestation slot in the FILE carries the sealing record
+        //        byte-for-byte (the seal is over THIS ledger). ----------------
+        let attest_bytes = seal_attestation();
+        let in_file = &file_bytes
+            [verified.body_len + verified.meta_len..verified.body_len + verified.meta_len + 80];
+        assert_eq!(in_file, &attest_bytes[..], "seal attestation slot");
+
+        // -- 6c. Wrong content handle → DigestMismatch (the A03 wrong-object
+        //        case must flip; a verify that ignores the handle is vacuous).
+        assert_eq!(
+            verify_seal(&file_bytes, &[0u8; 32]),
+            Err(SealError::DigestMismatch),
+            "zero handle must be refused"
+        );
+
+        // -- 7. MUTATION LEGS on real disk copies (never the shared tree's
+        //        subjects — the copies live in /tmp and are removed below). --
+        // 7a. One flipped BODY byte → ChecksumMismatch{region: Body}: the
+        //     checksum localizes the corruption to the row data. A verify
+        //     that rubber-stamps the 1M-row body cannot pass this leg.
+        let mutant_body_path = std::env::temp_dir().join(format!(
+            "cgap-seal-gate3-bodyflip-{}.par2",
+            std::process::id()
+        ));
+        let mut body_flip = file_bytes.clone();
+        body_flip[verified.body_len / 2] ^= 0x01;
+        std::fs::write(&mutant_body_path, &body_flip).expect("write body-flip copy");
+        let read_back = std::fs::read(&mutant_body_path).expect("read body-flip copy");
+        assert_eq!(read_back, body_flip, "mutation must reach disk");
+        assert_eq!(
+            verify_seal(&read_back, &digest),
+            Err(SealError::ChecksumMismatch {
+                region: CorruptRegion::Body
+            }),
+            "one flipped body byte must flip verify_seal on the BODY region"
+        );
+        // 7b. One flipped byte in the seal's ATTESTATION SLOT (footer region)
+        //     → ChecksumMismatch{region: Footer}. The verifier's verdict
+        //     order is shape → attestation → checksum → digest, so a meta-
+        //     STRUCTURE byte flip lands on Shape(MetaMalformed) (witnessed
+        //     this session); the attestation slot parses clean and localizes
+        //     the checksum failure to the footer instead.
+        let mut footer_flip = file_bytes.clone();
+        footer_flip[verified.body_len + verified.meta_len] ^= 0x01;
+        assert_eq!(
+            verify_seal(&footer_flip, &digest),
+            Err(SealError::ChecksumMismatch {
+                region: CorruptRegion::Footer
+            }),
+            "one flipped attestation-slot byte must flip verify_seal on the FOOTER region"
+        );
+        // 7c. The unmutated block still verifies after the mutation legs.
+        assert!(
+            verify_seal(&file_bytes, &digest).is_ok(),
+            "mutation legs corrupted the shared subject"
+        );
+
+        // -- 8. Lane identity from DISK: the committed page bodies, decoded
+        //        through the real decode kernel, reproduce the derived lanes
+        //        exactly — first AND last row groups. Any encode/decode drift
+        //        or offset shift flips this leg. --------------------------------
+        let decode_group = |group: usize, chunk: &[i32]| {
+            let expected = rle_encode(
+                &chunk.iter().map(|&v| v as u32).collect::<Vec<u32>>(),
+                8,
+            );
+            let span_start = if group == 0 {
+                // First page body ends at span0; the header occupies the rest.
+                let span0 = verified.spans[0] as usize;
+                super::span_start_of(span0, &expected, &file_bytes)
+            } else {
+                // Last page body ends at body_len.
+                verified.body_len - expected.len()
+            };
+            let mut decoded = vec![0u32; chunk.len()];
+            rle_decode(&file_bytes[span_start..span_start + expected.len()], &mut decoded)
+                .expect("decode committed page body");
+            let round_trip: Vec<i32> = decoded.iter().map(|&v| v as i32).collect();
+            assert_eq!(
+                round_trip, chunk,
+                "row group {group}: decoded lanes diverge from the committed batch"
+            );
+        };
+        decode_group(
+            0,
+            &lanes[..SEAL_ROWS_PER_GROUP as usize],
+        );
+        decode_group(
+            SEAL_ROW_GROUPS - 1,
+            &lanes[lanes.len() - SEAL_ROWS_PER_GROUP as usize..],
+        );
+
+        // -- 9. Receipt sealing (cgap-crypto, A16): the committed block
+        //        digest binds into a keyed delta under a REAL lease; the
+        //        receipt round-trips its 229-B wire and a flipped digest
+        //        byte flips verify to DigestMismatch. -------------------------
+        let admissions = admissions_root(&[&attest_bytes[..]]);
+        let mut lease = Lease::new([7u8; 32], 4, blake3_hash(b"cgap seal lease epoch v1"));
+        let delta = DeltaS::new([0u8; 32], digest, CORPUS_ROWS, admissions);
+        let receipt = seal_unsealed(delta, &mut lease);
+        assert_eq!(lease.current_tick(), 1, "seal consumes exactly one tick");
+        verify_unsealed(&receipt).expect("sealed receipt must verify");
+        let receipt_bytes = receipt.to_bytes();
+        let round_tripped = UnsealedReceipt::from_bytes(&receipt_bytes)
+            .expect("receipt wire round trip");
+        verify_unsealed(&round_tripped).expect("round-tripped receipt must verify");
+        let flipped = {
+            let mut d = digest;
+            d[0] ^= 0x01;
+            DeltaS::new([0u8; 32], d, CORPUS_ROWS, admissions)
+        };
+        // Tamper leg: a delta flipped BEFORE sealing would seal consistently
+        // (the keyed digest covers whatever it is given), so the mutation
+        // lands on the SEALED receipt's 229-B wire instead — one flipped
+        // covered byte (the bound block digest at wire offset 45 = delta
+        // to_root[0]), re-verified from the wire, must flip to
+        // DigestMismatch.
+        let _ = flipped;
+        let mut tampered = receipt_bytes;
+        tampered[45] ^= 0x01;
+        let bad_receipt = UnsealedReceipt::from_bytes(&tampered)
+            .expect("tampered wire still parses (domain tag intact)");
+        assert!(matches!(
+            verify_unsealed(&bad_receipt),
+            Err(VerifyError::DigestMismatch)
+        ), "one flipped covered byte must flip the receipt verify");
+        let _ = bad_receipt;
+
+        // -- 10. VERIFY through the frozen cgap_verify_p28 signature: the
+        //        sealing record verifies green (with and without the digest
+        //        slot), the SAME digest verifies from the FILE's attestation
+        //        slot, and every A17 §5 field law plus truncated/extended
+        //        records flip to CGAP_ERR_P28_SPOLIATION. ----------------------
+        let verify: CgapVerifyP28Fn = seal_verify_p28;
+        let expected_digest =
+            u64::from_le_bytes(blake3_hash(&attest_bytes)[0..8].try_into().expect("8 B"));
+        let mut digest_out: u64 = 0;
+        let status = unsafe {
+            verify(attest_bytes.as_ptr(), attest_bytes.len(), &mut digest_out)
+        };
+        assert_eq!(status, CGAP_OK, "valid ROOT record must verify");
+        assert_eq!(
+            digest_out, expected_digest,
+            "digest predicate must be real BLAKE3 over the evidence"
+        );
+        let status = unsafe {
+            verify(attest_bytes.as_ptr(), attest_bytes.len(), core::ptr::null_mut())
+        };
+        assert_eq!(status, CGAP_OK, "out_digest MAY be NULL (A19 §2)");
+        // The SAME record read back from the COMMITTED FILE verifies with the
+        // SAME digest — the ledger's seal is verifiable from disk alone.
+        let mut disk_digest: u64 = 0;
+        let status = unsafe { verify(in_file.as_ptr(), 80, &mut disk_digest) };
+        assert_eq!(status, CGAP_OK, "seal attestation must verify from disk");
+        assert_eq!(disk_digest, expected_digest, "disk digest drifted");
+        // Harness guard leg: null evidence is the membrane overload, distinct
+        // from the spoliation class (the court never passes null otherwise).
+        let status = unsafe { verify(core::ptr::null(), 0, core::ptr::null_mut()) };
+        assert_eq!(status, CGAP_ERR_INVALID_MAGIC, "null evidence guard");
+
+        // Spoliation corpus (A17 §5 field laws — the a14 row-5 taxonomy
+        // applied to the record itself): every mutation must flip the
+        // frozen ABI to CGAP_ERR_P28_SPOLIATION. A verify_p28 that admits
+        // any of these is a gate that cannot flip = VACUOUS.
+        let spoliation_cases: [(&str, Box<dyn Fn(&mut [u8; 80])>); 8] = [
+            ("att magic", Box::new(|b: &mut [u8; 80]| b[0] = b'X')),
+            (
+                "att version",
+                Box::new(|b: &mut [u8; 80]| b[4..6].copy_from_slice(&2u16.to_le_bytes())),
+            ),
+            ("reserved bit", Box::new(|b: &mut [u8; 80]| b[6] |= 0x08)),
+            ("lineage zero", Box::new(|b: &mut [u8; 80]| b[6] = 0)),
+            ("lineage two bits", Box::new(|b: &mut [u8; 80]| b[6] = 0x03)),
+            (
+                "ceiling over max",
+                Box::new(|b: &mut [u8; 80]| {
+                    b[8..16].copy_from_slice(&(SAFE_HARBOR_CEILING_MAX_CENTS + 1).to_le_bytes())
+                }),
+            ),
+            (
+                "ROOT with receipt",
+                Box::new(|b: &mut [u8; 80]| b[48..80].fill(1)),
+            ),
+            (
+                "DERIVATIVE without receipt",
+                Box::new(|b: &mut [u8; 80]| {
+                    b[6..8].copy_from_slice(&FLAG_DERIVATIVE.to_le_bytes())
+                }),
+            ),
+        ];
+        for (name, mutate) in &spoliation_cases {
+            let mut evidence = attest_bytes;
+            mutate(&mut evidence);
+            let mut slot: u64 = 0;
+            let status = unsafe { verify(evidence.as_ptr(), 80, &mut slot) };
+            assert_eq!(
+                status, CGAP_ERR_P28_SPOLIATION,
+                "spoliation case '{name}' must refuse through the frozen ABI"
+            );
+        }
+        // The origin-authority digest is NOT an intrinsic license law (§5.6
+        // recomputes it from instrument context the ABI does not carry —
+        // witnessed this session: the flip ADMITS). The digest predicate
+        // carries that detection: the record licenses, but the returned
+        // digest MUST change (A19 §2's "digest + license predicate" split).
+        let mut digest_flipped = attest_bytes;
+        digest_flipped[16] ^= 0x01;
+        let mut flipped_slot: u64 = 0;
+        let status = unsafe { verify(digest_flipped.as_ptr(), 80, &mut flipped_slot) };
+        assert_eq!(
+            status, CGAP_OK,
+            "origin-digest flip is not an intrinsic refusal (§5.6 needs context)"
+        );
+        assert_ne!(
+            flipped_slot, expected_digest,
+            "digest predicate must detect an evidence mutation"
+        );
+        // Truncated (79 B) and extended (81 B): §4.2 collapses both to the
+        // §5 spoliation class at the record layer.
+        let mut short = attest_bytes;
+        let status = unsafe { verify(short.as_ptr(), 79, &mut digest_out) };
+        assert_eq!(status, CGAP_ERR_P28_SPOLIATION, "79 B record");
+        let mut long = [0u8; 81];
+        long[..80].copy_from_slice(&attest_bytes);
+        let status = unsafe { verify(long.as_ptr(), 81, &mut digest_out) };
+        assert_eq!(status, CGAP_ERR_P28_SPOLIATION, "81 B record");
+        let _ = &mut short;
+
+        // -- 11. Lease law: the court's /tmp subjects are removed by their
+        //        only leaseholder (this court). --------------------------------
+        let _ = std::fs::remove_file(&ledger_path);
+        let _ = std::fs::remove_file(&twin_path);
+        let _ = std::fs::remove_file(&mutant_body_path);
+
+        println!(
+            "SEAL 1M LEDGER: admitted=1000000 (zero-alloc provenance) \
+             committed={} B across {} row groups; verify_seal ok; \
+             body/footer flips + wrong handle refused; lanes decoded from disk; \
+             keyed receipt sealed+verified; verify_p28 green + 8 intrinsic \
+             spoliation refusals + digest-predicate mutation pin + 79/81 B refused",
+            file_bytes.len(),
+            SEAL_ROW_GROUPS
+        );
+    }
+}
+
+/// Locate a first-row-group page body inside the committed bytes: the body
+/// ends exactly at `span0`; assert the preceding `expected.len()` bytes
+/// equal `expected` (the hybrid wire is byte-identical to rle_encode, the
+/// crate's own differential pin) and return the body's start offset.
+fn span_start_of(span0: usize, expected: &[u8], file_bytes: &[u8]) -> usize {
+    let start = span0 - expected.len();
+    assert_eq!(
+        &file_bytes[start..span0],
+        expected,
+        "row group 0 page body != rle_encode wire (header len {start}?)"
+    );
+    start
+}
+
+// == end SEAL (GATE-3) section =============================================

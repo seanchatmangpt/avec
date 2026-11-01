@@ -332,10 +332,23 @@ def resolve_vocabulary(root: Path, vocab_path) -> tuple:
 
 def workspace_members(root: Path) -> list:
     text = (root / "Cargo.toml").read_text(encoding="utf-8", errors="strict")
-    m = re.search(r"^members\s*=\s*\[(.*?)\]", text, re.S | re.M)
+    # A19 Wave-9 minimal unblock (cross-lane disclosure in BOTH receipts):
+    # comments are stripped from the FULL manifest text BEFORE the bracket
+    # capture, not after. The members array carries a scaffold comment whose
+    # text itself contains `]` ("its own [workspace]"), so the non-greedy
+    # capture previously stopped at that comment bracket and enumerated only
+    # the 11 pre-moonshot members — cgap-fibo was never enumerated, its
+    # (package, bin) producer-exemption key resolved to no artifact, and the
+    # no-dead-entries law refused the whole scan (witnessed 2026-11-01:
+    # `GATE-REFUSED: emitter-exempt-unresolved cgap-fibo:emit-fibo-pack`,
+    # exit 1). Comment-stripping is behavior-preserving for manifests whose
+    # members block has no bracketed comments; enumeration stays mechanical
+    # from the root manifest (not-bypassable law unchanged).
+    stripped = "\n".join(line.split("#", 1)[0] for line in text.splitlines())
+    m = re.search(r"^members\s*=\s*\[(.*?)\]", stripped, re.S | re.M)
     if not m:
         raise GateRefused("workspace-manifest", str(root / "Cargo.toml"), "no members array")
-    block = "\n".join(line.split("#", 1)[0] for line in m.group(1).splitlines())
+    block = m.group(1)
     members = []
     for tok in re.findall(r'"([^"]+)"', block):
         members.append(root / tok)

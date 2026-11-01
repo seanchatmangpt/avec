@@ -338,8 +338,11 @@ struct BindingEntry {
 /// consult).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BindingIndex {
-    /// bindings, ascending by first event row (the D3 determinism law)
-    pub(crate) entries: Vec<BindingEntry>,
+    /// bindings, ascending by first event row (the D3 determinism law).
+    /// Private: no consumer outside this module (Wave-1 ABI hygiene — the
+    /// frozen surface is the fixed-width wire types + the free functions;
+    /// the index is an internal projection artifact).
+    entries: Vec<BindingEntry>,
 }
 
 impl BindingIndex {

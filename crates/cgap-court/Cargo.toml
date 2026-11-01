@@ -37,3 +37,15 @@ cgap-core = { path = "../cgap-core" }
 cgap-blake3 = { path = "../cgap-blake3" }
 cgap-bn3 = { path = "../cgap-bn3" }
 cgap-gate = { path = "../cgap-gate" }
+# SEAL (GATE-3) repair: the seal court composes the owning kernels' public
+# APIs through the frozen A19 sovereign signatures — cgap-parquet (A02+A03
+# commit kernels; `std` for the Tier H FileSink), cgap-p28 (A17 license +
+# digest predicates), cgap-crypto (A16 keyed receipt sealing under a real
+# Lease), cgap-ffi (rlib: the frozen CgapCommitParquetFn / CgapVerifyP28Fn
+# aliases the court coerces through — coercion is the compile-time
+# signature pin). Path deps on zero-external crates; same disclosed
+# crate-as-dev-dep pattern as the Wave-3 consumption set above.
+cgap-parquet = { path = "../cgap-parquet", features = ["std"] }
+cgap-p28 = { path = "../cgap-p28" }
+cgap-crypto = { path = "../cgap-crypto" }
+cgap-ffi = { path = "../cgap-ffi" }

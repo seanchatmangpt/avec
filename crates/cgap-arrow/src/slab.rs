@@ -34,6 +34,15 @@
 //! [dev-dependencies]`): runtime externals stay E=0 and the zero-alloc
 //! structural law of the lib path is untouched.
 //!
+//! Saturation repair R1 is the third defect-repair slice: the wave-1
+//! saturation audit holed the payload-digest gate in a /tmp sandbox copy
+//! (weakened to a prefix compare) and the sampled C5 offsets stayed
+//! green — 132/132 — while a digest-suffix byte (witness 0x31) decoded
+//! `Ok`. The §5.1 law is over every byte, so `repair1_tests` (R1-C1)
+//! sweeps all 4160 offsets of a sealed window to their exact typed
+//! variants; any gate weakening or deletion now flips the court at the
+//! first ungated byte.
+//!
 //! Zero-alloc is structural: no `alloc` path is reachable from this
 //! module (court C2 symbol audit), and construction is `const fn`, so a
 //! slab lives in `.bss`/`.data` or on a bare-metal stack (court C3).
@@ -530,11 +539,22 @@ macro_rules! impl_seal_with_mask {
         impl $alias {
             /// Cross-check shadow bytes against the authoritative mask
             /// over `0..len`, then seal (see [`ArrowRecordSlab::seal`]).
+            ///
+            /// GATE-2 leg 3 (no-panic law): `slots[i]` bounds checks emit
+            /// `panic_bounds_check` on riscv32imc. The bound is a
+            /// structural invariant — `push` refuses past-cap writes
+            /// (`PushPastCap`) and `from_bytes` refuses `len > cap`
+            /// (`LenExceedsCap`), so `len() <= CAP` on every reachable
+            /// `self` — and the check is the panic path leg 3 forbids.
             pub fn seal_with_mask(&mut self, mask: &$mask) -> Result<(), SlabError> {
+                let len = self.len() as usize;
                 let mut i = 0;
-                while i < self.len() as usize {
+                while i < len {
                     let bit = mask.get(i) == Ok(true);
-                    if self.slots[i].presence_shadow != u8::from(bit) {
+                    // SAFETY: i < len <= CAP == self.slots.len() — the
+                    // invariant itemized in the doc comment above.
+                    let slot = unsafe { self.slots.get_unchecked(i) };
+                    if slot.presence_shadow != u8::from(bit) {
                         return Err(SlabError::PresenceMismatch);
                     }
                     i += 1;
@@ -719,10 +739,11 @@ mod wave2_tests {
         assert_eq!(round.header.digest, slab.header.digest);
     }
 
-    // C5 negative paths: any single-byte mutation of the sealed window
-    // maps to a typed error — payload region → DigestMismatch, header
-    // digest span → HeaderDigestMismatch, digest fields themselves
-    // included, never silent accept.
+    // C5 negative paths: sampled representatives of each gated region —
+    // payload region → DigestMismatch, header digest span →
+    // HeaderDigestMismatch, digest fields themselves included, never
+    // silent accept. Sampling is this court's shape, not the law's:
+    // exhaustiveness over all 4160 offsets is R1-C1 (`repair1_tests`).
     #[test]
     fn c5_single_byte_mutations_are_typed_errors() {
         let (mut slab, mask) = seeded_slab(9);
@@ -1782,5 +1803,107 @@ mod wave9_tests {
         hdr.verify_payload(hdr.payload(&frame).unwrap(), crate::blake3::hash)
             .unwrap();
         assert_eq!(Slab64::from_bytes(view.payload).unwrap(), first);
+    }
+}
+
+/// Saturation-repair courts (repair wave R1, lane A01 slice). The wave-1
+/// saturation audit holed the payload-digest gate in a /tmp sandbox copy
+/// (weakened to a prefix compare) and the lane's sampled courts stayed
+/// green: 132/132 passed while a digest-suffix byte (witness 0x31)
+/// decoded `Ok`. The §5.1 law — "a mutated byte ⇒ typed error, never
+/// silent accept" — is a law over EVERY byte, so coverage must be
+/// exhaustive, not sampled. R1-C1 closes the class: every offset of the
+/// sealed window, enumerated, to its exact typed variant.
+#[cfg(test)]
+mod repair1_tests {
+    use super::*;
+    use crate::bitmask::Mask64;
+
+    /// Full-coverage sealed fixture: 64 rows, alternating presence,
+    /// deterministic index-derived payloads (no entropy, no clocks).
+    fn sealed_full_slab() -> Slab64 {
+        let mut slab = Slab64::new();
+        let mut mask = Mask64::EMPTY;
+        let mut i = 0;
+        while i < 64 {
+            let payload: [u8; SLOT_PAYLOAD_SIZE] =
+                core::array::from_fn(|j| ((i * 7 + j * 13) & 0xFF) as u8);
+            let present = i % 2 == 0;
+            slab.push(&payload, present).unwrap();
+            if present {
+                mask.set(i).unwrap();
+            }
+            i += 1;
+        }
+        slab.seal_with_mask(&mask).unwrap();
+        slab
+    }
+
+    /// Exact expected refusal for a single xor-flip at sealed-window
+    /// offset `k` (gates fire in `from_bytes` order): 0x00..0x04 is the
+    /// magic gate -> `BadMagic`; 0x04..0x1C is the FNV-1a header-digest
+    /// span (byte-injective: any prefix flip changes the digest) and
+    /// 0x1C..0x20 the stored header digest field ->
+    /// `HeaderDigestMismatch`; 0x20..0x40 is the stored BLAKE3 digest
+    /// field (the audited digest-suffix class) and 0x40.. the BLAKE3-
+    /// gated slots span -> `DigestMismatch`.
+    fn expected_refusal(k: usize, m: &[u8]) -> SlabError {
+        if k < 0x04 {
+            SlabError::BadMagic {
+                got: u32::from_le_bytes([m[0], m[1], m[2], m[3]]),
+            }
+        } else if k < 0x20 {
+            SlabError::HeaderDigestMismatch
+        } else {
+            SlabError::DigestMismatch
+        }
+    }
+
+    // R1-C1 — exhaustive single-byte sweep over the WHOLE sealed window:
+    // all 64 + 64*64 == 4160 offsets, enumerated never sampled, each a
+    // typed refusal carrying the exact variant its gate owes. Positive
+    // control first: the pristine window decodes (the sweep attacks the
+    // gates, not the fixture). The audited defect byte 0x31 is named
+    // explicitly before the sweep. This is the repair for the wave-1
+    // saturation VACUOUS finding (sampled C5 offsets passed 132/132
+    // under a holed gate).
+    // Anti-vacuity mutations (each flips this court at the first
+    // ungated byte; M-R1-1 demonstrated live in the /tmp sandbox,
+    // sha256 fail-closed restore):
+    //   M-R1-1 — weaken the payload-digest gate to a 16-byte prefix
+    //            compare (`[..16] != stored_digest[..16]`): FAIL at
+    //            0x30, the first unchecked suffix byte, Ok decode.
+    //   M-R1-2 — delete the payload-digest gate: FAIL at 0x20.
+    //   M-R1-3 — delete the header-digest gate: FAIL at 0x04 (the
+    //            variant is no longer HeaderDigestMismatch).
+    #[test]
+    fn r1_c1_exhaustive_single_byte_sweep_sealed_window_is_typed_error() {
+        let slab = sealed_full_slab();
+        let image = slab.as_bytes().to_vec();
+        assert_eq!(image.len(), 64 + 64 * 64);
+        assert_eq!(Slab64::from_bytes(&image), Ok(slab), "positive control");
+
+        // The audit's witness byte, named: a digest-suffix flip is a
+        // typed DigestMismatch — never the Ok the holed gate produced.
+        let mut w = image.clone();
+        w[0x31] ^= 0x01;
+        assert_eq!(Slab64::from_bytes(&w), Err(SlabError::DigestMismatch));
+
+        // The sweep: 4160/4160 offsets, exact variant per region.
+        let mut swept = 0;
+        let mut k = 0;
+        while k < image.len() {
+            let mut m = image.clone();
+            m[k] ^= 0x01;
+            let want = expected_refusal(k, &m);
+            assert_eq!(
+                Slab64::from_bytes(&m),
+                Err(want),
+                "offset {k:#06x}: silent accept or wrong variant"
+            );
+            swept += 1;
+            k += 1;
+        }
+        assert_eq!(swept, 64 + 64 * 64, "every offset enumerated");
     }
 }

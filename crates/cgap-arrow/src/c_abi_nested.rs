@@ -42,6 +42,36 @@ struct OwnedStructSchema {
     children: Box<[*mut ArrowSchema]>,
 }
 
+/// Swap the release slot to NULL and return the previous value.
+///
+/// Target-class split (blocker fix, v26.11.1): `AtomicPtr::swap` is
+/// cfg-gated out on targets without pointer RMW atomics
+/// (`target_has_atomic = "ptr"` is false on e.g. `riscv32imc` — no A
+/// extension), so the release cascade must take the portable path there.
+///
+/// - Pointer-atomic targets: one real atomic RMW (`swap`, AcqRel) — the
+///   exactly-once guarantee is the hardware RMW itself.
+/// - No-RMW targets: `load`/`store` still exist (atomic load-store is
+///   available); the serialization point is the target's execution model
+///   (single-hart, no threads — `std::thread` does not exist on
+///   `--target riscv32imc-unknown-none-elf`), so no other execution context
+///   can interleave between the load and the store.
+///
+/// Both paths preserve the release discipline unchanged: the slot reads
+/// NULL to every later observer strictly before any cascade work runs.
+fn release_swap(slot: &AtomicPtr<c_void>) -> *mut c_void {
+    #[cfg(target_has_atomic = "ptr")]
+    {
+        slot.swap(core::ptr::null_mut(), Ordering::AcqRel)
+    }
+    #[cfg(not(target_has_atomic = "ptr"))]
+    {
+        let prev = slot.load(Ordering::Acquire);
+        slot.store(core::ptr::null_mut(), Ordering::Release);
+        prev
+    }
+}
+
 /// SAFETY: single release via atomic swap-to-NULL (same discipline as
 /// `c_abi`: `Option<unsafe fn>` is a nullable pointer with a niche, so an
 /// in-place `AtomicPtr<c_void>` view of the release slot is a pointer pun).
@@ -52,7 +82,10 @@ struct OwnedStructSchema {
 unsafe fn release_struct_array(array: *mut ArrowArray) {
     let slot: &AtomicPtr<c_void> =
         unsafe { &*(core::ptr::addr_of_mut!((*array).release) as *mut AtomicPtr<c_void>) };
-    let prev = slot.swap(core::ptr::null_mut(), Ordering::AcqRel);
+    // Parent slot swapped to NULL BEFORE the cascade (FMEA, module head):
+    // a concurrent/reentrant second release observes NULL and returns
+    // before touching any child. Target-gated RMW via `release_swap`.
+    let prev = release_swap(slot);
     if prev.is_null() {
         // Already released: typed no-op, never a double free.
         return;
@@ -85,7 +118,10 @@ unsafe fn release_struct_array(array: *mut ArrowArray) {
 unsafe fn release_struct_schema(schema: *mut ArrowSchema) {
     let slot: &AtomicPtr<c_void> =
         unsafe { &*(core::ptr::addr_of_mut!((*schema).release) as *mut AtomicPtr<c_void>) };
-    let prev = slot.swap(core::ptr::null_mut(), Ordering::AcqRel);
+    // Parent slot swapped to NULL BEFORE the cascade (FMEA, module head):
+    // a concurrent/reentrant second release observes NULL and returns
+    // before touching any child. Target-gated RMW via `release_swap`.
+    let prev = release_swap(slot);
     if prev.is_null() {
         // Already released: typed no-op, never a double free.
         return;

@@ -10,14 +10,24 @@ use cgap_arrow::primitive::PrimitiveBuilder;
 use core::sync::atomic::{AtomicPtr, Ordering};
 
 /// Live export slots read by the foreign importer.
+///
+/// XIP placement law (lane doc §5): the frozen slot exports are HOST-surface
+/// only — an XIP (`target_os = "none"`) build must NOT require a heap, so the
+/// `Box::leak` slots and every symbol touching them are compiled out there
+/// and the allocator drops out of the SRAM budget entirely. `cgap_digest_of`
+/// / `fold_word` stay (the digest path is in the §5 flash budget).
+#[cfg(not(target_os = "none"))]
 static ARRAY_SLOT: AtomicPtr<ArrowArray> = AtomicPtr::new(core::ptr::null_mut());
+#[cfg(not(target_os = "none"))]
 static SCHEMA_SLOT: AtomicPtr<ArrowSchema> = AtomicPtr::new(core::ptr::null_mut());
+#[cfg(not(target_os = "none"))]
 static ROWS: core::sync::atomic::AtomicI64 = core::sync::atomic::AtomicI64::new(0);
 
 /// # Safety
 /// Returns the live ArrowArray pointer; the CALLER (importer) takes release
 /// ownership per the C Data Interface contract.
 #[no_mangle]
+#[cfg(not(target_os = "none"))]
 pub unsafe extern "C" fn cgap_i32_batch(n: i64, null_every: i64) -> *mut ArrowArray {
     let mut b = PrimitiveBuilder::<i32>::new();
     let mut i = 0;
@@ -38,24 +48,28 @@ pub unsafe extern "C" fn cgap_i32_batch(n: i64, null_every: i64) -> *mut ArrowAr
 
 /// Address of the exported schema slot.
 #[no_mangle]
+#[cfg(not(target_os = "none"))]
 pub extern "C" fn cgap_schema_addr() -> usize {
     SCHEMA_SLOT.load(Ordering::Relaxed) as usize
 }
 
 /// Address of the exported array slot.
 #[no_mangle]
+#[cfg(not(target_os = "none"))]
 pub extern "C" fn cgap_array_addr() -> usize {
     ARRAY_SLOT.load(Ordering::Relaxed) as usize
 }
 
 /// Length of the last exported batch.
 #[no_mangle]
+#[cfg(not(target_os = "none"))]
 pub extern "C" fn cgap_batch_rows() -> i64 {
     ROWS.load(Ordering::Relaxed)
 }
 
 /// cgap version string pointer (NUL-terminated).
 #[no_mangle]
+#[cfg(not(target_os = "none"))]
 pub extern "C" fn cgap_version() -> *const core::ffi::c_char {
     // Rust &str is NOT NUL-terminated; serve the generated C form
     // (drift-guarded: version_cstr_parity asserts the prefix equals VERSION).
@@ -300,3 +314,15 @@ mod digest_ffi {
 
 // v26.11.1 moonshot lanes (coordinator-scaffolded, additive only):
 pub mod sovereign;
+
+/// XIP glue (lane doc §5): a `target_os = "none"` staticlib needs a panic
+/// handler and no `std`. Host targets use std's handler — this item does not
+/// exist there, so host builds are untouched (the slot-surface cfg gates
+/// above are the mirror image of this law).
+#[cfg(target_os = "none")]
+#[panic_handler]
+fn cgap_xip_panic(_: &core::panic::PanicInfo) -> ! {
+    loop {
+        core::hint::spin_loop();
+    }
+}

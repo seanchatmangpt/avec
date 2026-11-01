@@ -20,6 +20,47 @@ pub const CGAP_FLAG_DICTIONARY_ORDERED: i64 = 1;
 /// ARROW_FLAG_MAP_KEYS_SORTED (av:FlagMapKeysSorted, 4).
 pub const CGAP_FLAG_MAP_KEYS_SORTED: i64 = 4;
 
+/// Release-slot swap capability tiers (RV32IMC blocker fix, v26.11.1
+/// GATE-2 repair). The double-release guard clears the C Data Interface
+/// `release` slot through a punned [`AtomicPtr`]; what "clear" costs depends
+/// on the target's atomics capability:
+///
+/// - CAS tier (`cfg(target_has_atomic = "ptr")`; host aarch64/x86_64, RV64):
+///   `swap(NULL, AcqRel)` — the single-RMW pre-fix form, semantics unchanged
+///   on every CAS target.
+/// - Load/store tier (`not(target_has_atomic = "ptr")`; riscv32imc: no A
+///   extension, no atomic RMW at any width — `AtomicPtr::swap` is E0599
+///   there, witnessed at c_abi.rs:57/:87, exit 101 at HEAD): word-aligned
+///   loads/stores are naturally atomic on RV32, so the guard is
+///   `load(Acquire)` then `store(Release)`. The C Data Interface release
+///   contract is single-caller (the consumer invokes `release` from one
+///   context) — that is the safety condition on this tier; a concurrent
+///   second caller is not serialized by a plain load/store pair. The
+///   boundary is typed here and in chase_lev (`SUPPORTS_STEAL = false`),
+///   never silent.
+#[cfg(target_has_atomic = "ptr")]
+#[inline]
+unsafe fn release_slot_swap(slot: &AtomicPtr<c_void>) -> *mut c_void {
+    slot.swap(core::ptr::null_mut(), Ordering::AcqRel)
+}
+
+/// Load/store tier. Contract: see the CAS twin above.
+#[cfg(not(target_has_atomic = "ptr"))]
+#[inline]
+unsafe fn release_slot_swap(slot: &AtomicPtr<c_void>) -> *mut c_void {
+    let prev = slot.load(Ordering::Acquire);
+    if !prev.is_null() {
+        slot.store(core::ptr::null_mut(), Ordering::Release);
+    }
+    prev
+}
+
+/// Compile-time tier witness: `true` = single-RMW CAS swap; `false` =
+/// load/store tier. Host tests assert the CAS tier; a green riscv32imc
+/// build is the witness for the load/store tier (the CAS branch cannot
+/// compile on that target).
+pub const RELEASE_SLOT_CAS: bool = cfg!(target_has_atomic = "ptr");
+
 /// struct ArrowSchema (C Data Interface spec).
 #[repr(C)]
 pub struct ArrowSchema {
@@ -54,7 +95,7 @@ pub struct ArrowArray {
 unsafe fn release_schema(schema: *mut ArrowSchema) {
     let slot: &AtomicPtr<c_void> =
         unsafe { &*(core::ptr::addr_of_mut!((*schema).release) as *mut AtomicPtr<c_void>) };
-    let prev = slot.swap(core::ptr::null_mut(), Ordering::AcqRel);
+    let prev = unsafe { release_slot_swap(slot) };
     if prev.is_null() {
         return;
     }
@@ -84,7 +125,7 @@ unsafe fn release_array<T: Scalar>(array: *mut ArrowArray) {
     // so an in-place atomic view of the release slot is a pointer pun.
     let slot: &AtomicPtr<c_void> =
         unsafe { &*(core::ptr::addr_of_mut!((*array).release) as *mut AtomicPtr<c_void>) };
-    let prev = slot.swap(core::ptr::null_mut(), Ordering::AcqRel);
+    let prev = unsafe { release_slot_swap(slot) };
     if prev.is_null() {
         // Already released (or NULL release): typed no-op, never a double free.
         return;
@@ -231,5 +272,13 @@ mod tests {
             f(ptr); // double release: typed no-op, no double free
             drop(Box::from_raw(ptr)); // free the struct shell itself
         }
+    }
+
+    #[test]
+    fn host_release_slot_is_cas_tier() {
+        // Host (aarch64) has a CAS: the release-slot swap must be the
+        // single-RMW form. The load/store tier is witnessed by the green
+        // riscv32imc build, where this branch cannot compile.
+        assert!(RELEASE_SLOT_CAS);
     }
 }

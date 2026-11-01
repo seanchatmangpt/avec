@@ -136,71 +136,123 @@ pub fn compress(
 
 #[inline(always)]
 fn words_from_bytes(bytes: &[u8], out: &mut [u32; 16]) {
+    // Zero-padding law, structural form (GATE-2 leg 3): each missing byte
+    // IS the BLAKE3 zero pad, so `get(..).unwrap_or(&0)` implements the
+    // law with no panic path; the `chunks(4)` + subslice form it replaces
+    // emitted `panic_bounds_check` on riscv32imc.
     *out = [0u32; 16];
-    for (i, chunk) in bytes.chunks(4).enumerate() {
+    let mut w: usize = 0;
+    while w < 16 {
         let mut buf = [0u8; 4];
-        buf[..chunk.len()].copy_from_slice(chunk);
-        out[i] = u32::from_le_bytes(buf);
+        let mut q: usize = 0;
+        while q < 4 {
+            buf[q] = *bytes.get(w * 4 + q).unwrap_or(&0);
+            q += 1;
+        }
+        out[w] = u32::from_le_bytes(buf);
+        w += 1;
     }
 }
 
 /// Hashes a single chunk (0..=1024 bytes) across up to 16 sequential 64-byte blocks,
 /// returning its 16-word compression output (first 8 words form the 32-byte CV or root digest).
+///
+/// No-panic law (GATE-2 leg 3, v26.11.1): delegates to
+/// [`hash_chunk_window`] — no subslicing, no `unreachable!()`, no bounds
+/// checks — so this body emits zero panic-family symbols on the
+/// `riscv32imc` object (falsifier: rebuild + `rust-nm` family count).
 #[inline(always)]
 pub fn hash_chunk(chunk: &[u8], chunk_counter: u64, is_root: bool) -> [u32; 16] {
+    hash_chunk_window(chunk, 0, chunk.len(), chunk_counter, is_root)
+}
+
+/// Chunk compression over a `(base, n)` window of `data` — the window is
+/// never materialized as a subslice, so no slice-index panic path exists
+/// (GATE-2 leg 3). `n <= 1024` is the caller's contract (one chunk); the
+/// block loop zero-pads the trailing partial 64-byte block exactly like
+/// the BLAKE3 stream law.
+#[inline(always)]
+fn hash_chunk_window(
+    data: &[u8],
+    base: usize,
+    n: usize,
+    chunk_counter: u64,
+    is_root: bool,
+) -> [u32; 16] {
     let mut cv = IV;
     let mut block_words = [0u32; 16];
-    let num_blocks = if chunk.is_empty() {
-        1
-    } else {
-        chunk.len().div_ceil(64)
-    };
-
-    for b in 0..num_blocks {
-        let start = b * 64;
-        let end = (start + 64).min(chunk.len());
-        let block_slice = if chunk.is_empty() {
-            &[]
-        } else {
-            &chunk[start..end]
-        };
-        let block_len = block_slice.len() as u32;
-
-        words_from_bytes(block_slice, &mut block_words);
-
+    let num_blocks = if n == 0 { 1 } else { n.div_ceil(64) };
+    let mut b: usize = 0;
+    loop {
+        let block_base = base + b.wrapping_mul(64);
+        // Zero-padding law, structural form: out-of-window reads ARE the
+        // BLAKE3 zero pad, so `get(..).unwrap_or(&0)` implements the law
+        // directly and carries no panic path (GATE-2 leg 3) — the guarded
+        // copy it replaces emitted `panic_bounds_check` on riscv32imc.
+        let mut block = [0u8; 64];
+        let mut k: usize = 0;
+        while k < 64 {
+            block[k] = *data.get(block_base + k).unwrap_or(&0);
+            k += 1;
+        }
+        let m = n.saturating_sub(b.wrapping_mul(64)).min(64);
+        words_from_bytes(&block, &mut block_words);
         let mut flags = 0u32;
         if b == 0 {
             flags |= CHUNK_START;
         }
-        if b == num_blocks - 1 {
+        if b + 1 >= num_blocks {
             flags |= CHUNK_END;
             if is_root {
                 flags |= ROOT;
             }
         }
-
-        let out = compress_scalar(&cv, &block_words, chunk_counter, block_len, flags);
-        if b == num_blocks - 1 {
+        let out = compress_scalar(&cv, &block_words, chunk_counter, m as u32, flags);
+        if b + 1 >= num_blocks {
             return out;
         }
         cv.copy_from_slice(&out[0..8]);
+        b += 1;
     }
-
-    unreachable!()
 }
 
 /// Standalone `#![no_std]` 32-byte BLAKE3 computation with zero-allocation stack Merkle reduction.
+///
+/// No-panic law (GATE-2 leg 3): chunk windows travel as `(base, n)` pairs
+/// to [`hash_chunk_window`] (never materialized as subslices), the 32-byte
+/// assembly runs through provably-bounded index loops, and the Merkle
+/// stack accesses are itemized-`SAFETY` unchecked — the bounds checks
+/// they would otherwise emit are exactly the panic paths leg 3 forbids
+/// (falsifier: rebuild + `rust-nm` family count, must stay 0/0).
+///
+/// SAFETY (Merkle stack, itemized — the invariants discharging every
+/// unchecked access below):
+/// 1. Depth law: a chunk is 1024 bytes, so any `usize` input has at most
+///    `usize::MAX / 1024 + 1` chunks; the binary-counter stack depth after
+///    chunk `i` is `floor(log2(i + 1)) + 1`, bounded by the 54-slot array
+///    (depth 54 covers 2^64 bytes), so `stack_len in [1, 54]` whenever an
+///    access runs.
+/// 2. Merge-loop decrement: the body runs only when `total_chunks` is
+///    even, i.e. `chunk_idx >= 1`, i.e. chunk 0 was already pushed, so
+///    `stack_len >= 1` at the decrement — no underflow.
+/// 3. Final-fold decrement: `stack_len -= 2` runs only under the
+///    `stack_len > 1` guard, so the pre-decrement value is >= 2 — the
+///    read indices `stack_len - 1` and `stack_len - 2` are >= 0.
+/// 4. Fold write-back: after the -2/+1 dance the write lands at the old
+///    `stack_len - 2 >= 0` slot, still `< 54` by invariant 1.
 pub fn hash(data: &[u8]) -> [u8; 32] {
     let len = data.len();
 
     // Fast path: single-chunk input (0..=1024 bytes) forms the root node directly.
     if len <= 1024 {
-        let out = hash_chunk(data, 0, true);
-        let mut res = [0u8; 32];
-        for i in 0..8 {
-            res[i * 4..(i + 1) * 4].copy_from_slice(&out[i].to_le_bytes());
+        let out = hash_chunk_window(data, 0, len, 0, true);
+        let mut cv8 = [0u32; 8];
+        let mut j = 0;
+        while j < 8 {
+            cv8[j] = out[j];
+            j += 1;
         }
-        return res;
+        return root_words_to_bytes(&cv8);
     }
 
     // Zero-heap stack for parent Merkle reduction: max depth 54 covers 2^64 bytes.
@@ -208,12 +260,11 @@ pub fn hash(data: &[u8]) -> [u8; 32] {
     let mut stack_len = 0usize;
 
     let num_chunks = len.div_ceil(1024);
-    for chunk_idx in 0..num_chunks {
-        let start = chunk_idx * 1024;
-        let end = (start + 1024).min(len);
-        let chunk_slice = &data[start..end];
-
-        let chunk_out = hash_chunk(chunk_slice, chunk_idx as u64, false);
+    let mut chunk_idx = 0;
+    while chunk_idx < num_chunks {
+        let start = chunk_idx.wrapping_mul(1024);
+        let n = len.saturating_sub(start).min(1024);
+        let chunk_out = hash_chunk_window(data, start, n, chunk_idx as u64, false);
         let mut current_cv = [0u32; 8];
         current_cv.copy_from_slice(&chunk_out[0..8]);
 
@@ -223,53 +274,81 @@ pub fn hash(data: &[u8]) -> [u8; 32] {
             if stack_len == 1 && chunk_idx == num_chunks - 1 {
                 break;
             }
+            // SAFETY: invariants 1 (depth < 54) and 2 (stack_len >= 1 here).
+            let left_child = unsafe { *stack.get_unchecked(stack_len - 1) };
             stack_len -= 1;
-            let left_child = stack[stack_len];
             let mut block = [0u32; 16];
             block[..8].copy_from_slice(&left_child);
             block[8..].copy_from_slice(&current_cv);
-
             let parent_out = compress_scalar(&IV, &block, 0, 64, PARENT);
             current_cv.copy_from_slice(&parent_out[0..8]);
             total_chunks >>= 1;
         }
 
-        stack[stack_len] = current_cv;
+        // Push current_cv at index stack_len (SAFETY: invariant 1).
+        let mut j = 0;
+        while j < 8 {
+            unsafe {
+                (*stack.as_mut_ptr().add(stack_len))[j] = current_cv[j];
+            }
+            j += 1;
+        }
         stack_len += 1;
+        chunk_idx += 1;
     }
 
-    // Final reduction to root
+    // Final reduction to root.
     while stack_len > 1 {
-        let right_child = stack[stack_len - 1];
-        let left_child = stack[stack_len - 2];
+        // SAFETY: invariants 1 and 3 (stack_len >= 2 at loop entry).
+        let right_child = unsafe { *stack.get_unchecked(stack_len - 1) };
+        let left_child = unsafe { *stack.get_unchecked(stack_len - 2) };
         stack_len -= 2;
-
         let mut block = [0u32; 16];
         block[..8].copy_from_slice(&left_child);
         block[8..].copy_from_slice(&right_child);
-
-        let flags = if stack_len == 0 {
-            PARENT | ROOT
-        } else {
-            PARENT
-        };
+        let flags = if stack_len == 0 { PARENT | ROOT } else { PARENT };
         let out = compress_scalar(&IV, &block, 0, 64, flags);
-
         if stack_len == 0 {
-            let mut res = [0u8; 32];
-            for i in 0..8 {
-                res[i * 4..(i + 1) * 4].copy_from_slice(&out[i].to_le_bytes());
+            let mut cv8 = [0u32; 8];
+            let mut j = 0;
+            while j < 8 {
+                cv8[j] = out[j];
+                j += 1;
             }
-            return res;
+            return root_words_to_bytes(&cv8);
         }
-
-        stack[stack_len].copy_from_slice(&out[0..8]);
+        // Write root into the vacated slot (SAFETY: invariant 4).
+        let mut cv8 = [0u32; 8];
+        let mut j = 0;
+        while j < 8 {
+            cv8[j] = out[j];
+            j += 1;
+        }
+        unsafe {
+            *stack.as_mut_ptr().add(stack_len) = cv8;
+        }
         stack_len += 1;
     }
 
+    // SAFETY: stack_len == 1 here (every chunk pushes; chunk 0 pushes
+    // unconditionally), so slot 0 holds the pending root CV.
+    let root = unsafe { *stack.get_unchecked(0) };
+    root_words_to_bytes(&root)
+}
+
+/// Assemble the 32-byte root digest from the 8-word root chaining value:
+/// provably-bounded index loops, no subslice panic paths (GATE-2 leg 3).
+fn root_words_to_bytes(out: &[u32; 8]) -> [u8; 32] {
     let mut res = [0u8; 32];
-    for i in 0..8 {
-        res[i * 4..(i + 1) * 4].copy_from_slice(&stack[0][i].to_le_bytes());
+    let mut i = 0;
+    while i < 8 {
+        let w = out[i].to_le_bytes();
+        let mut q = 0;
+        while q < 4 {
+            res[i * 4 + q] = w[q];
+            q += 1;
+        }
+        i += 1;
     }
     res
 }
@@ -596,6 +675,10 @@ pub mod avx2_parent {
 }
 
 /// Reduces a horizontal queue of CVs at the same subtree level using SIMD (4-way NEON / 8-way AVX2).
+/// Host-throughput kernel: compiled out of no-OS builds (GATE-2 leg 3 —
+/// its indexed tails are not on the embedded surface; the embedded digest
+/// donor is [`hash`]).
+#[cfg(not(target_os = "none"))]
 #[inline(always)]
 pub fn reduce_level_simd(cvs: &mut [[u32; 8]; 64], cv_count: &mut usize) {
     let mut i = 0;
@@ -668,6 +751,8 @@ pub fn reduce_level_simd(cvs: &mut [[u32; 8]; 64], cv_count: &mut usize) {
 
 /// Computes the 32-byte BLAKE3 digest using horizontal 64-chunk level-batched SIMD parent reduction
 /// combined with the outer Merkle stack, producing byte-identical output to [`hash`].
+/// Host-throughput kernel: compiled out of no-OS builds (GATE-2 leg 3).
+#[cfg(not(target_os = "none"))]
 pub fn hash_wide_simd(data: &[u8]) -> [u8; 32] {
     let len = data.len();
     if len <= 1024 {

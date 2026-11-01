@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avec.chatman.dev/schemas/v26.11.1/receipt-schema-v2.schema.json",
+  "title": "cgap v26.11.1 extended per-node receipt (schema v2)",
+  "description": "Per-node execution receipt for the v26.11.1 DFLSS campaign. Sources: docs/jira/v26.11.1/dflss/00-dflss-charter-source.md section 2 and section 4 Phase 4; executor/strings_admitted rationale in docs/jira/v26.11.1/phase-change-charter.md.",
+  "type": "object",
+  "properties": {
+    "lane": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Producing node's lane id (A01..A20 lane or conversion-engine node id)."
+    },
+    "files_written": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true,
+      "description": "Every path this node wrote; nothing outside files_written is attributable to the node."
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The executed command line."
+          },
+          "exit": {
+            "type": "integer",
+            "description": "Real observed exit code, not intent."
+          }
+        },
+        "required": ["command", "exit"],
+        "additionalProperties": false
+      },
+      "description": "Executed commands with observed exit codes; the grounding for every ALIVE claim."
+    },
+    "courts_run": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Court name."
+          },
+          "evidence": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Pass/flip evidence: command + exit, or the mutation that flipped."
+          }
+        },
+        "required": ["name", "evidence"],
+        "additionalProperties": false
+      },
+      "description": "Courts run by this node; a court that cannot flip is FAIL; skips are loud ([SKIP] <reason>)."
+    },
+    "standing": {
+      "type": "string",
+      "enum": ["ALIVE", "PARTIAL", "BLOCKED", "REFUSED", "UNSUPPORTED", "UNVERIFIED"],
+      "description": "Campaign standing vocabulary; UNVERIFIED is the default and is never rounded up."
+    },
+    "divergences": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true,
+      "description": "Where the lane doc or dispatch conflicted with reality; the doc yields, the divergence is recorded here."
+    },
+    "executor": {
+      "type": "string",
+      "enum": ["agent", "gate", "generator", "court"],
+      "description": "Executor class of the transforms named in this receipt (Steam machinery-share witness; phase-change charter, transition 3)."
+    },
+    "strings_admitted": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Runtime string paths this receipt adds (AM->FM diode). Must stay 0; nonzero = falsifier fired = transition not happening. The schema admits the honest nonzero record; the zero-string gate, not this schema, refuses it."
+    },
+    "ctq_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["ctq-01", "ctq-02", "ctq-03", "ctq-04", "ctq-05", "ctq-06"]
+      },
+      "uniqueItems": true,
+      "description": "CTQ ids resolved against docs/jira/v26.11.1/dflss/ctq-registry.yaml (charter section 3 VOC->CTQ rows)."
+    },
+    "doe_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["DOE-1", "DOE-2", "DOE-3", "DOE-4"]
+      },
+      "uniqueItems": true,
+      "description": "Charter section 4 Phase 3 generate-and-kill design experiments."
+    }
+  },
+  "required": ["lane", "files_written", "commands", "courts_run", "standing", "divergences", "executor", "strings_admitted", "ctq_refs", "doe_refs"],
+  "additionalProperties": false
+}
