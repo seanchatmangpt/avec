@@ -1,0 +1,15 @@
+[package]
+name = "cgap"
+version.workspace = true
+edition.workspace = true
+description = "cgap umbrella facade: columnar substrate (Arrow), BLAKE3 hashing, Parquet persistence, and Git packfile writing — one dependency for the published cgap kernel crates."
+repository.workspace = true
+authors.workspace = true
+license-file = "../../LICENSE.md"
+publish = true
+
+[dependencies]
+cgap-arrow = { path = "../cgap-arrow", version = "26.10.29" }
+cgap-blake3 = { path = "../cgap-blake3", version = "26.10.29" }
+cgap-git = { path = "../cgap-git", version = "26.10.29" }
+cgap-parquet = { path = "../cgap-parquet", version = "26.10.29" }

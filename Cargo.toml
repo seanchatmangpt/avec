@@ -5,6 +5,7 @@
 
 resolver = "2"
 members = [
+    "crates/cgap",
     "crates/cgap-arrow",
     "crates/cgap-blake3",
     "crates/cgap-parquet",
