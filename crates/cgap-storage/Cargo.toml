@@ -1,0 +1,7 @@
+[package]
+name = "cgap-storage"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[lib]

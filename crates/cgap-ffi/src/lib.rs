@@ -297,3 +297,6 @@ mod digest_ffi {
         assert_ne!(dv, dn, "validity state must be load-bearing in the digest");
     }
 }
+
+// v26.11.1 moonshot lanes (coordinator-scaffolded, additive only):
+pub mod sovereign;

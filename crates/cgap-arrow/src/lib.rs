@@ -64,3 +64,7 @@ pub use primitive::{Primitive, PrimitiveBuilder};
 pub use timestamps::{TimestampMicro, TimestampMilli, TimestampNano, TimestampSecond};
 pub use varlen::{Varlen, VarlenBuilder};
 pub use views::{ViewVec, ViewVecBuilder};
+
+// v26.11.1 moonshot lanes (coordinator-scaffolded, additive only):
+pub mod slab;
+pub mod bitmask;

@@ -1,0 +1,9 @@
+[package]
+name = "cgap-court"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[[test]]
+name = "court_verdict"
+path = "../../tests/court_verdict.rs"

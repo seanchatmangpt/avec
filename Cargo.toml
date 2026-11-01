@@ -17,7 +17,22 @@ members = [
     "crates/audit",
     "crates/integration",
     "crates/cli",
+    # v26.11.1 moonshot lanes (A01-A20) - coordinator-scaffolded so lanes
+    # never edit this root manifest (same-checkout fan-out, disjoint
+    # ownership). PROPOSED until lane courts land.
+    "crates/cgap-core",
+    "crates/cgap-storage",
+    "crates/cgap-bont",
+    "crates/cgap-bosym",
+    "crates/cgap-bn3",
+    "crates/cgap-gate",
+    "crates/cgap-crypto",
+    "crates/cgap-p28",
+    "crates/cgap-court",
+    "ontologies/fibo",
+    "ontologies/cloud",
 ]
+
 
 [workspace.package]
 version = "26.10.29"

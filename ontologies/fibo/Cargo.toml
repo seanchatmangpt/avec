@@ -1,0 +1,5 @@
+[package]
+name = "cgap-fibo"
+version.workspace = true
+edition.workspace = true
+publish = false

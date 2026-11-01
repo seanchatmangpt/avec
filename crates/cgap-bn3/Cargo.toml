@@ -1,0 +1,7 @@
+[package]
+name = "cgap-bn3"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[lib]

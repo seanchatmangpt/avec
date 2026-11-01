@@ -128,3 +128,6 @@ pub mod ladder;
 
 // ---- wave-4 lane 2 wire-in (inflate: RFC 1951/1950 read side) ----
 pub mod inflate;
+
+// v26.11.1 moonshot lanes (coordinator-scaffolded, additive only):
+pub mod dag;

@@ -45,3 +45,7 @@ pub mod unpack;
 pub mod unpack_filter;
 
 pub use rle::{rle_decode, rle_encode, ParquetError};
+
+// v26.11.1 moonshot lanes (coordinator-scaffolded, additive only):
+pub mod mmap_writer;
+pub mod footer;
