@@ -1,11 +1,13 @@
 # 03-rename-receipt
 
 Manufacturing receipt for the avec -> cgap rename. Subject:
-`/Users/sac/avec` on `main`, lineage `a512927..8b86157`. Status of the
-rename as a whole: **PARTIAL_ALIVE** — every local gate ran and passed on
-the renamed tree, but the rename is not complete until push, D1 (GitHub
-repo rename), and D1b (local dir rename) execute. Those are operator
-transitions; lanes never run git/GitHub transitions.
+`/Users/sac/cgap` on `main`, lineage `a512927..d03a6b4`. Status of the
+rename as a whole: **PARTIAL_ALIVE** — push, D1 (GitHub repo rename),
+D1b (local dir rename), and crates.io publication of `cgap-arrow` /
+`cgap-blake3` executed 2026-10-31 (receipts below); remaining:
+`cgap-git` / `cgap-parquet` publication (rate-limited to
+2026-11-01T06:33:33Z) and the stardf/purrdf consumer transitions (WIP
+upstream, pins deferred).
 
 ## Subject lineage
 
@@ -52,8 +54,11 @@ per-lane file in this repo.
 
 | D | Verdict | Outcome |
 |---|---|---|
-| D1 | GitHub repo rename, operator op post-merge | PENDING (operator) |
-| D1b | Local dir rename, operator op | PENDING (operator) |
+| D1 | GitHub repo rename, operator op post-merge | DONE 2026-10-31 —
+  `gh repo rename cgap -R seanchatmangpt/avec`; `gh repo view
+  seanchatmangpt/cgap` confirms (old URL redirects) |
+| D1b | Local dir rename, operator op | DONE — checkout now
+  `/Users/sac/cgap`; `/Users/sac/avec` absent |
 | D2 | License URN `urn:avec:...` KEEP | KEPT — LICENSE*.md untouched; |
 | | | cited as historical namespace exception |
 | D3 | `stardf_avec_export_stream` rename | DONE (renamed to |
@@ -152,6 +157,55 @@ mutated-assertion-only court.
 4. Marketplace note: the rename commits sit on the local branch
    `blake3-digest-keys`, which strictly contains `origin/main`; branch
    state must be disclosed when the pin bumps land.
+
+## Post-rename execution (2026-10-31, this session)
+
+Executed after the operator moved the checkout (`D1b`) and per the
+operator's amended plan (crates.io publication **before** consumer git
+pins):
+
+1. **L10 committed** first so NEW_HEAD includes the receipt: `663ed36`
+   (03-rename-receipt.md + 00-index standing).
+2. **D1**: `gh repo rename cgap -R seanchatmangpt/avec` exit 0;
+   `gh repo view seanchatmangpt/cgap` -> `cgap
+   https://github.com/seanchatmangpt/cgap`. origin URL updated to the
+   new location.
+3. **Push**: `4ede671..663ed36 main -> main`, then `663ed36..d03a6b4`
+   (see 5).
+4. **Pin-bump reversal**: initial stardf/purrdf git-pin edits were
+   reverted at operator direction (publish-first plan).
+5. **cgap de-stardf** (`d03a6b4`): operator direction — cgap carries NO
+   stardf dependency. The stardf-arrow-capi dev-dep in `cgap-ffi`
+   blocked all four `cargo publish` runs (cargo resolves every member's
+   dev-deps during packaging) and cgap-ffi's court moved to its subject:
+   `ggen-legacy/stardf/arrow/crates/stardf-arrow-capi/tests/
+   cgap_consumer_court.rs` (dev-deps `cgap-ffi` + `cgap-audit` from the
+   stardf side; DYLIB const points at the stardf workspace target dir).
+   Also exposed a stardf-side pre-existing breakage (separate, not
+   repaired here): stardf root `[workspace.package]` lacks
+   `description`/`keywords`/`categories`/`license`/`rust-version`
+   inherited by ~21-39 members — `cargo metadata` exit 101 at `46416e74`.
+6. **crates.io publication** (token from operator in-session; 26.10.29
+   per D8 freeze):
+   - `cgap-blake3 v26.10.29` — Published, exit 0.
+   - `cgap-arrow v26.10.29` — Published, exit 0.
+   - `cgap-git` / `cgap-parquet` — BLOCKED: crates.io 429 new-crate rate
+     limit, retry after `2026-11-01T06:33:33Z`; scheduled one-shot task
+     `5ebcac20` will fire in-session.
+   - Preceded by four dry-run exits 0 and one commit `d03a6b4` (the
+     license-file lines + court move) so registry content matches a
+     committed rev.
+7. **Registry ALIVE witness**: fresh `/tmp/cgap-consumer` crate,
+   `cargo add cgap-arrow` -> `cargo build` exit 0; Cargo.lock source =
+   `registry+https://github.com/rust-lang/crates.io-index`,
+   cgap-arrow 26.10.29. crates.io API: cgap-arrow + cgap-blake3
+   max_version 26.10.29 (user-agent `cgap-publish-receipt`).
+
+Standing after this session: rename **PARTIAL_ALIVE** — publish-first
+plan executed through cgap-arrow/cgap-blake3 ALIVE on the registry;
+cgap-git/cgap-parquet BLOCKED (429, scheduled); consumer pins deferred
+(stardf WIP upstream; purrdf pin still `avec-arrow 20248e4` broken
+E0583).
 
 ## See Also
 

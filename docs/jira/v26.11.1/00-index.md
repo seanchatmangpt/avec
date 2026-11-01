@@ -119,9 +119,11 @@ Filenames below are relative to `tickets/`.
 | rename-1 | `01-rename-impact-survey.md` | avec -> cgap impact survey (ALIVE census, D-points) |
 | rename-2 | `02-rename-plan.md` | avec -> cgap executable plan (P0-P7, D1-D12, R1-R12) — |
   the executable spec; any other rename prose does not supersede it |
-| rename-3 | `03-rename-receipt.md` | Standing: 01/02 executed; receipt at
-  03-rename-receipt.md is PARTIAL_ALIVE — ALIVE gates cited there; pending:
-  push, D1, D1b |
+| rename-3 | `03-rename-receipt.md` | Standing: receipt is PARTIAL_ALIVE —
+  D1/D1b DONE, pushed through d03a6b4, cgap-arrow + cgap-blake3 ALIVE on
+  crates.io at 26.10.29 (fresh-consumer build witness); pending:
+  cgap-git/cgap-parquet (429 rate limit, 2026-11-01T06:33Z), stardf/purrdf
+  consumer pins deferred (stardf WIP) |
 
 ### waves/ — Phase 2-6 PRD/ARD docs (W1-W5)
 
