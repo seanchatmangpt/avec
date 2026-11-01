@@ -1,16 +1,16 @@
-# avec.ttl - project-level graph for the avec consumer repo.
+# cgap.ttl - project-level graph for the cgap consumer repo.
 #
 # Carries project identity + release facts. The Arrow domain graph lives
-# canonically in avec-pack (ggen-marketplace); this file carries no duplicated
+# canonically in cgap-pack (ggen-marketplace); this file carries no duplicated
 # domain facts (one graph, one source of truth - no N-implementations drift).
 #
 # Regenerate consequences: ggen sync run
 
-@prefix av:   <urn:avec:> .
+@prefix av:   <https://cgap.chatmangpt.com/> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 
 av:project a av:Project ;
-    rdfs:label "avec" ;
+    rdfs:label "cgap" ;
     av:version "26.10.29" ;
     av:releaseDate "2026-10-29" ;
     av:ctq1 "SWAR bitmap masking throughput >= 9.0 GiB/s" ;
