@@ -6,6 +6,7 @@ description = "Parquet persistence kernels with branch-free inner-loop bodies: b
 repository.workspace = true
 authors.workspace = true
 publish = true
+license-file = "../../LICENSE.md"
 
 [features]
 default = []

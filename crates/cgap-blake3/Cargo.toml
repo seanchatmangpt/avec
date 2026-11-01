@@ -6,6 +6,7 @@ description = "Sovereign, zero-dependency #![no_std] BLAKE3 cryptographic tree h
 repository.workspace = true
 authors.workspace = true
 publish = true
+license-file = "../../LICENSE.md"
 
 [features]
 default = []

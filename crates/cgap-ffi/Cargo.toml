@@ -19,7 +19,9 @@ cgap-arrow = { path = "../cgap-arrow" }
 # the test binary installs its CountingAlloc #[global_allocator] and exposes
 # with_alloc_tracking for the zero-alloc assertions.
 cgap-audit = { path = "../audit" }
-# W3 consumer court (tests/stardf_consumer_court.rs): the FINAL stardf capi as
-# a foreign-consumer dev-dep (rlib link for courts 1-2; cdylib artifact for
-# court 3's dlopen witness).
-stardf-arrow-capi = { path = "../../../ggen-legacy/stardf/arrow/crates/stardf-arrow-capi" }
+# The stardf consumer court now lives with its subject: stardf WIP upstream
+# (2026-10-31), and cgap must not carry any stardf dependency — cargo resolves
+# every workspace member's dev-deps during `cargo publish`, so a stardf
+# dev-dep here blocked packaging all four published crates. Moved to
+# ggen-legacy/stardf/arrow crates/stardf-arrow-capi/tests/cgap_consumer_court.rs
+# (path-dev-deps on cgap-ffi/cgap-audit from the stardf side).

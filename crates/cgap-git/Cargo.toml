@@ -6,6 +6,7 @@ description = "Git Packfile v2 writer: stored blob objects, .idx v2 generation, 
 repository.workspace = true
 authors.workspace = true
 publish = true
+license-file = "../../LICENSE.md"
 
 [features]
 default = ["std"]

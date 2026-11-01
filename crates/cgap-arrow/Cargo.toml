@@ -6,6 +6,7 @@ description = "Freestanding Apache Arrow columnar substrate: branch-free kernel 
 repository.workspace = true
 authors.workspace = true
 publish = true
+license-file = "../../LICENSE.md"
 
 [features]
 default = []
