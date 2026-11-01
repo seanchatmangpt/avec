@@ -30,7 +30,7 @@ fi
 
 # 4. Anti-vacuity court: perturb settlementLatencyNs 14900 -> 50000 in a copy;
 #    engine MUST report non-conformant on the mutant, else the gate is VACUOUS.
-sed 's/cgap:settlementLatencyNs 14900/cgap:settlementLatencyNs 50000/' "$ONTO" > "$TMP/mutant.ttl"
+sed 's/avec:settlementLatencyNs 14900/avec:settlementLatencyNs 50000/' "$ONTO" > "$TMP/mutant.ttl"
 cmp -s "$ONTO" "$TMP/mutant.ttl" && { echo "FAIL: perturbation did not mutate the TTL"; exit 1; }
 python3 -m pyshacl -e -f human "$TMP/mutant.ttl" > "$TMP/mut.txt" 2>&1 || true
 if grep -q "^Conforms: False" "$TMP/mut.txt"; then
