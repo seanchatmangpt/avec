@@ -1,11 +1,11 @@
 [project]
-name = "avec"
+name = "cgap"
 
 [ontology]
-source = "ontology/avec.ttl"
+source = "ontology/cgap.ttl"
 
 [packs]
-avec-pack = { path = "../ggen-marketplace/packs/avec-pack" }
+cgap-pack = { path = "../ggen-marketplace/packs/cgap-pack" }
 
 [templates]
 dir = "gen-templates"

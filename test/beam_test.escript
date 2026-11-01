@@ -12,7 +12,9 @@
 -export([main/1, cgap_new/2, cgap_len/1, cgap_get/2, cgap_free/1,
          cgap_version/0, cgap_new_i64/2, cgap_get_i64/2, cgap_stats/1,
          cgap_envelope_new/1, cgap_envelope_len/1, cgap_new_fast/2,
-         cgap_batch_binary/1]).
+         cgap_batch_binary/1, cgap_binary_data_pointer/1, cgap_dtor_stats/0,
+         cgap_alloc_stats/0, cgap_flush_to_parquet/1, cgap_seal_to_packfile/1,
+         cgap_receipt_query/1, cgap_open/1, cgap_scan/3, pointer_of/1]).
 -on_load(init/0).
 
 init() ->
@@ -187,4 +189,26 @@ cgap_new_fast(_N, _Fill) ->
 %% Cross-lane stub (resbin lane's export): load_nif requires a stub for
 %% every NIF the library exports. No asserts touched.
 cgap_batch_binary(_Id) ->
+    erlang:nif_error(nif_library_not_loaded).
+
+%% Rename-repair (2026-11-01): load_nif requires a stub for EVERY registered
+%% NIF; the pre-existing stub list covered only 12 of 21 (witnessed: bad_lib
+%% "Function not found cgap_beam:pointer_of/1"). No asserts touched.
+cgap_binary_data_pointer(_Id) ->
+    erlang:nif_error(nif_library_not_loaded).
+cgap_dtor_stats() ->
+    erlang:nif_error(nif_library_not_loaded).
+cgap_alloc_stats() ->
+    erlang:nif_error(nif_library_not_loaded).
+cgap_flush_to_parquet(_Id) ->
+    erlang:nif_error(nif_library_not_loaded).
+cgap_seal_to_packfile(_Id) ->
+    erlang:nif_error(nif_library_not_loaded).
+cgap_receipt_query(_Id) ->
+    erlang:nif_error(nif_library_not_loaded).
+cgap_open(_Path) ->
+    erlang:nif_error(nif_library_not_loaded).
+cgap_scan(_A, _B, _C) ->
+    erlang:nif_error(nif_library_not_loaded).
+pointer_of(_A) ->
     erlang:nif_error(nif_library_not_loaded).

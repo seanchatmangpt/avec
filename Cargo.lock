@@ -15,87 +15,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
 
 [[package]]
-name = "avec-arrow"
-version = "26.10.29"
-
-[[package]]
-name = "avec-audit"
-version = "26.10.29"
-dependencies = [
- "avec-arrow",
- "avec-parquet",
-]
-
-[[package]]
-name = "avec-beam"
-version = "26.10.29"
-dependencies = [
- "avec-arrow",
- "avec-blake3",
- "avec-git",
- "avec-parquet",
-]
-
-[[package]]
-name = "avec-blake3"
-version = "26.10.29"
-
-[[package]]
-name = "avec-cli"
-version = "26.10.29"
-dependencies = [
- "avec-arrow",
- "avec-blake3",
- "avec-git",
- "avec-parquet",
-]
-
-[[package]]
-name = "avec-ffi"
-version = "26.10.29"
-dependencies = [
- "avec-arrow",
- "avec-audit",
- "stardf-arrow-capi",
-]
-
-[[package]]
-name = "avec-git"
-version = "26.10.29"
-
-[[package]]
-name = "avec-gpu"
-version = "26.10.29"
-dependencies = [
- "avec-arrow",
- "cc",
-]
-
-[[package]]
-name = "avec-integration"
-version = "26.10.29"
-dependencies = [
- "avec-arrow",
- "avec-audit",
- "avec-blake3",
- "avec-git",
- "avec-parquet",
-]
-
-[[package]]
-name = "avec-parquet"
-version = "26.10.29"
-dependencies = [
- "avec-arrow",
-]
-
-[[package]]
 name = "bench"
 version = "26.10.29"
 dependencies = [
- "avec-arrow",
- "avec-blake3",
- "avec-parquet",
+ "cgap-arrow",
+ "cgap-blake3",
+ "cgap-parquet",
  "divan",
 ]
 
@@ -133,6 +58,81 @@ name = "cfg-if"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
+
+[[package]]
+name = "cgap-arrow"
+version = "26.10.29"
+
+[[package]]
+name = "cgap-audit"
+version = "26.10.29"
+dependencies = [
+ "cgap-arrow",
+ "cgap-parquet",
+]
+
+[[package]]
+name = "cgap-beam"
+version = "26.10.29"
+dependencies = [
+ "cgap-arrow",
+ "cgap-blake3",
+ "cgap-git",
+ "cgap-parquet",
+]
+
+[[package]]
+name = "cgap-blake3"
+version = "26.10.29"
+
+[[package]]
+name = "cgap-cli"
+version = "26.10.29"
+dependencies = [
+ "cgap-arrow",
+ "cgap-blake3",
+ "cgap-git",
+ "cgap-parquet",
+]
+
+[[package]]
+name = "cgap-ffi"
+version = "26.10.29"
+dependencies = [
+ "cgap-arrow",
+ "cgap-audit",
+ "stardf-arrow-capi",
+]
+
+[[package]]
+name = "cgap-git"
+version = "26.10.29"
+
+[[package]]
+name = "cgap-gpu"
+version = "26.10.29"
+dependencies = [
+ "cc",
+ "cgap-arrow",
+]
+
+[[package]]
+name = "cgap-integration"
+version = "26.10.29"
+dependencies = [
+ "cgap-arrow",
+ "cgap-audit",
+ "cgap-blake3",
+ "cgap-git",
+ "cgap-parquet",
+]
+
+[[package]]
+name = "cgap-parquet"
+version = "26.10.29"
+dependencies = [
+ "cgap-arrow",
+]
 
 [[package]]
 name = "clap"

@@ -80,6 +80,22 @@ defmodule :cgap_beam do
   def cgap_new_i64(_n, _fill), do: :erlang.nif_error(:nif_library_not_loaded)
   def cgap_get_i64(_id, _i), do: :erlang.nif_error(:nif_library_not_loaded)
   def cgap_stats(_id), do: :erlang.nif_error(:nif_library_not_loaded)
+
+  # Rename-repair (2026-11-01): load_nif requires a stub for EVERY registered
+  # NIF; the pre-existing stub list covered only 8 of 21. No asserts touched.
+  def cgap_new_fast(_n, _fill), do: :erlang.nif_error(:nif_library_not_loaded)
+  def cgap_envelope_new(_id), do: :erlang.nif_error(:nif_library_not_loaded)
+  def cgap_envelope_len(_env), do: :erlang.nif_error(:nif_library_not_loaded)
+  def cgap_batch_binary(_id), do: :erlang.nif_error(:nif_library_not_loaded)
+  def cgap_binary_data_pointer(_id), do: :erlang.nif_error(:nif_library_not_loaded)
+  def cgap_dtor_stats(), do: :erlang.nif_error(:nif_library_not_loaded)
+  def cgap_alloc_stats(), do: :erlang.nif_error(:nif_library_not_loaded)
+  def cgap_flush_to_parquet(_id), do: :erlang.nif_error(:nif_library_not_loaded)
+  def cgap_seal_to_packfile(_id), do: :erlang.nif_error(:nif_library_not_loaded)
+  def cgap_receipt_query(_id), do: :erlang.nif_error(:nif_library_not_loaded)
+  def cgap_open(_path), do: :erlang.nif_error(:nif_library_not_loaded)
+  def cgap_scan(_a, _b, _c), do: :erlang.nif_error(:nif_library_not_loaded)
+  def pointer_of(_a), do: :erlang.nif_error(:nif_library_not_loaded)
 end
 
 defmodule CgapEx do
