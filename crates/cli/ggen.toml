@@ -1,0 +1,16 @@
+[project]
+name = "cgap-cli"
+
+[ontology]
+source = "ontology/cgap-cli.ttl"
+
+[packs]
+clap-noun-verb-schema-pack       = { path = "/Users/sac/ggen-marketplace/packs/clap-noun-verb-schema-pack" }
+clap-noun-verb-crate-pack        = { path = "/Users/sac/ggen-marketplace/packs/clap-noun-verb-crate-pack" }
+clap-noun-verb-routing-pack      = { path = "/Users/sac/ggen-marketplace/packs/clap-noun-verb-routing-pack" }
+clap-noun-verb-behavior-pack     = { path = "/Users/sac/ggen-marketplace/packs/clap-noun-verb-behavior-pack" }
+clap-noun-verb-boundary-pack     = { path = "/Users/sac/ggen-marketplace/packs/clap-noun-verb-boundary-pack" }
+clap-noun-verb-verification-pack = { path = "/Users/sac/ggen-marketplace/packs/clap-noun-verb-verification-pack" }
+
+[templates]
+dir = "gen-templates"

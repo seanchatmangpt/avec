@@ -16,7 +16,8 @@ members = [
     "crates/bench",
     "crates/audit",
     "crates/integration",
-    "crates/cli",
+    # NOTE: crates/cli is a standalone ggen six-pack generated crate (its own
+    # [workspace]); it is deliberately NOT a member here.
     # v26.11.1 moonshot lanes (A01-A20) - coordinator-scaffolded so lanes
     # never edit this root manifest (same-checkout fan-out, disjoint
     # ownership). PROPOSED until lane courts land.

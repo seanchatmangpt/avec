@@ -7,7 +7,7 @@
 //! --exclude cgap-arrow --exclude cgap-parquet -o /tmp/cli-mut --timeout 60`).
 //!
 //! Chicago discipline: every test drives the REAL binary as a subprocess
-//! (`std::process::Command`, path from `CARGO_BIN_EXE_cgap-cli`) and asserts
+//! (`std::process::Command`, path from `CARGO_BIN_EXE_cgap`) and asserts
 //! final observable state — exact stdout lines, exit codes, and (macOS)
 //! max-RSS footprints via `/usr/bin/time -l` as allocation ground truth.
 //! No mocks. No sleeps: the only time-like quantity asserted is the
@@ -128,27 +128,22 @@ const MASK_MIN_RSS_BYTES: u64 = 150_000_000;
 const PARQUET_MIN_RSS_BYTES: u64 = 70_000_000;
 
 fn run_cli(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_cgap-cli"))
+    Command::new(env!("CARGO_BIN_EXE_cgap"))
         .args(args)
         .output()
         .expect("spawn cgap-cli subprocess")
 }
 
-/// stdout must be exactly one line ending in `\n`.
-fn one_line_stdout(out: &Output) -> String {
+/// stdout must parse as exactly one JSON object (the noun-verb runtime's
+/// rendering of the handler's returned Value).
+fn json_object_stdout(out: &Output) -> serde_json::Map<String, serde_json::Value> {
     let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
-    assert!(
-        stdout.ends_with('\n'),
-        "expected exactly one stdout line, got {:?}",
-        stdout
-    );
-    let line = stdout.trim_end_matches('\n');
-    assert!(
-        !line.contains('\n'),
-        "expected exactly one stdout line, got {:?}",
-        stdout
-    );
-    line.to_owned()
+    let v: serde_json::Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|e| panic!("stdout must be one JSON object: {e}; got {stdout:?}"));
+    match v {
+        serde_json::Value::Object(m) => m,
+        other => panic!("expected a JSON object, got {other:?}"),
+    }
 }
 
 /// Parse `<token> GiB/s`-style numeric laws without a regex crate.
@@ -169,12 +164,15 @@ fn assert_gibs_in_window(token: &str, window: (f64, f64), what: &str) -> f64 {
 /// (cmd_version→()).
 #[test]
 fn version_prints_workspace_law_version() {
-    let out = run_cli(&["version"]);
+    let out = run_cli(&["self", "version"]);
     assert!(out.status.success(), "exit: {:?}", out.status);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let v: serde_json::Value = serde_json::from_str(stdout.trim_end())
+        .expect("version output must be one JSON string");
     assert_eq!(
-        String::from_utf8_lossy(&out.stdout),
-        "26.10.29\n",
-        "version law: literal 26.10.29 in lockstep with workspace version"
+        v.as_str(),
+        Some(env!("CARGO_PKG_VERSION")),
+        "version law: JSON string in lockstep with the manifest version"
     );
     assert!(
         out.stderr.is_empty(),
@@ -190,11 +188,12 @@ fn version_prints_workspace_law_version() {
 /// (`+=`→`-=` underflow abort in dev, `*=` → 0/143).
 #[test]
 fn align_test_prints_143_of_143_aligned() {
-    let out = run_cli(&["align-test"]);
+    let out = run_cli(&["align", "test"]);
     assert!(out.status.success(), "exit: {:?}", out.status);
+    let obj = json_object_stdout(&out);
     assert_eq!(
-        String::from_utf8_lossy(&out.stdout),
-        "align-test: 143/143 aligned\n",
+        (obj["aligned"].as_u64(), obj["total"].as_u64()),
+        (Some(143), Some(143)),
         "alignment law: all 143 allocations on 64-byte boundaries"
     );
     assert!(
@@ -211,20 +210,22 @@ fn align_test_prints_143_of_143_aligned() {
 /// indexes `out[MASK_WORDS ± …]` → out-of-bounds abort).
 #[test]
 fn bench_mask_line_laws() {
-    let out = run_cli(&["bench-mask"]);
+    let out = run_cli(&["bench", "mask"]);
     assert!(out.status.success(), "exit: {:?}", out.status);
     assert!(
         out.stderr.is_empty(),
         "bench-mask must not write to stderr: {:?}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let line = one_line_stdout(&out);
-    let rest = line
-        .strip_prefix("mask ")
-        .filter(|r| r.ends_with(" GiB/s"))
-        .unwrap_or_else(|| panic!("bench-mask line format law violated: {line:?}"));
-    let num = rest.strip_suffix(" GiB/s").expect("suffix checked");
-    assert_gibs_in_window(num, MASK_GIBS_WINDOW, "bench-mask");
+    let obj = json_object_stdout(&out);
+    let num = obj["mask_gib_per_s"]
+        .as_f64()
+        .expect("mask_gib_per_s must be a JSON number");
+    assert!(
+        num > MASK_GIBS_WINDOW.0 && num < MASK_GIBS_WINDOW.1,
+        "bench mask: {num} GiB/s outside plausible window {:?}",
+        MASK_GIBS_WINDOW
+    );
 }
 
 /// T4 — parquet receipt law: `bench-parquet` prints exactly one
@@ -236,33 +237,32 @@ fn bench_mask_line_laws() {
 #[test]
 fn bench_parquet_line_laws() {
     const EXPECTED_TOKENS: usize = 9;
-    let out = run_cli(&["bench-parquet"]);
+    let out = run_cli(&["bench", "parquet"]);
     assert!(out.status.success(), "exit: {:?}", out.status);
     assert!(
         out.stderr.is_empty(),
         "bench-parquet must not write to stderr: {:?}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let line = one_line_stdout(&out);
-    let tokens: Vec<&str> = line.split_whitespace().collect();
-    assert_eq!(
-        tokens,
-        vec![
-            "parquet",
-            "w=4",
-            "literal",
-            "rle_encode_fast",
-            tokens.get(4).copied().unwrap_or(""),
-            "vs",
-            "rle_encode",
-            tokens.get(7).copied().unwrap_or(""),
-            "GiB/s",
-        ],
-        "parquet line format law violated: {line:?}"
+    let obj = json_object_stdout(&out);
+    let fast_num = obj["rle_encode_fast_gib_per_s"].as_f64().expect(
+        "rle_encode_fast_gib_per_s must be a JSON number",
     );
-    assert_eq!(tokens.len(), EXPECTED_TOKENS);
-    let fast = assert_gibs_in_window(tokens[4], PARQUET_GIBS_WINDOW, "rle_encode_fast");
-    let base = assert_gibs_in_window(tokens[7], PARQUET_GIBS_WINDOW, "rle_encode");
+    let base_num = obj["rle_encode_gib_per_s"].as_f64().expect(
+        "rle_encode_gib_per_s must be a JSON number",
+    );
+    assert!(
+        fast_num > PARQUET_GIBS_WINDOW.0 && fast_num < PARQUET_GIBS_WINDOW.1,
+        "bench parquet fast {fast_num} outside {:?}",
+        PARQUET_GIBS_WINDOW
+    );
+    assert!(
+        base_num > PARQUET_GIBS_WINDOW.0 && base_num < PARQUET_GIBS_WINDOW.1,
+        "bench parquet base {base_num} outside {:?}",
+        PARQUET_GIBS_WINDOW
+    );
+    let fast = fast_num;
+    let base = base_num;
     // Byte-identical outputs (the binary's own correctness gate) imply the
     // two encoders move the same bytes; rates within a small factor.
     let ratio = fast / base;
@@ -282,9 +282,9 @@ fn bench_parquet_line_laws() {
 #[test]
 fn bench_mask_footprint_matches_64mib_workload() {
     let out = Command::new("/usr/bin/time")
-        .args(["-l", env!("CARGO_BIN_EXE_cgap-cli"), "bench-mask"])
+        .args(["-l", env!("CARGO_BIN_EXE_cgap"), "bench", "mask"])
         .output()
-        .expect("spawn /usr/bin/time -l cgap-cli bench-mask");
+        .expect("spawn /usr/bin/time -l cgap bench mask");
     assert!(out.status.success(), "exit: {:?}", out.status);
     let stderr = String::from_utf8_lossy(&out.stderr);
     let rss_line = stderr
@@ -312,9 +312,9 @@ fn bench_mask_footprint_matches_64mib_workload() {
 #[test]
 fn bench_parquet_footprint_matches_8mib_values_workload() {
     let out = Command::new("/usr/bin/time")
-        .args(["-l", env!("CARGO_BIN_EXE_cgap-cli"), "bench-parquet"])
+        .args(["-l", env!("CARGO_BIN_EXE_cgap"), "bench", "parquet"])
         .output()
-        .expect("spawn /usr/bin/time -l cgap-cli bench-parquet");
+        .expect("spawn /usr/bin/time -l cgap bench parquet");
     assert!(out.status.success(), "exit: {:?}", out.status);
     let stderr = String::from_utf8_lossy(&out.stderr);
     let rss_line = stderr

@@ -17,7 +17,7 @@ default:
 
 # Toolchain/env health probe (bin owned by wave-10 lane 2; fails until landed)
 doctor:
-    cargo run -q -p cgap-cli --bin doctor
+    cargo run -q --manifest-path crates/cli/Cargo.toml --bin doctor
 
 # Full v26.10.31 verification ladder
 verify:
@@ -53,4 +53,4 @@ dod:
 
 # Portfolio status bin (bin owned by wave-10 lane 11; fails until landed)
 status:
-    cargo run -q -p cgap-cli --bin status
+    cargo run -q --manifest-path crates/cli/Cargo.toml --bin status

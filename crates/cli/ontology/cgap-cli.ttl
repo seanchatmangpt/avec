@@ -1,0 +1,57 @@
+@prefix cnv: <https://clap-noun-verb.dev/ontology#> .
+
+cnv:CgapCli a cnv:Cli ;
+    cnv:crateName "cgap-cli" ;
+    cnv:binaryName "cgap" ;
+    cnv:version "26.10.29" ;
+    cnv:edition "2021" ;
+    cnv:rustVersion "1.85" ;
+    cnv:about "cgap CLI over the cgap columnar kernels, generated from this graph by ggen." ;
+    cnv:hasNoun cnv:SelfNoun, cnv:BenchNoun, cnv:AlignNoun .
+
+cnv:SelfNoun a cnv:Noun ;
+    cnv:name "self" ;
+    cnv:about "Meta commands about the CLI itself." ;
+    cnv:hasCommand cnv:SelfVersion .
+
+cnv:SelfVersion a cnv:Command ;
+    cnv:name "version" ;
+    cnv:about "Print the CLI version." ;
+    cnv:belongsToNoun cnv:SelfNoun ;
+    cnv:hasBehavior cnv:SelfVersionBehavior .
+
+cnv:SelfVersionBehavior a cnv:CustomBehavior .
+
+cnv:BenchNoun a cnv:Noun ;
+    cnv:name "bench" ;
+    cnv:about "Kernel line-rate benchmarks." ;
+    cnv:hasCommand cnv:BenchMask, cnv:BenchParquet .
+
+cnv:BenchMask a cnv:Command ;
+    cnv:name "mask" ;
+    cnv:about "64 MiB mask_words line-rate bench, min-of-5." ;
+    cnv:belongsToNoun cnv:BenchNoun ;
+    cnv:hasBehavior cnv:BenchMaskBehavior .
+
+cnv:BenchMaskBehavior a cnv:CustomBehavior .
+
+cnv:BenchParquet a cnv:Command ;
+    cnv:name "parquet" ;
+    cnv:about "Literal-page w=4 RLE encode comparison, min-of-5." ;
+    cnv:belongsToNoun cnv:BenchNoun ;
+    cnv:hasBehavior cnv:BenchParquetBehavior .
+
+cnv:BenchParquetBehavior a cnv:CustomBehavior .
+
+cnv:AlignNoun a cnv:Noun ;
+    cnv:name "align" ;
+    cnv:about "64-byte alignment probe over the Buf allocator." ;
+    cnv:hasCommand cnv:AlignTest .
+
+cnv:AlignTest a cnv:Command ;
+    cnv:name "test" ;
+    cnv:about "Assert 64-byte alignment for Buf sizes 1..1000 step 7." ;
+    cnv:belongsToNoun cnv:AlignNoun ;
+    cnv:hasBehavior cnv:AlignTestBehavior .
+
+cnv:AlignTestBehavior a cnv:CustomBehavior .
