@@ -53,6 +53,11 @@ dependencies = [
 [[package]]
 name = "cgap-arrow"
 version = "26.10.29"
+dependencies = [
+ "cgap-core",
+ "cgap-gate",
+ "cgap-storage",
+]
 
 [[package]]
 name = "cgap-audit"
@@ -77,6 +82,24 @@ name = "cgap-blake3"
 version = "26.10.29"
 
 [[package]]
+name = "cgap-bn3"
+version = "26.10.29"
+dependencies = [
+ "cgap-blake3",
+]
+
+[[package]]
+name = "cgap-bont"
+version = "26.10.29"
+dependencies = [
+ "cgap-blake3",
+]
+
+[[package]]
+name = "cgap-bosym"
+version = "26.10.29"
+
+[[package]]
 name = "cgap-cli"
 version = "26.10.29"
 dependencies = [
@@ -87,12 +110,60 @@ dependencies = [
 ]
 
 [[package]]
+name = "cgap-cloud"
+version = "26.10.29"
+dependencies = [
+ "cgap-blake3",
+ "cgap-bont",
+]
+
+[[package]]
+name = "cgap-core"
+version = "26.10.29"
+dependencies = [
+ "cgap-blake3",
+ "cgap-gate",
+]
+
+[[package]]
+name = "cgap-court"
+version = "26.10.29"
+dependencies = [
+ "cgap-audit",
+ "cgap-blake3",
+ "cgap-bn3",
+ "cgap-core",
+ "cgap-gate",
+ "cgap-storage",
+]
+
+[[package]]
+name = "cgap-crypto"
+version = "26.10.29"
+dependencies = [
+ "cgap-blake3",
+]
+
+[[package]]
 name = "cgap-ffi"
 version = "26.10.29"
 dependencies = [
  "cgap-arrow",
  "cgap-audit",
 ]
+
+[[package]]
+name = "cgap-fibo"
+version = "26.10.29"
+dependencies = [
+ "cgap-blake3",
+ "cgap-bont",
+ "cgap-core",
+]
+
+[[package]]
+name = "cgap-gate"
+version = "26.10.29"
 
 [[package]]
 name = "cgap-git"
@@ -118,10 +189,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "cgap-p28"
+version = "26.10.29"
+dependencies = [
+ "cgap-blake3",
+ "cgap-crypto",
+]
+
+[[package]]
 name = "cgap-parquet"
 version = "26.10.29"
 dependencies = [
  "cgap-arrow",
+]
+
+[[package]]
+name = "cgap-storage"
+version = "26.10.29"
+dependencies = [
+ "cgap-blake3",
+ "cgap-git",
 ]
 
 [[package]]

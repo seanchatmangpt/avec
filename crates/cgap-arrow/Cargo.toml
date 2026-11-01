@@ -13,3 +13,12 @@ default = []
 std = []
 
 [dependencies]
+
+[dev-dependencies]
+# Wave 9 cross-lane integration courts (lane A01, v26.11.1): real A04/A14/A05
+# collaborators at court call sites only — runtime externals stay E=0 because
+# dev-dependencies never compile into the lib target. Same crate-as-dev-dep
+# pattern as cgap-core (cgap-blake3) and cgap-parquet (cgap-arrow).
+cgap-core = { path = "../cgap-core" }
+cgap-gate = { path = "../cgap-gate" }
+cgap-storage = { path = "../cgap-storage" }

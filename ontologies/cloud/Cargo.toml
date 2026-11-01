@@ -3,3 +3,15 @@ name = "cgap-cloud"
 version.workspace = true
 edition.workspace = true
 publish = false
+
+# Lane A10 (docs/jira/v26.11.1/lanes/A10-cloud-oabi.md), build/runtime split
+# mirroring A09: the `#![no_std]` facade (src/lib.rs) itself uses NO
+# dependencies — const/types only (lexeme table, slot goldens, equivalence
+# table, metadata). `cgap-blake3` + `cgap-bont` are linked for the BUILD-TIME
+# `emit-pack` bin and the courts: the emitter collision-vets through A06's
+# real `CollisionDetector`, emits A06's real container types, and validates
+# its own output through A06's real loader before writing (Chicago: real
+# collaborators end to end).
+[dependencies]
+cgap-blake3 = { path = "../../crates/cgap-blake3" }
+cgap-bont = { path = "../../crates/cgap-bont" }

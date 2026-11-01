@@ -5,3 +5,12 @@ edition.workspace = true
 publish = false
 
 [lib]
+
+# [A13 unblock 2026-11-01] Minimal unblock, disclosed per contract: the
+# A13 lane's crypto builtins (0x20/0x21) must call the real
+# cgap_blake3::{hash, hash_many_simd} surface (lane doc Section 7, DoD 9),
+# which requires this one path dependency. House style: direct path dep
+# (crates/audit/Cargo.toml precedent). Coordinator: review or revert this
+# edge; the lane did not touch the root workspace manifest.
+[dependencies]
+cgap-blake3 = { path = "../cgap-blake3" }

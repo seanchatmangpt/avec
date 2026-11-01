@@ -3,3 +3,34 @@ name = "cgap-fibo"
 version.workspace = true
 edition.workspace = true
 publish = false
+
+# Lane A09 (docs/jira/v26.11.1/lanes/A09-fibo-oabi.md), build/runtime split
+# (§3.2): the `#![no_std]` facade (src/lib.rs) itself uses NO dependencies —
+# DoD 1 constrains the facade surface (const/types only, no alloc, no
+# lazy statics). `cgap-blake3` is linked for the BUILD-TIME `emit-fibo-pack`
+# bin only (§3.2 build-time half: harvester/collision-check/emitter);
+# `cgap-bont` is a test-only collaborator (T10 loader court reads A06's
+# frozen container types, never redefines them).
+[dependencies]
+cgap-blake3 = { path = "../../crates/cgap-blake3" }
+
+[dev-dependencies]
+cgap-bont = { path = "../../crates/cgap-bont" }
+# Wave-9 cross-lane integration (2026-11-01): A04's `identity_assert` +
+# `CgapFrameHeader`/`P28LicenseAttestation` are court collaborators for the
+# wave-9 slice items "A04 identity court" / "A14 dam over A04 frames"
+# (tests/wave9_integration_courts.rs). Test-only; the no_std facade stays
+# zero-dependency (DoD 1).
+cgap-core = { path = "../../crates/cgap-core" }
+
+# Wave-6 repair (2026-11-01): the Wave-2 bin target name `emit-pack`
+# collided with lane A10's identically-named bin (ontologies/cloud) — two
+# workspace members link one shared `target/debug/emit-pack` path, so a
+# joint cargo invocation could leave A10's binary at that path when this
+# lane's courts resolve `CARGO_BIN_EXE_emit-pack`. Witnessed failing this
+# session (`cargo test -p cgap-fibo -p cgap-cloud --no-fail-fast`, exit
+# 101: fibo t9b/t9c/t11 ran the cloud emitter, 3 FAILED). The target name
+# is now lane-unique; the source path is unchanged.
+[[bin]]
+name = "emit-fibo-pack"
+path = "src/bin/emit-pack.rs"

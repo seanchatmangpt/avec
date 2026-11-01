@@ -18,3 +18,9 @@ venv/
 
 # Scratch: transient build/test spillover (hygiene audit v26.10.31, lane 17)
 /err.log
+
+# Lane build roots are leases, never assets (same-checkout fan-out law)
+target/
+**/target/
+target-*/
+**/target-*/

@@ -5,3 +5,7 @@ edition.workspace = true
 publish = false
 
 [lib]
+
+[dependencies]
+# A06 §9.1: zero dependencies except cgap-blake3 (workspace path dep).
+cgap-blake3 = { path = "../cgap-blake3" }

@@ -4,4 +4,15 @@ version.workspace = true
 edition.workspace = true
 publish = false
 
-[lib]
+[dependencies]
+# A05 §3.3: BLAKE3 binds payload identity (96-bit prefix split header/trailer).
+# Workspace-internal, zero-dependency, no_std — E=0 runtime externals preserved.
+cgap-blake3 = { path = "../cgap-blake3" }
+
+[dev-dependencies]
+# Wave-5 defect repair: the "same identity as cgap-git" claim for the
+# journal's IEEE CRC-32 was UNVERIFIED (no court pinned it). This
+# workspace-internal, zero-external-dependency dev-dep backs
+# tests/court_crc_identity.rs — a real-collaborator differential court.
+# Runtime externals stay E=0 (dev-deps are test-only).
+cgap-git = { path = "../cgap-git" }

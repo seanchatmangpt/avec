@@ -7,3 +7,33 @@ publish = false
 [[test]]
 name = "court_verdict"
 path = "../../tests/court_verdict.rs"
+
+[dev-dependencies]
+# A20 §5.3: the real shared CountingAlloc primitive (crates/audit/src/
+# alloc_counter.rs). Linking cgap-audit donates its #[global_allocator] to
+# this test binary (the struct is pub and reusable) — same crate-as-dev-dep
+# pattern as cgap-ffi, lane-18 disclosed unblock. Path dep; the tree it
+# pulls (cgap-arrow, cgap-parquet) is zero-external-dependency no_std.
+cgap-audit = { path = "../audit" }
+# A20 §5.2: the frozen A05 WAL ABI (cgap_storage::atomic_commit constants
+# and layouts) the interleave engine builds against. Zero-dependency crate.
+cgap-storage = { path = "../cgap-storage" }
+# Wave 3 (full lane scope): A20 §3 consumes the sealed sibling surfaces via
+# their public APIs only. All four are path deps on zero-external crates
+# (every covered crate's [dependencies] is path-only — enforced by the
+# gate's --deps mode this same wave). Disclosure: these four additions are
+# A20-owned (crates/cgap-court/ is sole-writer this lane); the shared
+# Cargo.lock churn they cause is mechanical, same class as lane A17's.
+#   cgap-core   — the canonical A04 CgapFrameHeader/P28LicenseAttestation
+#                 (128 B / 80 B) the verdict lane pins at runtime (§ anchors);
+#   cgap-blake3 — the real BLAKE3 kernel for oabi_digest material in the
+#                 dam-consumption court (§3 "consumes public APIs only");
+#   cgap-bn3    — the A12 SIMD-unifier surface (unify_batch/fixpoint) the
+#                 unifier court consumes;
+#   cgap-gate   — the A14 penstock ingress (the dam's refusal boundary) the
+#                 dam court consumes, plus the frozen A19 status register
+#                 values the cross-lane pin court asserts.
+cgap-core = { path = "../cgap-core" }
+cgap-blake3 = { path = "../cgap-blake3" }
+cgap-bn3 = { path = "../cgap-bn3" }
+cgap-gate = { path = "../cgap-gate" }
