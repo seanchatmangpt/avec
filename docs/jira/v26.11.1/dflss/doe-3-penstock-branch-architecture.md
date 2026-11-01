@@ -272,8 +272,8 @@ Receipt file: `docs/jira/v26.11.1/waves/bench-doe3-penstock-branch-receipt.md`
 - `ls /Users/sac/cgap/crates/cgap-gate /Users/sac/cgap/crates/cgap-gate/src` -> exit 0
   (lib.rs + penstock.rs present)
 - `wc -l /Users/sac/cgap/crates/cgap-gate/src/penstock.rs` -> 1719 lines
-- `grep -n "pub fn\|pub struct\|FrameView" /Users/sac/cgap/crates/cgap-gate/src/penstock.rs`
-  -> exit 0 (line cites in §2)
+- `grep -n "pub fn\|pub struct\|pub enum\|FrameView\|fn ingress"` against
+  `crates/cgap-gate/src/penstock.rs` -> exit 0 (source of the line cites in §2)
 - `ls /Users/sac/cgap/docs/jira/v26.11.1/dflss/doe-3-penstock-branch-architecture.md`
   -> exit 1 (absent before this write; created fresh, not overwritten)
 - `ls /Users/sac/cgap/crates/bench /Users/sac/cgap/crates/bench/benches` -> exit 0
