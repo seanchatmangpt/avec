@@ -287,14 +287,12 @@ Receipt file: `docs/jira/v26.11.1/waves/bench-doe3-penstock-branch-receipt.md`
 
 | Instrument | Status (this session) |
 | --- | --- |
-| `crates/cgap-gate/src/penstock.rs` (Arm A subject) | ALIVE — release suite 11/11, exit 0 (§10) |
-| `cgap-gate` public surface (`pub mod penstock;`) | ALIVE — suite exercises it;
-  `ingress`/`FrameView`/consts are `pub` |
+| `crates/cgap-gate/src/penstock.rs` (Arm A subject) | ALIVE — suite 11/11 exit 0 (§10) |
+| `cgap-gate` public surface (`pub mod penstock;`) | ALIVE — suite exercises it |
 | Divan membrane `crates/bench` | UNVERIFIED — not built this session; manifest read |
 | `benches/doe3_penstock_branch.rs` | UNVERIFIED — absent on disk; §5 specifies it |
 | `cgap-gate` dep in `crates/bench/Cargo.toml` | UNVERIFIED — absent; §5.2 wiring |
 | Anti-vacuity court (M-BR-1 / M-BR-2) | UNVERIFIED — specified, not executed |
-| Anti-vacuity sandbox court (M-BR-1/M-BR-2) | UNVERIFIED — specified, not executed this session |
 
 ## 12. Divergences (recorded, not silent)
 
