@@ -119,6 +119,9 @@ Filenames below are relative to `tickets/`.
 | rename-1 | `01-rename-impact-survey.md` | avec -> cgap impact survey (ALIVE census, D-points) |
 | rename-2 | `02-rename-plan.md` | avec -> cgap executable plan (P0-P7, D1-D12, R1-R12) — |
   the executable spec; any other rename prose does not supersede it |
+| rename-3 | `03-rename-receipt.md` | Standing: 01/02 executed; receipt at
+  03-rename-receipt.md is PARTIAL_ALIVE — ALIVE gates cited there; pending:
+  push, D1, D1b |
 
 ### waves/ — Phase 2-6 PRD/ARD docs (W1-W5)
 
