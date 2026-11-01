@@ -189,23 +189,30 @@ pins):
    per D8 freeze):
    - `cgap-blake3 v26.10.29` — Published, exit 0.
    - `cgap-arrow v26.10.29` — Published, exit 0.
-   - `cgap-git` / `cgap-parquet` — BLOCKED: crates.io 429 new-crate rate
-     limit, retry after `2026-11-01T06:33:33Z`; scheduled one-shot task
-     `5ebcac20` will fire in-session.
+   - `cgap-git v26.10.29` — Published, exit 0 (window opened 06:33Z).
+   - `cgap-parquet v26.10.29` — Published, exit 0 (`--allow-dirty`: its
+     lane-written README was on disk, lane complete + verified; window
+     opened 06:43Z after the sliding reset).
+   - `cgap v26.10.29` (umbrella facade, `c108256`) — Published, exit 0
+     (`--allow-dirty`, same README posture); window opened 06:53Z.
    - Preceded by four dry-run exits 0 and one commit `d03a6b4` (the
      license-file lines + court move) so registry content matches a
      committed rev.
 7. **Registry ALIVE witness**: fresh `/tmp/cgap-consumer` crate,
-   `cargo add cgap-arrow` -> `cargo build` exit 0; Cargo.lock source =
-   `registry+https://github.com/rust-lang/crates.io-index`,
-   cgap-arrow 26.10.29. crates.io API: cgap-arrow + cgap-blake3
-   max_version 26.10.29 (user-agent `cgap-publish-receipt`).
+   `cargo add cgap-arrow` -> `cargo build` exit 0; and a fresh
+   `/tmp/cgap-umbrella-check*` consumer: `cargo add cgap` ->
+   `cargo build` exit 0, Cargo.lock source =
+   `registry+https://github.com/rust-lang/crates.io-index`. crates.io
+   API: ALL FIVE crates max_version 26.10.29 (user-agent
+   `cgap-publish-receipt`): cgap, cgap-arrow, cgap-blake3, cgap-git,
+   cgap-parquet.
 
-Standing after this session: rename **PARTIAL_ALIVE** — publish-first
-plan executed through cgap-arrow/cgap-blake3 ALIVE on the registry;
-cgap-git/cgap-parquet BLOCKED (429, scheduled); consumer pins deferred
-(stardf WIP upstream; purrdf pin still `avec-arrow 20248e4` broken
-E0583).
+Standing after this session: rename **PARTIAL_ALIVE -> publication
+complete** — ALL FIVE crates (cgap umbrella + 4 kernels) ALIVE on
+crates.io at 26.10.29 with fresh-consumer build witnesses. Remaining
+deferred: consumer pins (stardf WIP upstream; purrdf pin still
+`avec-arrow 20248e4` broken E0583) — operator call when stardf's
+workspace manifest repair lands.
 
 ## See Also
 
