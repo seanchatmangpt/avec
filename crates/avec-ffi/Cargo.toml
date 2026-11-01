@@ -19,3 +19,7 @@ avec-arrow = { path = "../avec-arrow" }
 # the test binary installs its CountingAlloc #[global_allocator] and exposes
 # with_alloc_tracking for the zero-alloc assertions.
 avec-audit = { path = "../audit" }
+# W3 consumer court (tests/stardf_consumer_court.rs): the FINAL stardf capi as
+# a foreign-consumer dev-dep (rlib link for courts 1-2; cdylib artifact for
+# court 3's dlopen witness).
+stardf-arrow-capi = { path = "../../../ggen-legacy/stardf/arrow/crates/stardf-arrow-capi" }

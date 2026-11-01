@@ -1,0 +1,14 @@
+# Toolchain pin for the avec workspace (G09 gate repair, 2026-10-31).
+#
+# WHY: stardf/arrow is a path dependency of the avec-ffi stardf consumer court
+# (`crates/avec-ffi/tests/stardf_consumer_court.rs`), and its manifests now
+# declare rust-version = 1.98 (the workspace floor). avec's ambient rustup
+# default (stable 1.97.0) refuses the floor, turning the
+# stardf_consumer_court gate RED (exit 101, 2026-10-31 21:02-21:05).
+#
+# CHANNEL: floating nightly, the same posture stardf/arrow itself pins
+# (stardf/arrow/rust-toolchain.toml) — the court must build the capi exactly
+# as stardf builds it. No `#![feature(...)]` is used by this gate; the gate
+# must run as plain `cargo test` with NO RUSTFLAGS override.
+[toolchain]
+channel = "nightly"
