@@ -75,7 +75,7 @@ REPO = Path(__file__).resolve().parent.parent
 ARTIFACT_MD = REPO / "docs" / "jira" / "v26.10.31" / "19-ontology-ttl.md"
 VALIDATOR_SH = REPO / "scripts" / "validate_ontology.sh"
 
-AVEC = Namespace("https://avec.chatman.dev/ontology/26.10.31#")
+CGAP = Namespace("https://avec.chatman.dev/ontology/26.10.31#")
 ODRL = Namespace("http://www.w3.org/ns/odrl/2/")
 EX = Namespace("https://avec.chatman.dev/corpus-b/")
 SH = Namespace("http://www.w3.org/ns/shacl#")
@@ -219,63 +219,63 @@ def run_absence_probe(name: str, ttl: bytes, base_hash: str, mutate, rows) -> No
 # --------------------------------------------------------------------------
 
 def git_conforming(g: Graph, node: URIRef) -> None:
-    """Git plane instance conforming to avec:GitSequencingPlaneShape."""
-    g.add((node, RDF.type, AVEC.GitSequencingPlane))
-    g.add((node, AVEC.packfileVersion, Literal(2)))
-    g.add((node, AVEC.fanoutTableEntries, Literal(256)))
-    g.add((node, AVEC.searchLadderStages, Literal(16)))
+    """Git plane instance conforming to cgap:GitSequencingPlaneShape."""
+    g.add((node, RDF.type, CGAP.GitSequencingPlane))
+    g.add((node, CGAP.packfileVersion, Literal(2)))
+    g.add((node, CGAP.fanoutTableEntries, Literal(256)))
+    g.add((node, CGAP.searchLadderStages, Literal(16)))
 
 
 def turnstile_conforming(g: Graph, node: URIRef) -> None:
-    """Turnstile instance conforming to avec:TurnstileAdmissionShape
+    """Turnstile instance conforming to cgap:TurnstileAdmissionShape
     (settlement at the receipted 14900 ns; Cpk omitted — minInclusive is
     vacuous on absence, and its presence-binding is probed by N-13)."""
-    g.add((node, RDF.type, AVEC.TurnstileAdmission))
-    g.add((node, AVEC.heapAllocationBytes, Literal(0)))
-    g.add((node, AVEC.branchMissRate, Literal(Decimal("0.000"))))
-    g.add((node, AVEC.settlementLatencyNs, Literal(14900)))
+    g.add((node, RDF.type, CGAP.TurnstileAdmission))
+    g.add((node, CGAP.heapAllocationBytes, Literal(0)))
+    g.add((node, CGAP.branchMissRate, Literal(Decimal("0.000"))))
+    g.add((node, CGAP.settlementLatencyNs, Literal(14900)))
 
 
 def m_n08_fanout(g: Graph) -> None:
     git_conforming(g, EX.Case_N08)
-    g.set((EX.Case_N08, AVEC.fanoutTableEntries, Literal(128)))
+    g.set((EX.Case_N08, CGAP.fanoutTableEntries, Literal(128)))
 
 
 def m_n08_absent(g: Graph) -> None:
-    g.add((EX.Case_N08_absent, RDF.type, AVEC.GitSequencingPlane))
+    g.add((EX.Case_N08_absent, RDF.type, CGAP.GitSequencingPlane))
 
 
 def m_n09_variance(g: Graph) -> None:
     git_conforming(g, EX.Case_N09)
-    g.add((EX.Case_N09, AVEC.searchTimeVarianceNs, Literal(Decimal("4.0"))))
+    g.add((EX.Case_N09, CGAP.searchTimeVarianceNs, Literal(Decimal("4.0"))))
 
 
 def m_n10_heap(g: Graph) -> None:
     turnstile_conforming(g, EX.Case_N10)
-    g.set((EX.Case_N10, AVEC.heapAllocationBytes, Literal(4096)))
+    g.set((EX.Case_N10, CGAP.heapAllocationBytes, Literal(4096)))
 
 
 def m_n10_absent(g: Graph) -> None:
-    g.add((EX.Case_N10_absent, RDF.type, AVEC.TurnstileAdmission))
+    g.add((EX.Case_N10_absent, RDF.type, CGAP.TurnstileAdmission))
 
 
 def m_n11_branch(g: Graph) -> None:
     turnstile_conforming(g, EX.Case_N11)
-    g.set((EX.Case_N11, AVEC.branchMissRate, Literal(Decimal("0.003"))))
+    g.set((EX.Case_N11, CGAP.branchMissRate, Literal(Decimal("0.003"))))
 
 
 def m_n11_absent(g: Graph) -> None:
-    g.add((EX.Case_N11_absent, RDF.type, AVEC.TurnstileAdmission))
+    g.add((EX.Case_N11_absent, RDF.type, CGAP.TurnstileAdmission))
 
 
 def m_n12_settlement(g: Graph) -> None:
     turnstile_conforming(g, EX.Case_N12)
-    g.set((EX.Case_N12, AVEC.settlementLatencyNs, Literal(40000)))
+    g.set((EX.Case_N12, CGAP.settlementLatencyNs, Literal(40000)))
 
 
 def m_n13_cpk(g: Graph) -> None:
     turnstile_conforming(g, EX.Case_N13)
-    g.add((EX.Case_N13, AVEC.processCapabilityCpk, Literal(Decimal("1.4"))))
+    g.add((EX.Case_N13, CGAP.processCapabilityCpk, Literal(Decimal("1.4"))))
 
 
 # --------------------------------------------------------------------------
@@ -287,7 +287,7 @@ def m_n13_cpk(g: Graph) -> None:
 # graph selects which engine-executed comparison applies; the court never
 # compares money in Python.
 ASK_HARBOR = """
-PREFIX avec: <https://avec.chatman.dev/ontology/26.10.31#>
+PREFIX cgap: <https://avec.chatman.dev/ontology/26.10.31#>
 PREFIX odrl: <http://www.w3.org/ns/odrl/2/>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 ASK WHERE {
@@ -295,7 +295,7 @@ ASK WHERE {
           odrl:permission ?perm .
   ?perm odrl:action odrl:use ;
         odrl:constraint ?c .
-  ?c odrl:leftOperand avec:assetUnderManagement ;
+  ?c odrl:leftOperand cgap:assetUnderManagement ;
      odrl:operator odrl:lt ;
      odrl:rightOperand ?limit .
   FILTER ( ?aum < ?limit )
@@ -304,7 +304,7 @@ ASK WHERE {
 """
 
 ASK_DUTY = """
-PREFIX avec: <https://avec.chatman.dev/ontology/26.10.31#>
+PREFIX cgap: <https://avec.chatman.dev/ontology/26.10.31#>
 PREFIX odrl: <http://www.w3.org/ns/odrl/2/>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 ASK WHERE {
@@ -313,7 +313,7 @@ ASK WHERE {
   ?perm odrl:action odrl:use ;
         odrl:constraint ?c ;
         odrl:duty ?duty .
-  ?c odrl:leftOperand avec:assetUnderManagement ;
+  ?c odrl:leftOperand cgap:assetUnderManagement ;
      odrl:operator odrl:gte ;
      odrl:rightOperand ?limit .
   ?duty odrl:action ?dutyAction .
@@ -356,7 +356,7 @@ def run_odrl_case(ttl: bytes, base_hash: str, rows: list[dict],
             exact = (int(harbor) + int(duty)) == 1 and harbor == want_harbor
             branch = ("HARBOR(duty-free)" if harbor else
                       f"DUTY(duty={duty_action})" if duty else "GAP")
-            if duty and duty_action != AVEC.regularize:
+            if duty and duty_action != CGAP.regularize:
                 exact = False
             out.append((label, aum, harbor, duty, branch, exact))
         return out

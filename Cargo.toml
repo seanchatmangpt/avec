@@ -5,13 +5,13 @@
 
 resolver = "2"
 members = [
-    "crates/avec-arrow",
-    "crates/avec-blake3",
-    "crates/avec-parquet",
-    "crates/avec-ffi",
-    "crates/avec-beam",
-    "crates/avec-gpu",
-    "crates/avec-git",
+    "crates/cgap-arrow",
+    "crates/cgap-blake3",
+    "crates/cgap-parquet",
+    "crates/cgap-ffi",
+    "crates/cgap-beam",
+    "crates/cgap-gpu",
+    "crates/cgap-git",
     "crates/bench",
     "crates/audit",
     "crates/integration",
@@ -21,7 +21,7 @@ members = [
 [workspace.package]
 version = "26.10.29"
 edition = "2021"
-repository = "https://github.com/seanchatmangpt/avec"
+repository = "https://github.com/seanchatmangpt/cgap"
 authors = ["Sean Chatman <info@chatmangpt.com>"]
 
 [profile.release]

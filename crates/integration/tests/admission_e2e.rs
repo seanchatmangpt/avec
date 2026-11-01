@@ -1,11 +1,11 @@
 //! End-to-end admission pipeline (PRD workflow 1, specs 23/24/25/26).
 //!
 //! Real collaborators, Chicago-style: a batch of real `Quad64` records
-//! (spec 23 layout from avec-arrow), a real BLAKE3 receipt over the batch
+//! (spec 23 layout from cgap-arrow), a real BLAKE3 receipt over the batch
 //! bytes (spec 26, R = blake3(batch_bytes)), real level-free parquet pages
-//! through `avec_parquet::level_free::write_page`/`read_page_payload`
+//! through `cgap_parquet::level_free::write_page`/`read_page_payload`
 //! (spec 24), asserted byte-identical after the full round trip with
-//! receipt equality, and the real avec-git packfile wrap of those pages
+//! receipt equality, and the real cgap-git packfile wrap of those pages
 //! (spec 25: `PackBuilder` -> pack+idx, parse-back byte identity, plus a
 //! real `git fsck` court over the emitted pack).
 //!
@@ -17,11 +17,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use avec_arrow::layout::{Quad64, QUAD_SIZE};
-use avec_blake3::hash;
-use avec_parquet::level_free::{read_page_payload, write_page, LevelFreeType};
-use avec_git::pack_write::{encode_object_header, git_object_oid, parse_idx_v2, parse_pack_v2};
-use avec_git::PackBuilder;
+use cgap_arrow::layout::{Quad64, QUAD_SIZE};
+use cgap_blake3::hash;
+use cgap_parquet::level_free::{read_page_payload, write_page, LevelFreeType};
+use cgap_git::pack_write::{encode_object_header, git_object_oid, parse_idx_v2, parse_pack_v2};
+use cgap_git::PackBuilder;
 
 /// Deterministic pseudo-random quad stream (xorshift64*), so every run of
 /// the test hashes the same batch and the receipt is reproducible.
@@ -168,7 +168,7 @@ impl TempGitRepo {
     /// `git init -q` a fresh repo in a unique temp dir; removed on Drop.
     fn new(tag: &str) -> TempGitRepo {
         let root = std::env::temp_dir().join(format!(
-            "avec-integration-admission-e2e-{}-{}-{}",
+            "cgap-integration-admission-e2e-{}-{}-{}",
             tag,
             std::process::id(),
             std::time::SystemTime::now()
@@ -227,7 +227,7 @@ fn install_pack(repo_root: &Path, pack: &[u8], idx: &[u8]) -> (PathBuf, PathBuf)
 
 #[test]
 fn admission_e2e_roundtrip_and_receipt() {
-    println!("[stage: layout]   avec-arrow Quad64 layout — LANDED, using it");
+    println!("[stage: layout]   cgap-arrow Quad64 layout — LANDED, using it");
     let quads = make_quads(256);
     let bytes = batch_bytes(&quads);
     assert_eq!(bytes.len(), 256 * QUAD_SIZE);
@@ -239,12 +239,12 @@ fn admission_e2e_roundtrip_and_receipt() {
     }
 
     // --------------------------------------------------------- spec 26 --
-    println!("[stage: blake3]   avec-blake3 batch receipt — LANDED");
+    println!("[stage: blake3]   cgap-blake3 batch receipt — LANDED");
     let receipt: [u8; 32] = hash(&bytes);
     assert_eq!(hash(&bytes), receipt, "BLAKE3 must be deterministic");
 
     // --------------------------------------------------------- spec 24 --
-    println!("[stage: parquet]  avec-parquet level-free pages — LANDED");
+    println!("[stage: parquet]  cgap-parquet level-free pages — LANDED");
     let pages: Vec<(&'static str, Vec<u8>, LevelFreeType)> = project_columns(&quads)
         .into_iter()
         .map(|c| {
@@ -256,22 +256,22 @@ fn admission_e2e_roundtrip_and_receipt() {
     assert_eq!(pages.len(), 8, "one page per quad column");
 
     // --------------------------------------------------------- spec 25 --
-    println!("[stage: git]     avec-git packfile wrap of the 8 pages — LANDED");
+    println!("[stage: git]     cgap-git packfile wrap of the 8 pages — LANDED");
     let mut builder = PackBuilder::new();
     for (_name, page, _ty) in &pages {
         builder.push(page);
     }
     let (pack, idx) =
-        builder.finish().expect("avec-git PackBuilder finish over the page payloads");
+        builder.finish().expect("cgap-git PackBuilder finish over the page payloads");
     assert_eq!(builder.len(), 8, "builder carries one blob per page");
 
     // Parse the idx back (independent reader): one entry per page.
-    let (oids, _crcs, _offs) = parse_idx_v2(&idx).expect("avec-git idx parses");
+    let (oids, _crcs, _offs) = parse_idx_v2(&idx).expect("cgap-git idx parses");
     assert_eq!(oids.len(), 8, "idx must carry one entry per page");
 
     // Independent pack parser + inflate: every object must inflate back to
     // its page bytes, byte-identical.
-    let parsed = parse_pack_v2(&pack).expect("avec-git pack parses");
+    let parsed = parse_pack_v2(&pack).expect("cgap-git pack parses");
     assert_eq!(parsed.len(), 8, "pack must carry one object per page");
     for (obj, (name, page, _)) in parsed.iter().zip(pages.iter()) {
         assert_eq!(obj.obj_type, 3, "{name} packs as a pack-v2 blob (type 3)");
@@ -284,7 +284,7 @@ fn admission_e2e_roundtrip_and_receipt() {
             .map(|q| q.offset as usize)
             .min()
             .unwrap_or(pack.len() - 20);
-        let back = avec_git::inflate::zlib_decode(&pack[start..next])
+        let back = cgap_git::inflate::zlib_decode(&pack[start..next])
             .unwrap_or_else(|e| panic!("{name}: zlib body does not inflate: {e:?}"));
         assert_eq!(
             back, *page,
@@ -309,7 +309,7 @@ fn admission_e2e_roundtrip_and_receipt() {
         fsck.ok,
         "\n==================== ADMISSION E2E GIT COURT: FAIL ====================\n\
          git {git_version}\n\
-         avec-git pack built from the 8 admission pages ({} bytes) rejected by \
+         cgap-git pack built from the 8 admission pages ({} bytes) rejected by \
          git fsck --full.\n\
          --- fsck stderr ---\n{}\n\
          =======================================================================",
@@ -324,7 +324,7 @@ fn admission_e2e_roundtrip_and_receipt() {
     );
     assert!(
         vp.ok,
-        "git verify-pack -v rejected the avec-git pack/idx pair: {}",
+        "git verify-pack -v rejected the cgap-git pack/idx pair: {}",
         vp.stderr
     );
 

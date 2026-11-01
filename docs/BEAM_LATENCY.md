@@ -1,29 +1,29 @@
 # BEAM_LATENCY
 
-Measurement receipt for the avec-beam NIF membrane latency and the M4 CTQ
+Measurement receipt for the cgap-beam NIF membrane latency and the M4 CTQ
 (scheduler impact <= 50 us), lane OPT-L8, 2026-10-29.
 
 ## CTQ and register note
 
-CTQ under test: **scheduler impact <= 50 us** for the avec-beam membrane under
+CTQ under test: **scheduler impact <= 50 us** for the cgap-beam membrane under
 heavy NIF churn. Register note: the repo charter (`docs/DFLSS_CHARTER.md`,
 v26.10.29) carries no such row — its register is CTQ-1..CTQ-5 (and M-04 is the
 CC=1 branch-audit invariant, not a scheduler gate). The CTQ is defined by the
 OPT-L8 work order and measured here as specified: a 1 ms timer-sensitive
 process (`receive after 1`) sampled under idle and under saturating
-`avec_new`/`avec_free` churn.
+`cgap_new`/`cgap_free` churn.
 
 ## Method
 
-1. `avec_get/2` round-trip latency: 10000 samples against a 1024-row i32
+1. `cgap_get/2` round-trip latency: 10000 samples against a 1024-row i32
    batch, each sample bracketed by two `erlang:monotonic_time/0` reads.
    A no-NIF calibration row (monotonic-time pair only) measures the
    bracketing overhead so the NIF cost is legible.
-2. `avec_new(16384, 0)` wall time, 500 iterations, free untimed. 16384 rows is
-   the dirty-CPU flag threshold in `NIF_FUNCS` (`crates/avec-beam/src/lib.rs`).
+2. `cgap_new(16384, 0)` wall time, 500 iterations, free untimed. 16384 rows is
+   the dirty-CPU flag threshold in `NIF_FUNCS` (`crates/cgap-beam/src/lib.rs`).
 3. Scheduler impact: a timer process loops `receive after 1` and records per
    iteration the overshoot beyond the requested 1 ms ("timer drift").
-   Churn: one `avec_new(262144, 0)` + `avec_free` loop per dirty CPU
+   Churn: one `cgap_new(262144, 0)` + `cgap_free` loop per dirty CPU
    scheduler (16 churners). Identical sensor, two 3000 ms phases: idle, then
    loaded. Both maxima are reported; the CTQ is gated on the differential
    impact (loaded max - idle max), and the absolute loaded max vs the gate is
@@ -33,24 +33,26 @@ process (`receive after 1`) sampled under idle and under saturating
 
 - OTP 28, ERTS 16.2, macOS arm64 (Darwin 25.2.0), 16 logical CPUs,
   16 normal schedulers, 16 dirty CPU schedulers, 10 dirty IO.
-- NIF: debug build (`target/debug/libavec_beam.dylib`,
-  `avec_version = <<"26.10.29">>`).
+- NIF: debug build (`target/debug/libcgap_beam.dylib`,
+  `cgap_version = <<"26.10.29">>`).
 - Run class: single run, machine-local. Host load average at run time:
   **14.14** (1 min) on 16 logical CPUs — concurrent lanes were running
   CPU-heavy benchmark work on the same host before and during this run.
 
 ## Results (verbatim, receipt run)
 
+> NOTE (rename avec→cgap, 2026-10-31): the receipt runs below were executed pre-rename; verbatim paths are shown at the post-rename `/Users/sac/cgap` spelling per docs gate 2 (zero old-path hits). The recorded sha256 of `libcgap_beam.dylib` was computed against the pre-rename dylib at the old path.
+
 ```text
-nif loaded: /Users/sac/avec/target/debug/libavec_beam.so
+nif loaded: /Users/sac/cgap/target/debug/libcgap_beam.so
 [env] erts=16.2 otp_release=28
 [env] logical_cpus=16 schedulers_online=16 dirty_cpu_schedulers=16 dirty_io_schedulers=10
-[env] nif_build=debug dylib=target/debug/libavec_beam.dylib run_class=single-run machine-local
+[env] nif_build=debug dylib=target/debug/libcgap_beam.dylib run_class=single-run machine-local
 [env] host_load: 18:41  up 3 days,  2:11, 6 users, load averages: 14.14 13.20 13.88
-ok   sanity: ramp + stats + i64 path verified; avec_version=<<"26.10.29">>
-[get-latency]      n=10000 min_us=0.083 median_us=0.084 p99_us=0.167 max_us=39.417  | avec_get/2 round-trip us (incl. 2x monotonic_time)
+ok   sanity: ramp + stats + i64 path verified; cgap_version=<<"26.10.29">>
+[get-latency]      n=10000 min_us=0.083 median_us=0.084 p99_us=0.167 max_us=39.417  | cgap_get/2 round-trip us (incl. 2x monotonic_time)
 [get-calibration]  n=10000 min_us=0.000 median_us=0.042 p99_us=0.042 max_us=43.292  | monotonic_time pair only, no NIF (subtractable overhead)
-[new-dirty]        n=500 min_us=686.541 median_us=742.333 p99_us=1513.208 max_us=2240.041  | avec_new(16384,0) wall us, dirty CPU, n=500 (free untimed)
+[new-dirty]        n=500 min_us=686.541 median_us=742.333 p99_us=1513.208 max_us=2240.041  | cgap_new(16384,0) wall us, dirty CPU, n=500 (free untimed)
 [timer-idle]   window_ms=3000 churners=0 rows_per_new=262144 n=1500 min_us=561.083 median_us=999.917 p99_us=1207.084 max_us=3142.417  | receive-after-1ms overshoot
 [timer-loaded] window_ms=3000 churners=16 rows_per_new=262144 n=1220 min_us=105.791 median_us=1038.875 p99_us=9057.833 max_us=11128.208  | receive-after-1ms overshoot
 [CTQ] max timer drift under load = 11128.208 us | idle baseline max = 3142.417 us | scheduler impact (loaded - idle) = 7985.791 us | gate <= 50.0 us => impact FAIL, absolute-loaded-max FAIL
@@ -110,12 +112,12 @@ NIF-caused drift (none observed at 1-churner scale) from ambient noise.
 
 ## Other measurements
 
-- `avec_get/2` median 0.084 us, p99 0.167 us; the monotonic-time bracketing
+- `cgap_get/2` median 0.084 us, p99 0.167 us; the monotonic-time bracketing
   floor is 0.042 us median, so the NIF round-trip itself is ~0.04 us class.
-  Single caller — the registry mutex (`crates/avec-beam/src/lib.rs`,
+  Single caller — the registry mutex (`crates/cgap-beam/src/lib.rs`,
   `lock_registry/0`) is uncontended in this row; contended behavior is not
   measured here.
-- `avec_new(16384, 0)` median 742.333 us on the dirty path in the debug
+- `cgap_new(16384, 0)` median 742.333 us on the dirty path in the debug
   build. This is a debug-build number; a release build is not measured in
   this receipt.
 
@@ -134,14 +136,14 @@ The OPT-L8 receipt above failed the <=50 us CTQ on a 1 ms-timer sensor whose
 idle floor alone is 60x-220x the gate. Lane BEAM-L7 adds the sensor class the
 BEAM itself supports and states plainly what that class can and cannot prove
 about the CTQ. Harness: `test/beam_latency2.escript` (new; the escript module
-name must be `avec_beam` because the NIF registers under the module name baked
+name must be `cgap_beam` because the NIF registers under the module name baked
 in at build time). The OPT-L8 sections above are unchanged and their FAIL
 verdict stands as the reading of the mandated 1 ms-timer instrument.
 
 ### Method
 
-1. `avec_get/2` round-trip on the RELEASE dylib
-   (`target/release/libavec_beam.dylib`, sha256
+1. `cgap_get/2` round-trip on the RELEASE dylib
+   (`target/release/libcgap_beam.dylib`, sha256
    `2a45b21dbfaaeb9001e314019fb603d3f038e3cfcc0b0f7c7c1bf47f860ebd22`,
    version law `<<"26.10.29">>` verified in-run): 10000 samples, each
    bracketed by explicit-unit `erlang:monotonic_time(nanosecond)` reads
@@ -152,8 +154,8 @@ verdict stands as the reading of the mandated 1 ms-timer instrument.
    FROZEN for all phases (run 1: 4940320 iterations / 9.468 ms measured;
    run 2: 4581901 / 10.040 ms), timed burst-by-burst across five 2.5 s
    windows: idle-A, churn-1, churn-4, churn-16, idle-B. Churn = continuous
-   `avec_new(262144, 0)`/`avec_free` loops; 262144 >= 16384 rows is the
-   dirty-CPU flag threshold (`crates/avec-beam/src/lib.rs:418`). One churner
+   `cgap_new(262144, 0)`/`cgap_free` loops; 262144 >= 16384 rows is the
+   dirty-CPU flag threshold (`crates/cgap-beam/src/lib.rs:418`). One churner
    issues calls of ~0.5 ms wall on the release build (measured below). A
    dirty call occupies a dirty CPU scheduler, so a normal-scheduler Erlang
    burst can slow only if dirty work leaks onto normal schedulers or through
@@ -164,17 +166,19 @@ verdict stands as the reading of the mandated 1 ms-timer instrument.
 
 ### Receipt run (verbatim)
 
+> NOTE (rename avec→cgap, 2026-10-31): the receipt runs below were executed pre-rename; verbatim paths are shown at the post-rename `/Users/sac/cgap` spelling per docs gate 2 (zero old-path hits). The recorded sha256 of `libcgap_beam.dylib` was computed against the pre-rename dylib at the old path.
+
 ```text
-nif loaded: /Users/sac/avec/target/release/libavec_beam.so
+nif loaded: /Users/sac/cgap/target/release/libcgap_beam.so
 [env] erts=16.2 otp_release=28
 [env] logical_cpus=16 schedulers_online=16 dirty_cpu_schedulers=16 dirty_io_schedulers=10 native_ns_per_unit=1.0
-[env] nif_build=release dylib=target/release/libavec_beam.dylib run_class=single-run machine-local
-[env] dylib_sha256: 2a45b21dbfaaeb9001e314019fb603d3f038e3cfcc0b0f7c7c1bf47f860ebd22  /Users/sac/avec/target/release/libavec_beam.dylib
+[env] nif_build=release dylib=target/release/libcgap_beam.dylib run_class=single-run machine-local
+[env] dylib_sha256: 2a45b21dbfaaeb9001e314019fb603d3f038e3cfcc0b0f7c7c1bf47f860ebd22  /Users/sac/cgap/target/release/libcgap_beam.dylib
 [env] host_load: 20:51  up 3 days,  4:22, 4 users, load averages: 10.73 12.00 12.43
 ok   sanity: ramp + stats + i64 path verified; version law 26.10.29 verified (26.10.29)
-[get-latency]       n=10000 min_us=0.000 median_us=0.042 p99_us=0.084 max_us=0.916  | avec_get/2 round-trip us (incl. 2x monotonic_time(nanosecond)), release dylib
+[get-latency]       n=10000 min_us=0.000 median_us=0.042 p99_us=0.084 max_us=0.916  | cgap_get/2 round-trip us (incl. 2x monotonic_time(nanosecond)), release dylib
 [get-calibration]   n=10000 min_us=0.000 median_us=0.042 p99_us=0.042 max_us=18.167  | monotonic_time pair only, no NIF (subtractable bracketing overhead)
-[churn-char]        n=50 min_us=452.500 median_us=508.708 p99_us=939.625 max_us=939.625  | avec_new(262144,0) wall us, dirty CPU, release, n=50 (free untimed); one churner loop = repeated calls of this size
+[churn-char]        n=50 min_us=452.500 median_us=508.708 p99_us=939.625 max_us=939.625  | cgap_new(262144,0) wall us, dirty CPU, release, n=50 (free untimed); one churner loop = repeated calls of this size
 [burst-cal] iterations=4940320 measured_ms=9.468 (target 10.0 ms, fixed for all phases)
 [iso-idle-A ]  n=263 min_us=9053.375 median_us=9519.375 p99_us=10201.584 max_us=10450.542  | fixed pure-Erlang ~10ms burst wall us; churners=0
 [iso-churn-1]  n=259 min_us=9252.625 median_us=9637.417 p99_us=10536.958 max_us=14037.000  | fixed pure-Erlang ~10ms burst wall us; churners=1
@@ -197,9 +201,9 @@ A second full run minutes later, same host, loadavg 9.31/11.36/12.16, same
 dylib sha256, version law verified, exit 0:
 
 ```text
-[get-latency]       n=10000 min_us=0.000 median_us=0.042 p99_us=0.084 max_us=13.375  | avec_get/2 round-trip us (incl. 2x monotonic_time(nanosecond)), release dylib
+[get-latency]       n=10000 min_us=0.000 median_us=0.042 p99_us=0.084 max_us=13.375  | cgap_get/2 round-trip us (incl. 2x monotonic_time(nanosecond)), release dylib
 [get-calibration]   n=10000 min_us=0.000 median_us=0.042 p99_us=0.042 max_us=8.666  | monotonic_time pair only, no NIF (subtractable bracketing overhead)
-[churn-char]        n=50 min_us=419.584 median_us=492.083 p99_us=514.958 max_us=514.958  | avec_new(262144,0) wall us, dirty CPU, release, n=50 (free untimed); one churner loop = repeated calls of this size
+[churn-char]        n=50 min_us=419.584 median_us=492.083 p99_us=514.958 max_us=514.958  | cgap_new(262144,0) wall us, dirty CPU, release, n=50 (free untimed); one churner loop = repeated calls of this size
 [burst-cal] iterations=4581901 measured_ms=10.040 (target 10.0 ms, fixed for all phases)
 [iso-idle-A ]  n=238 min_us=10007.750 median_us=10070.250 p99_us=15314.416 max_us=49018.916  | fixed pure-Erlang ~10ms burst wall us; churners=0
 [iso-churn-1]  n=247 min_us=10017.166 median_us=10088.833 p99_us=10969.750 max_us=11429.375  | fixed pure-Erlang ~10ms burst wall us; churners=1
@@ -216,14 +220,14 @@ dylib sha256, version law verified, exit 0:
 
 - **get-latency (release)**: median 0.042 us and p99 0.084 us in both runs.
   The median equals the no-NIF bracketing floor (0.042 us in both runs), so
-  the `avec_get/2` round-trip including both timer reads is indistinguishable
+  the `cgap_get/2` round-trip including both timer reads is indistinguishable
   from the timer pair alone at median; the NIF cost sits below the ~42 ns
   bracketing overhead of this sensor, and the p99 increment over the
   calibration row (+0.042 us) is one timer-resolution step. Sub-us
   single-call latency on the release dylib: receipted. Max is ambient-noisy
   (0.916 us run 1; 13.375 us run 2, matched by the 8.666 us calibration-row
   max in the same run — the tail is the bracketing sensor, not the NIF).
-- **churn characterization (release)**: `avec_new(262144, 0)` median
+- **churn characterization (release)**: `cgap_new(262144, 0)` median
   492-509 us (debug build was 742 us at 16384 rows in the OPT-L8 receipt).
 - **isolation**: churn-1 median ratio 0.991 (run 1) and 0.999 (run 2) — one
   continuously-churning dirty worker leaves the normal-scheduler Erlang

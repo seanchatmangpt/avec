@@ -62,15 +62,15 @@ export BANNED_RE='^(jmp|je|jne|jg|jl|jge|jle|ja|jae|jb|jbe|js|jns|jo|jno|jp|jnp|
 #   plumbing). Recorded per kernel; raising slack is a reviewed diff.
 # ----------------------------------------------------------------------------
 KERNELS=(
-  "transpose:crates/avec-arrow/src/transpose.rs:transpose:4"
-  "predicates/filter_quads_eq:crates/avec-arrow/src/predicates.rs:filter_quads_eq|ct_quad_eq_u32:4"
-  "blake3/compress_chunks_4way:crates/avec-blake3/src/multi_chunk.rs:compress_chunks_4way:6"
+  "transpose:crates/cgap-arrow/src/transpose.rs:transpose:4"
+  "predicates/filter_quads_eq:crates/cgap-arrow/src/predicates.rs:filter_quads_eq|ct_quad_eq_u32:4"
+  "blake3/compress_chunks_4way:crates/cgap-blake3/src/multi_chunk.rs:compress_chunks_4way:6"
   # NOTE: when the 4-way kernel is inlined into its caller (hash_wide_simd,
   # defined in lib.rs of the same crate), only the surviving compress_chunks_4way
   # symbols are audited here; the caller is OUT OF SCOPE for this kernel row
   # because its source constructs live in a different file. If the symbol
   # disappears entirely (fully inlined), this gate fails closed (exit 3).
-  "avec-git/ladder:crates/avec-git/src/ladder.rs:ladder_search|ct_eq_oid:4"
+  "cgap-git/ladder:crates/cgap-git/src/ladder.rs:ladder_search|ct_eq_oid:4"
 )
 
 # --- source-side construct count (documented textual proxy) ------------------
@@ -233,13 +233,13 @@ if [ "${1:-}" = "--mutant" ]; then mutant_court; fi
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 echo "== PROXY Analyze gate: CFG homology (source constructs vs emitted branches)"
-echo "== building avec-arrow, avec-blake3, avec-git --profile audit into $TMP/target"
+echo "== building cgap-arrow, cgap-blake3, cgap-git --profile audit into $TMP/target"
 (cd "$REPO" && CARGO_TARGET_DIR="$TMP/target" cargo build --profile audit \
-   -p avec-arrow -p avec-blake3 -p avec-git) \
+   -p cgap-arrow -p cgap-blake3 -p cgap-git) \
   || { echo "FATAL: cargo build failed" >&2; exit 3; }
 ARTIFACTS=()
 while IFS= read -r f; do ARTIFACTS+=("$f"); done \
-  < <(find "$TMP/target/audit" -maxdepth 2 -name 'libavec_*.rlib' 2>/dev/null)
+  < <(find "$TMP/target/audit" -maxdepth 2 -name 'libcgap_*.rlib' 2>/dev/null)
 [ ${#ARTIFACTS[@]} -gt 0 ] || { echo "FATAL: no rlibs produced" >&2; exit 3; }
 echo "== artifacts: ${#ARTIFACTS[@]} rlib(s); disassembler: $DISASM"
 

@@ -12,7 +12,7 @@
 // crates/wasm-footprint/src/lib.rs `u64_slice`.)
 //
 // Method: instantiate the artifact, grow the module's exported memory, bump-
-// allocate three 64-byte-aligned buffers (the avec alignment invariant), fill
+// allocate three 64-byte-aligned buffers (the cgap alignment invariant), fill
 // valid/pred with deterministic xorshift64* patterns, poison `out`, run 2
 // untimed warmup calls, time 5 calls (process.hrtime.bigint), report the MIN.
 // Black-box-consumes the output: head/tail out-lanes are checked against the
@@ -48,7 +48,7 @@ const WARMUP = 2;
 const RUNS = 5;
 const MASK64 = (1n << 64n) - 1n;
 const POISON = 0xDEADBEEFCAFEF00Dn;
-const ALIGN = 64;                        // avec buffer alignment invariant
+const ALIGN = 64;                        // cgap buffer alignment invariant
 
 console.log('== wasm bench: wasm_mask_words on the optimized footprint artifact ==');
 console.log(`artifact: ${artifactPath}`);
@@ -173,7 +173,7 @@ console.log(`consume:    out[0]=0x${gotHead.toString(16)} out[n-1]=0x${gotTail.t
 // ===========================================================================
 //
 // Subject: wasm_decode_page_body_w4 — the W=4 constant-parameter
-// specialization of avec_parquet::rle::decode_into exported by the same
+// specialization of cgap_parquet::rle::decode_into exported by the same
 // artifact (crates/wasm-footprint/src/lib.rs): width byte admitted only if
 // exactly 4, then the record loop with the width dispatch folded away
 // (literals = 8 byte-per-lane words, lane k = byte k%8 & 0x0F; repeated
@@ -185,8 +185,8 @@ console.log(`consume:    out[0]=0x${gotHead.toString(16)} out[n-1]=0x${gotTail.t
 //   1. Fixture provenance: BODY_HEX/LANES_HEX below were minted by the
 //      Rust court `w4_courts::w4_mints_js_fixture` in
 //      crates/wasm-footprint/src/lib.rs — body bytes from the real
-//      avec_parquet::rle::rle_encode, lane values proven lane-exact
-//      against the real avec_parquet::rle::decode_into (test
+//      cgap_parquet::rle::rle_encode, lane values proven lane-exact
+//      against the real cgap_parquet::rle::decode_into (test
 //      `w4_courts::differential_vs_decode_into`). Regenerate with
 //      `cargo test --lib w4_mints_js_fixture -- --nocapture` from
 //      crates/wasm-footprint and re-paste (minted 2026-10-29, version

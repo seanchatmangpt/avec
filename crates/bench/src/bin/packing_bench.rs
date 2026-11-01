@@ -22,8 +22,8 @@
 //! {1,2,4,8} the SWAR kernels are additionally cross-checked lane-for-lane
 //! against the tight decode on real packed bytes.
 
-use avec_parquet::packing::{pack_bits, unpack_bits_tight};
-use avec_parquet::unpack::{unpack_1bit, unpack_2bit, unpack_4bit, unpack_8bit};
+use cgap_parquet::packing::{pack_bits, unpack_bits_tight};
+use cgap_parquet::unpack::{unpack_1bit, unpack_2bit, unpack_4bit, unpack_8bit};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::hint::black_box;
 use std::sync::atomic::{AtomicUsize, Ordering};

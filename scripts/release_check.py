@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""avec pre-publish release gate (stdlib only).
+"""cgap pre-publish release gate (stdlib only).
 
 Gates:
   1. Workspace version is exactly 26.10.29 in root [workspace.package] and

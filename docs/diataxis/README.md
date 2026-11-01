@@ -1,4 +1,4 @@
-# AVEC Documentation Router
+# CGAP Documentation Router
 
 Task-oriented hub for the v26.10.31 milestone corpus
 ([docs/jira/v26.10.31/](../jira/v26.10.31/) — 72 files plus the machine-minted
@@ -17,7 +17,7 @@ Learning-oriented; follow start to finish.
 
 - [tutorials/getting-started.md](tutorials/getting-started.md) — build
   64B-aligned batches, run compressed-domain predicates, and hash with
-  `avec-blake3`; the hands-on walkthrough for the substrate core.
+  `cgap-blake3`; the hands-on walkthrough for the substrate core.
 - [examples/c99_consumer/](../../examples/c99_consumer/) — a foreign-language
   (C99) consumer over the substrate; run via `scripts/c99_smoke.sh`.
 - `GETTING_STARTED.md` — pending wave-10 (milestone-wide walkthrough; not yet

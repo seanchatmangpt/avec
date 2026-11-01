@@ -1,4 +1,4 @@
-//! Membrane coverage for the avec-arrow integrator surface (lane REL-L13).
+//! Membrane coverage for the cgap-arrow integrator surface (lane REL-L13).
 //!
 //! Extends `cross_crate.rs` (which owns the i32 C-ABI walk, the alignment
 //! law, the format-code table, the u32 varlen and the views roundtrip) with
@@ -16,8 +16,8 @@
 //!
 //! Scope note (lane decision, per contract): `rle_encode` /
 //! `rle_encode_fast` byte-identity and any parquet page roundtrip live in
-//! `avec-parquet`, which this crate does not depend on by law (deps are
-//! avec-arrow only) — skipped, reported to the coordinator.
+//! `cgap-parquet`, which this crate does not depend on by law (deps are
+//! cgap-arrow only) — skipped, reported to the coordinator.
 //!
 //! Chicago discipline: real builders, real C Data Interface structs heaped
 //! exactly as a foreign importer holds them, expectations derived from the
@@ -27,13 +27,13 @@
 use core::ffi::CStr;
 use core::slice;
 
-use avec_arrow::bitmap::mask_words;
-use avec_arrow::c_abi::ForeignArray;
-use avec_arrow::c_abi_nested::export_struct;
-use avec_arrow::primitive::Scalar;
-use avec_arrow::silicon::mask_words_neon;
-use avec_arrow::varlen::Offset;
-use avec_arrow::{export, ArrowSchema, PrimitiveBuilder, VarlenBuilder, AVEC_FLAG_NULLABLE};
+use cgap_arrow::bitmap::mask_words;
+use cgap_arrow::c_abi::ForeignArray;
+use cgap_arrow::c_abi_nested::export_struct;
+use cgap_arrow::primitive::Scalar;
+use cgap_arrow::silicon::mask_words_neon;
+use cgap_arrow::varlen::Offset;
+use cgap_arrow::{export, ArrowSchema, PrimitiveBuilder, VarlenBuilder, CGAP_FLAG_NULLABLE};
 
 /// Importer duty for the schema half of a pair: `export` boxes the schema
 /// shell and aliases `private_data` to it, so the house release frees exactly
@@ -156,7 +156,7 @@ where
     assert_eq!(array.n_buffers, 2);
     assert_eq!(array.offset, 0);
     assert_eq!(array.n_children, 0);
-    assert_eq!(schema.flags, AVEC_FLAG_NULLABLE);
+    assert_eq!(schema.flags, CGAP_FLAG_NULLABLE);
     assert_eq!(schema.n_children, 0);
     assert!(schema.release.is_some());
     // SAFETY: format is a 'static C string; the shell is alive pre-release.
@@ -399,7 +399,7 @@ fn nested_export_struct_abi_walk_two_children() {
 
     // -- parent schema ---------------------------------------------------------
     assert_eq!(schema.n_children, 2);
-    assert_eq!(schema.flags, AVEC_FLAG_NULLABLE);
+    assert_eq!(schema.flags, CGAP_FLAG_NULLABLE);
     assert!(schema.release.is_some());
     assert!(schema.metadata.is_null());
     assert!(schema.dictionary.is_null());

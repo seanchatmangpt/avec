@@ -154,8 +154,8 @@ No push, no rebase: project law is NEVER REBASE, NEVER FORCE PUSH, ONLY MERGE.
 ### Exact mechanics
 
 - Stage and commit in atomic units, largest ownership first:
-  crates/audit -> avec-arrow -> avec-parquet -> avec-beam -> bench ->
-  remaining crates (cli, avec-ffi, avec-git, avec-blake3, integration,
+  crates/audit -> cgap-arrow -> cgap-parquet -> cgap-beam -> bench ->
+  remaining crates (cli, cgap-ffi, cgap-git, cgap-blake3, integration,
   wasm-footprint) -> scripts/ -> docs/ -> root manifests (Cargo.toml,
   Cargo.lock, Makefile, README, .gitignore) last so manifest and consumer
   commits stay coherent.

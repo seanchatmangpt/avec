@@ -1,5 +1,5 @@
 [package]
-name = "avec-audit"
+name = "cgap-audit"
 version.workspace = true
 edition.workspace = true
 description = "CC=1 branch-audit cdylib: forces every kernel into the artifact so machine code can be inspected."
@@ -7,11 +7,11 @@ publish = false
 
 [lib]
 # rlib added by lane 18 (compile-freeze minimal unblock, disclosed in both
-# receipts): tests/alloc_courts.rs in avec-ffi links avec-audit as a dev-dep
+# receipts): tests/alloc_courts.rs in cgap-ffi links cgap-audit as a dev-dep
 # to drive alloc_counter::with_alloc_tracking; a cdylib cannot be linked
 # into a test binary. cdylib build unchanged.
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-avec-arrow = { path = "../avec-arrow" }
-avec-parquet = { path = "../avec-parquet" }
+cgap-arrow = { path = "../cgap-arrow" }
+cgap-parquet = { path = "../cgap-parquet" }

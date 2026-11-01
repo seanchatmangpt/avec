@@ -1,12 +1,12 @@
-# avec — one-command DX recipes (wave-10 lane 3)
+# cgap — one-command DX recipes (wave-10 lane 3)
 #
-#   just doctor   - toolchain/env health probe via avec-cli doctor bin (lands with wave-10 lane 2)
+#   just doctor   - toolchain/env health probe via cgap-cli doctor bin (lands with wave-10 lane 2)
 #   just verify   - full v26.10.31 verification ladder (scripts/verify_v26.10.31.sh)
 #   just bench    - release-build the bench crate, then run the CTQ report binary
 #   just courts   - 3 court suites sequentially with headers, fail-fast
 #   just receipts - newest receipts + Standing tally from docs/jira/v26.10.31/receipts/
 #   just dod      - Definition-of-Done gate (scripts/dod.sh; lands with wave-10 lane 1)
-#   just status   - portfolio status bin via avec-cli status (lands with wave-10 lane 11)
+#   just status   - portfolio status bin via cgap-cli status (lands with wave-10 lane 11)
 #
 # Every recipe wires an existing script/bin — no logic duplicated here. `doctor`,
 # `dod`, and `status` target artifacts owned by other lanes and 404 until those
@@ -17,7 +17,7 @@ default:
 
 # Toolchain/env health probe (bin owned by wave-10 lane 2; fails until landed)
 doctor:
-    cargo run -q -p avec-cli --bin doctor
+    cargo run -q -p cgap-cli --bin doctor
 
 # Full v26.10.31 verification ladder
 verify:
@@ -53,4 +53,4 @@ dod:
 
 # Portfolio status bin (bin owned by wave-10 lane 11; fails until landed)
 status:
-    cargo run -q -p avec-cli --bin status
+    cargo run -q -p cgap-cli --bin status

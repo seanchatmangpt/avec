@@ -1,0 +1,12 @@
+[package]
+name = "cgap-gpu"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+cgap-arrow = { path = "../cgap-arrow" }
+
+[build-dependencies]
+cc = "1.0"

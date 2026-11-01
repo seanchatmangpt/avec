@@ -2,10 +2,10 @@
 //! Spec: docs/jira/v26.10.31/29-benchmark-harness-plan.md.
 //!
 //! Four benches:
-//! (a) AoS->SoA quad transpose (avec_arrow::transpose)
-//! (b) branchless predicate filter (avec_arrow::predicates::filter_quads_eq)
-//! (c) BLAKE3 tree hash throughput on a 64 MiB buffer (avec_blake3::hash_wide_simd)
-//! (d) parquet level-free page write+read round trip (avec_parquet::level_free)
+//! (a) AoS->SoA quad transpose (cgap_arrow::transpose)
+//! (b) branchless predicate filter (cgap_arrow::predicates::filter_quads_eq)
+//! (c) BLAKE3 tree hash throughput on a 64 MiB buffer (cgap_blake3::hash_wide_simd)
+//! (d) parquet level-free page write+read round trip (cgap_parquet::level_free)
 //!
 //! These are FIRST CTQ datapoints — no gate wiring.
 //!
@@ -16,10 +16,10 @@
 // declared without its file, freezing all workspace cargo. Replaced by lane
 // I18 with the real harness below.
 
-use avec_arrow::predicates::filter_quads_eq;
-use avec_arrow::transpose::{transpose, Quad64};
-use avec_blake3::hash_wide_simd;
-use avec_parquet::level_free::{read_page_payload, write_page, LevelFreeType};
+use cgap_arrow::predicates::filter_quads_eq;
+use cgap_arrow::transpose::{transpose, Quad64};
+use cgap_blake3::hash_wide_simd;
+use cgap_parquet::level_free::{read_page_payload, write_page, LevelFreeType};
 use divan::counter::BytesCount;
 use divan::{black_box, Bencher};
 

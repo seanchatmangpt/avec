@@ -1,7 +1,7 @@
 //! Hashed-mask digest A/B bench (lane PCL5).
 //!
-//! Measures [`avec_arrow::digest::mask_words_hashed`] against the house
-//! portable kernel [`avec_arrow::bitmap::mask_words`] on the SAME buffers:
+//! Measures [`cgap_arrow::digest::mask_words_hashed`] against the house
+//! portable kernel [`cgap_arrow::bitmap::mask_words`] on the SAME buffers:
 //! `out[i] = valid[i] & pred[i]` over 8 Mi u64 words (64 MiB per slice,
 //! 192 MiB walked per call: 2 read + 1 write), min-of-5 rounds. This
 //! measures the design doc's 0%-penalty claim — a hypothesis, expected to
@@ -13,8 +13,8 @@
 //! post-timing final-state re-check proving the timed calls really wrote
 //! the buffer.
 
-use avec_arrow::bitmap::mask_words;
-use avec_arrow::digest::mask_words_hashed;
+use cgap_arrow::bitmap::mask_words;
+use cgap_arrow::digest::mask_words_hashed;
 use std::hint::black_box;
 use std::time::Instant;
 

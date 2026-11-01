@@ -13,7 +13,7 @@
 //! from the byteslice literature, NOT a measurement of this crate — the
 //! `point_get` lines below are the measured numbers for this host.
 
-use avec_parquet::byteslice::{pack_byteslice, point_get, scan_eq_byteslice};
+use cgap_parquet::byteslice::{pack_byteslice, point_get, scan_eq_byteslice};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::hint::black_box;
 use std::sync::atomic::{AtomicUsize, Ordering};

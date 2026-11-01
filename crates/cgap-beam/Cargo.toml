@@ -1,0 +1,15 @@
+[package]
+name = "cgap-beam"
+version.workspace = true
+edition.workspace = true
+description = "BEAM/AtomVM NIF membrane for cgap (off-heap resource handles)."
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+cgap-arrow = { path = "../cgap-arrow" }
+cgap-parquet = { path = "../cgap-parquet" }
+cgap-git = { path = "../cgap-git" }
+cgap-blake3 = { path = "../cgap-blake3" }

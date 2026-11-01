@@ -1,5 +1,5 @@
 #!/usr/bin/env escript
-%% avec-beam sub-us latency + scheduler-isolation probe (lane BEAM-L7).
+%% cgap-beam sub-us latency + scheduler-isolation probe (lane BEAM-L7).
 %%
 %% Companion to test/beam_latency.escript (OPT-L8). That harness's <=50 us CTQ
 %% sensor was a 1 ms-timer sensor; its floor (idle overshoot ~+1.0 ms median,
@@ -7,7 +7,7 @@
 %% verdict measured the timer floor, not the membrane. This harness implements
 %% the honest sensor class the BEAM itself supports:
 %%
-%%   1. avec_get/2 round-trip latency on the RELEASE dylib: 10000 samples,
+%%   1. cgap_get/2 round-trip latency on the RELEASE dylib: 10000 samples,
 %%      each bracketed by explicit-unit erlang:monotonic_time(nanosecond)
 %%      reads, plus a no-NIF calibration row so the bracketing overhead is
 %%      subtractable. This sensor has ns-class resolution and receipts the
@@ -16,9 +16,9 @@
 %%      Erlang workload (tight tail-recursive integer loop, calibrated once
 %%      to ~10 ms per burst) is timed burst-by-burst across five 2.5 s
 %%      windows: idle-A, churn-1, churn-4, churn-FULL (dirty CPU scheduler
-%%      count), idle-B. Churn = continuous avec_new(262144,0)/avec_free
+%%      count), idle-B. Churn = continuous cgap_new(262144,0)/cgap_free
 %%      loops; 262144 >= 16384 rows => dirty-CPU path (NIF_FUNCS threshold,
-%%      crates/avec-beam/src/lib.rs). If dirty work stays on dirty
+%%      crates/cgap-beam/src/lib.rs). If dirty work stays on dirty
 %%      schedulers, a normal-scheduler Erlang burst is not slowed by dirty
 %%      churn except through OS core contention. The churn sweep separates
 %%      the two: degradation present even at churn-1 (one dirty thread on
@@ -40,20 +40,20 @@
 %% Exit codes: 0 completed run (any measurement verdict); 1 version-law
 %% mismatch; 2 NIF load failure; 3 phase timeout.
 
-%% Module name MUST be avec_beam: the NIF registers itself under the module
+%% Module name MUST be cgap_beam: the NIF registers itself under the module
 %% name baked in at build time (bad_lib mismatch otherwise), mirroring
 %% test/beam_latency.escript.
--module(avec_beam).
+-module(cgap_beam).
 -export([main/1]).
 -on_load(init/0).
 
 -define(VERSION, <<"26.10.29">>).
--define(RELEASE_DIR, "/Users/sac/avec/target/release").
+-define(RELEASE_DIR, "/Users/sac/cgap/target/release").
 -define(GET_N, 10000).
 -define(GET_ROWS, 1024).
 -define(BURST_TARGET_NS, 10000000).
 -define(PHASE_MS, 2500).
--define(CHURN_ROWS, 262144). %% 1 MiB i32 value buffer per avec_new => dirty CPU
+-define(CHURN_ROWS, 262144). %% 1 MiB i32 value buffer per cgap_new => dirty CPU
 -define(CHURN_LIGHT, 1).
 -define(CHURN_MID, 4).
 
@@ -63,8 +63,8 @@ init() ->
     %% name the BEAM looks for. Reuse an existing correct symlink; refresh
     %% it only if stale (build-artifact dir, same dance as
     %% test/beam_test.escript).
-    Dylib = ?RELEASE_DIR ++ "/libavec_beam.dylib",
-    NifBase = ?RELEASE_DIR ++ "/libavec_beam",
+    Dylib = ?RELEASE_DIR ++ "/libcgap_beam.dylib",
+    NifBase = ?RELEASE_DIR ++ "/libcgap_beam",
     So = NifBase ++ ".so",
     case file:read_link(So) of
         {ok, Dylib} ->
@@ -95,7 +95,7 @@ main(_Args) ->
 %% --- environment -----------------------------------------------------------
 
 print_env() ->
-    Dylib = ?RELEASE_DIR ++ "/libavec_beam.dylib",
+    Dylib = ?RELEASE_DIR ++ "/libcgap_beam.dylib",
     Sha = string:trim(os:cmd("shasum -a 256 " ++ Dylib), both),
     io:format("[env] erts=~s otp_release=~s~n",
               [erlang:system_info(version),
@@ -106,44 +106,44 @@ print_env() ->
                erlang:system_info(dirty_cpu_schedulers_online),
                erlang:system_info(dirty_io_schedulers),
                1.0 * erlang:convert_time_unit(1, native, nanosecond)]),
-    io:format("[env] nif_build=release dylib=target/release/libavec_beam.dylib run_class=single-run machine-local~n"),
+    io:format("[env] nif_build=release dylib=target/release/libcgap_beam.dylib run_class=single-run machine-local~n"),
     io:format("[env] dylib_sha256: ~s~n", [Sha]),
     io:format("[env] host_load: ~s", [os:cmd("uptime")]).
 
 %% --- contract sanity before any timing --------------------------------------
 
 sanity() ->
-    Id = avec_new(1000, 5),
+    Id = cgap_new(1000, 5),
     true = is_integer(Id),
-    1000 = avec_len(Id),
-    5 = avec_get(Id, 0),
-    1004 = avec_get(Id, 999),
-    {1000, 32} = avec_stats(Id),
-    ok = avec_free(Id),
-    Id64 = avec_new_i64(10, 1099511627776),
-    1099511627776 = avec_get_i64(Id64, 0),
-    {10, 64} = avec_stats(Id64),
-    ok = avec_free(Id64),
-    case avec_version() of
+    1000 = cgap_len(Id),
+    5 = cgap_get(Id, 0),
+    1004 = cgap_get(Id, 999),
+    {1000, 32} = cgap_stats(Id),
+    ok = cgap_free(Id),
+    Id64 = cgap_new_i64(10, 1099511627776),
+    1099511627776 = cgap_get_i64(Id64, 0),
+    {10, 64} = cgap_stats(Id64),
+    ok = cgap_free(Id64),
+    case cgap_version() of
         ?VERSION ->
             io:format("ok   sanity: ramp + stats + i64 path verified; version law 26.10.29 verified (~ts)~n",
                       [?VERSION]);
         Other ->
-            io:format("VERSION LAW VIOLATION: avec_version() = ~p, want ~ts~n",
+            io:format("VERSION LAW VIOLATION: cgap_version() = ~p, want ~ts~n",
                       [Other, ?VERSION]),
             erlang:halt(1)
     end.
 
-%% --- 1. avec_get round-trip latency, release dylib, ns-unit brackets ---------
+%% --- 1. cgap_get round-trip latency, release dylib, ns-unit brackets ---------
 
 get_latency() ->
-    Id = avec_new(?GET_ROWS, -100),
+    Id = cgap_new(?GET_ROWS, -100),
     true = is_integer(Id),
-    lists:foreach(fun(I) -> _ = avec_get(Id, I rem ?GET_ROWS) end,
+    lists:foreach(fun(I) -> _ = cgap_get(Id, I rem ?GET_ROWS) end,
                   lists:seq(1, 1000)),
     Samples = [begin
                    T0 = erlang:monotonic_time(nanosecond),
-                   _ = avec_get(Id, I rem ?GET_ROWS),
+                   _ = cgap_get(Id, I rem ?GET_ROWS),
                    T1 = erlang:monotonic_time(nanosecond),
                    T1 - T0
                end || I <- lists:seq(1, ?GET_N)],
@@ -152,9 +152,9 @@ get_latency() ->
                T1 = erlang:monotonic_time(nanosecond),
                T1 - T0
            end || _ <- lists:seq(1, ?GET_N)],
-    ok = avec_free(Id),
+    ok = cgap_free(Id),
     report_us("[get-latency]      ", Samples,
-              "avec_get/2 round-trip us (incl. 2x monotonic_time(nanosecond)), release dylib"),
+              "cgap_get/2 round-trip us (incl. 2x monotonic_time(nanosecond)), release dylib"),
     report_us("[get-calibration]  ", Cal,
               "monotonic_time pair only, no NIF (subtractable bracketing overhead)").
 
@@ -162,19 +162,19 @@ get_latency() ->
 
 churn_char() ->
     lists:foreach(fun(_) ->
-                      Id = avec_new(?CHURN_ROWS, 0),
+                      Id = cgap_new(?CHURN_ROWS, 0),
                       true = is_integer(Id),
-                      ok = avec_free(Id)
+                      ok = cgap_free(Id)
                   end, lists:seq(1, 50)),
     Samples = [begin
                    T0 = erlang:monotonic_time(nanosecond),
-                   Id = avec_new(?CHURN_ROWS, 0),
+                   Id = cgap_new(?CHURN_ROWS, 0),
                    T1 = erlang:monotonic_time(nanosecond),
-                   ok = avec_free(Id),
+                   ok = cgap_free(Id),
                    T1 - T0
                end || _ <- lists:seq(1, 50)],
     report_us("[churn-char]       ", Samples,
-              "avec_new(262144,0) wall us, dirty CPU, release, n=50 (free untimed); one churner loop = repeated calls of this size").
+              "cgap_new(262144,0) wall us, dirty CPU, release, n=50 (free untimed); one churner loop = repeated calls of this size").
 
 %% --- 3. scheduler isolation: fixed Erlang burst idle vs dirty churn ----------
 
@@ -269,9 +269,9 @@ churn_loop(Parent, Deadline) ->
         true ->
             Parent ! churn_done;
         false ->
-            Id = avec_new(?CHURN_ROWS, 0),
+            Id = cgap_new(?CHURN_ROWS, 0),
             true = is_integer(Id),
-            ok = avec_free(Id),
+            ok = cgap_free(Id),
             churn_loop(Parent, Deadline)
     end.
 
@@ -330,19 +330,19 @@ pct(Sorted, P) ->
 
 %% --- NIF stubs (replaced at load_nif time) ------------------------------------
 
-avec_new(_N, _Fill) ->
+cgap_new(_N, _Fill) ->
     erlang:nif_error(nif_library_not_loaded).
-avec_len(_Id) ->
+cgap_len(_Id) ->
     erlang:nif_error(nif_library_not_loaded).
-avec_get(_Id, _I) ->
+cgap_get(_Id, _I) ->
     erlang:nif_error(nif_library_not_loaded).
-avec_free(_Id) ->
+cgap_free(_Id) ->
     erlang:nif_error(nif_library_not_loaded).
-avec_version() ->
+cgap_version() ->
     erlang:nif_error(nif_library_not_loaded).
-avec_new_i64(_N, _Fill) ->
+cgap_new_i64(_N, _Fill) ->
     erlang:nif_error(nif_library_not_loaded).
-avec_get_i64(_Id, _I) ->
+cgap_get_i64(_Id, _I) ->
     erlang:nif_error(nif_library_not_loaded).
-avec_stats(_Id) ->
+cgap_stats(_Id) ->
     erlang:nif_error(nif_library_not_loaded).

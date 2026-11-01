@@ -1,17 +1,17 @@
 [package]
-name = "avec-integration"
+name = "cgap-integration"
 version = "26.10.29"
 edition = "2021"
 description = "Cross-crate integration tests: C-ABI roundtrip, alignment law, format-code table, varlen/views roundtrips."
 publish = false
 
 [dependencies]
-avec-arrow = { path = "../avec-arrow" }
+cgap-arrow = { path = "../cgap-arrow" }
 
 [dev-dependencies]
-avec-arrow = { path = "../avec-arrow" }
-avec-audit = { path = "../audit" }
-avec-blake3 = { path = "../avec-blake3" }
+cgap-arrow = { path = "../cgap-arrow" }
+cgap-audit = { path = "../audit" }
+cgap-blake3 = { path = "../cgap-blake3" }
 # std: the scan module (mmap scanner + ScanError surface) is feature-gated.
-avec-parquet = { path = "../avec-parquet", features = ["std"] }
-avec-git = { path = "../avec-git" }
+cgap-parquet = { path = "../cgap-parquet", features = ["std"] }
+cgap-git = { path = "../cgap-git" }

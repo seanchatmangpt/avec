@@ -1,4 +1,4 @@
-# Reference: Crates, Modules, and APIs (`avec` v26.10.29)
+# Reference: Crates, Modules, and APIs (`cgap` v26.10.29)
 
 Information-oriented reference covering every workspace crate, public module, core invariant, and measured CTQ baseline.
 
@@ -8,18 +8,18 @@ Information-oriented reference covering every workspace crate, public module, co
 
 | Crate | Path | Attributes | External Deps | Description |
 |---|---|---|---|---|
-| `avec-arrow` | `crates/avec-arrow` | `#![no_std]` (`alloc`) | `0` | Freestanding Apache Arrow columnar substrate, 64B `Buf`, 16 KiB `MmuBuf`, `PerfectMap`, `Fingerprint`, `blake3`, C Data Interface |
-| `avec-blake3` | `crates/avec-blake3` | `#![no_std]` (no `alloc`) | `0` | Sovereign BLAKE3 cryptographic tree hash with 16-block intra-chunk chaining, 54-depth stack Merkle tree, and 4-way NEON / 8-way AVX2 parent reduction |
-| `avec-parquet` | `crates/avec-parquet` | `#![no_std]` (`alloc`) | `0` | Parquet codecs & compressed-domain query kernels: RLE/bit-packed hybrid, FFOR, `bitslice`, `byteslice`, Thrift compact header, DataPageV2 |
-| `avec-gpu` | `crates/avec-gpu` | `std` + Metal FFI | `cc` (build) | Freestanding Apple Silicon Metal Unified Memory zero-copy bridge (`MetalSharedBuffer`, `MTLResourceStorageModeShared`) |
-| `avec-ffi` | `crates/avec-ffi` | `cdylib` | `0` | C Data Interface shared library membrane for PyArrow / C consumers |
-| `avec-beam` | `crates/avec-beam` | `cdylib` (`erl_nif`) | `0` | Erlang/OTP & AtomVM NIF membrane: dirty/normal scheduler twins, GC-pinned resource binaries (`resbin`), POSIX SHM SPSC ring |
-| `avec-audit` | `crates/audit` | `cdylib` | `0` | Machine-code disassembly target for `scripts/branch_audit.py` |
+| `cgap-arrow` | `crates/cgap-arrow` | `#![no_std]` (`alloc`) | `0` | Freestanding Apache Arrow columnar substrate, 64B `Buf`, 16 KiB `MmuBuf`, `PerfectMap`, `Fingerprint`, `blake3`, C Data Interface |
+| `cgap-blake3` | `crates/cgap-blake3` | `#![no_std]` (no `alloc`) | `0` | Sovereign BLAKE3 cryptographic tree hash with 16-block intra-chunk chaining, 54-depth stack Merkle tree, and 4-way NEON / 8-way AVX2 parent reduction |
+| `cgap-parquet` | `crates/cgap-parquet` | `#![no_std]` (`alloc`) | `0` | Parquet codecs & compressed-domain query kernels: RLE/bit-packed hybrid, FFOR, `bitslice`, `byteslice`, Thrift compact header, DataPageV2 |
+| `cgap-gpu` | `crates/cgap-gpu` | `std` + Metal FFI | `cc` (build) | Freestanding Apple Silicon Metal Unified Memory zero-copy bridge (`MetalSharedBuffer`, `MTLResourceStorageModeShared`) |
+| `cgap-ffi` | `crates/cgap-ffi` | `cdylib` | `0` | C Data Interface shared library membrane for PyArrow / C consumers |
+| `cgap-beam` | `crates/cgap-beam` | `cdylib` (`erl_nif`) | `0` | Erlang/OTP & AtomVM NIF membrane: dirty/normal scheduler twins, GC-pinned resource binaries (`resbin`), POSIX SHM SPSC ring |
+| `cgap-audit` | `crates/audit` | `cdylib` | `0` | Machine-code disassembly target for `scripts/branch_audit.py` |
 | `bench` | `crates/bench` | `bin` suite | `0` | Release benchmark harnesses with global allocation interception |
 
 ---
 
-## 2. `avec-blake3` Public API Reference
+## 2. `cgap-blake3` Public API Reference
 
 | Symbol | Signature | Description |
 |---|---|---|
@@ -41,7 +41,7 @@ Information-oriented reference covering every workspace crate, public module, co
 
 ---
 
-## 3. `avec-arrow` Phase-Change Modules
+## 3. `cgap-arrow` Phase-Change Modules
 
 | Module | Key Types / Functions | Invariant / Performance Receipt |
 |---|---|---|
@@ -54,7 +54,7 @@ Information-oriented reference covering every workspace crate, public module, co
 
 ---
 
-## 4. `avec-parquet` Phase-Change Modules
+## 4. `cgap-parquet` Phase-Change Modules
 
 | Module | Key Functions | Invariant / Performance Receipt |
 |---|---|---|

@@ -1,14 +1,14 @@
-//! avec-audit: forces every audited kernel into a cdylib artifact.
+//! cgap-audit: forces every audited kernel into a cdylib artifact.
 //!
 //! Each export wraps one kernel; the linker cannot elide what is exported,
 //! so the branch audit inspects the REAL compiled kernel machine code.
 
 pub mod alloc_counter;
 
-use avec_arrow::bitmap;
-use avec_arrow::silicon;
-use avec_arrow::views::is_inline;
-use avec_parquet::unpack;
+use cgap_arrow::bitmap;
+use cgap_arrow::silicon;
+use cgap_arrow::views::is_inline;
+use cgap_parquet::unpack;
 
 /// # Safety
 /// n must bound the readable words at each pointer.
@@ -30,10 +30,10 @@ pub unsafe extern "C" fn audit_mask_words(
 }
 
 /// NEON silicon kernel export: `out[i] = valid[i] & pred[i]` through
-/// `avec_arrow::silicon::mask_words_neon`. On aarch64 this dispatches to the
+/// `cgap_arrow::silicon::mask_words_neon`. On aarch64 this dispatches to the
 /// 4-word-stride NEON kernel (branch-free inner body; loop control and the
 /// scalar tail carry the extent's conditionals — see the disclosure on
-/// `mask_words_neon` in crates/avec-arrow/src/silicon.rs, audited by the
+/// `mask_words_neon` in crates/cgap-arrow/src/silicon.rs, audited by the
 /// extent-scoped rule in scripts/branch_audit.py). On other targets the same
 /// export dispatches to the portable SWAR kernel with the identical output
 /// contract, so the audit surface exists on every host.

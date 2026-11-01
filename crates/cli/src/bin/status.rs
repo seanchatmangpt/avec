@@ -286,14 +286,14 @@ fn log(msg: &str) {
     let _ = writeln!(std::io::stderr(), "[status] {msg}");
 }
 
-/// Repo root: $AVEC_REPO_ROOT, else walk up from cwd hunting for `.git`.
+/// Repo root: $CGAP_REPO_ROOT, else walk up from cwd hunting for `.git`.
 fn repo_root() -> Res<PathBuf> {
-    if let Ok(r) = std::env::var("AVEC_REPO_ROOT") {
+    if let Ok(r) = std::env::var("CGAP_REPO_ROOT") {
         let p = PathBuf::from(&r);
         if p.join(".git").exists() {
             return Ok(p);
         }
-        return Err(format!("AVEC_REPO_ROOT={r} has no .git"));
+        return Err(format!("CGAP_REPO_ROOT={r} has no .git"));
     }
     let mut cur = std::env::current_dir().map_err(|e| format!("cwd: {e}"))?;
     loop {
@@ -1035,7 +1035,7 @@ fn render(
     decisions: &[Res<Decision>],
 ) -> String {
     let mut out = String::new();
-    out.push_str("avec status — v26.10.31 milestone dashboard\n");
+    out.push_str("cgap status — v26.10.31 milestone dashboard\n");
 
     // == FR / CTQ table ====================================================
     out.push_str("\n== FR / CTQ ==\n");

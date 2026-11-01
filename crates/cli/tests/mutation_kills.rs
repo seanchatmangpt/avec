@@ -1,13 +1,13 @@
-//! Mutation-kill tests for `avec-cli` — lane CLI-MUT, 2026-10-29.
+//! Mutation-kill tests for `cgap-cli` — lane CLI-MUT, 2026-10-29.
 //!
 //! Subject: `crates/cli/src/main.rs` (46 mutation survivors triaged from
 //! `/tmp/opt20-mut-arrow/mutants.out/missed.txt` rows 13-58; re-derived by
 //! the lane's own scoped scan `cargo mutants --workspace --exclude
-//! avec-audit --exclude bench --exclude avec-ffi --exclude avec-beam
-//! --exclude avec-arrow --exclude avec-parquet -o /tmp/cli-mut --timeout 60`).
+//! cgap-audit --exclude bench --exclude cgap-ffi --exclude cgap-beam
+//! --exclude cgap-arrow --exclude cgap-parquet -o /tmp/cli-mut --timeout 60`).
 //!
 //! Chicago discipline: every test drives the REAL binary as a subprocess
-//! (`std::process::Command`, path from `CARGO_BIN_EXE_avec-cli`) and asserts
+//! (`std::process::Command`, path from `CARGO_BIN_EXE_cgap-cli`) and asserts
 //! final observable state — exact stdout lines, exit codes, and (macOS)
 //! max-RSS footprints via `/usr/bin/time -l` as allocation ground truth.
 //! No mocks. No sleeps: the only time-like quantity asserted is the
@@ -128,10 +128,10 @@ const MASK_MIN_RSS_BYTES: u64 = 150_000_000;
 const PARQUET_MIN_RSS_BYTES: u64 = 70_000_000;
 
 fn run_cli(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_avec-cli"))
+    Command::new(env!("CARGO_BIN_EXE_cgap-cli"))
         .args(args)
         .output()
-        .expect("spawn avec-cli subprocess")
+        .expect("spawn cgap-cli subprocess")
 }
 
 /// stdout must be exactly one line ending in `\n`.
@@ -164,7 +164,7 @@ fn assert_gibs_in_window(token: &str, window: (f64, f64), what: &str) -> f64 {
     v
 }
 
-/// T1 — version law: `avec-cli version` prints exactly `26.10.29` and
+/// T1 — version law: `cgap-cli version` prints exactly `26.10.29` and
 /// exits 0. Kills 29:5 (main→()), 30:9 (deleted version arm), 44:5
 /// (cmd_version→()).
 #[test]
@@ -282,9 +282,9 @@ fn bench_parquet_line_laws() {
 #[test]
 fn bench_mask_footprint_matches_64mib_workload() {
     let out = Command::new("/usr/bin/time")
-        .args(["-l", env!("CARGO_BIN_EXE_avec-cli"), "bench-mask"])
+        .args(["-l", env!("CARGO_BIN_EXE_cgap-cli"), "bench-mask"])
         .output()
-        .expect("spawn /usr/bin/time -l avec-cli bench-mask");
+        .expect("spawn /usr/bin/time -l cgap-cli bench-mask");
     assert!(out.status.success(), "exit: {:?}", out.status);
     let stderr = String::from_utf8_lossy(&out.stderr);
     let rss_line = stderr
@@ -312,9 +312,9 @@ fn bench_mask_footprint_matches_64mib_workload() {
 #[test]
 fn bench_parquet_footprint_matches_8mib_values_workload() {
     let out = Command::new("/usr/bin/time")
-        .args(["-l", env!("CARGO_BIN_EXE_avec-cli"), "bench-parquet"])
+        .args(["-l", env!("CARGO_BIN_EXE_cgap-cli"), "bench-parquet"])
         .output()
-        .expect("spawn /usr/bin/time -l avec-cli bench-parquet");
+        .expect("spawn /usr/bin/time -l cgap-cli bench-parquet");
     assert!(out.status.success(), "exit: {:?}", out.status);
     let stderr = String::from_utf8_lossy(&out.stderr);
     let rss_line = stderr

@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to avec are documented in this file. Format based on
+All notable changes to cgap are documented in this file. Format based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 the project's calendar scheme (`26.10.29` = 2026-10-29). Every number below is
 transcribed from the v26.10.29 receipt docs (`docs/RECEIPTS.md`,
@@ -29,31 +29,36 @@ release notes' Discrepancies section, not reconciled here.
   footprint gate passes for `wasm32-unknown-unknown` (3,435 B stripped,
   CTQ-4 PASS).
 
+### Changed
+
+- Rename: avec→cgap across crates, C ABI, BEAM NIFs, headers, docs; version
+  frozen at 26.10.29.
+
 ## [26.10.29] - 2026-10-29
 
-Initial entry: first release ledger for the avec columnar substrate.
+Initial entry: first release ledger for the cgap columnar substrate.
 
 ### Added
 
-- avec-arrow v26.10.29 — freestanding, branchless in-memory columnar
+- cgap-arrow v26.10.29 — freestanding, branchless in-memory columnar
   substrate; `no_std` + `alloc`, zero external dependencies. Publish-enabled
   (`publish = true`). Kernels present on disk: `bitmap`, `primitive`,
   `varlen`, `views`, `c_abi` (+ `c_abi_nested`), `silicon`, `buffer`,
   `runend`, `slice`.
-- avec-parquet v26.10.29 — branchless Parquet persistence kernels;
+- cgap-parquet v26.10.29 — branchless Parquet persistence kernels;
   `no_std`, zero deps. Publish-enabled (`publish = true`). Kernels present on
   disk: `rle`, `packing`, `unpack`, `encode_fast`, `dictionary`, `thrift`,
   `page`.
-- Internal crates (`publish = false`): avec-ffi (C-ABI membrane, Gate 3
-  surface), avec-beam (erl_nif membrane), avec-audit (branch-audit cdylib),
+- Internal crates (`publish = false`): cgap-ffi (C-ABI membrane, Gate 3
+  surface), cgap-beam (erl_nif membrane), cgap-audit (branch-audit cdylib),
   bench (Gate 2 harness), integration (integration tests), wasm-footprint
   (standalone footprint / symbol-gate artifact crate).
 - Gate surface (`Makefile`): `test gate0 gate1 gate2 gate3 gates lint
   publish-check`, plus auxiliary `footprint`, `branch-audit`, `symbol-gate`,
   `gate-parquet`, `bench-all`, `bench-page`, `bench-gate`.
-- Ontology-driven generation: `ggen.toml` pins `avec-pack` from
+- Ontology-driven generation: `ggen.toml` pins `cgap-pack` from
   ggen-marketplace; four generated surfaces (2 headers under `include/`,
-  2 Rust modules under `crates/avec-arrow/src/`); Gate 0 proves byte-stable
+  2 Rust modules under `crates/cgap-arrow/src/`); Gate 0 proves byte-stable
   replay.
 - Docs of record: DFLSS charter, receipts ledger, BEAM latency receipt,
   branch register, wasm footprint doc, bench floors, mutation-court backlog.
@@ -70,14 +75,14 @@ Initial entry: first release ledger for the avec columnar substrate.
   branch-free; latches, dispatch, and bounds paths are itemized**. Source
   and doc headers corrected (`bitmap.rs`, `lib.rs`, `silicon.rs` scoping).
 - Gate 1 (`make gate1`) = CC=1 machine-code branch audit over
-  `target/audit/libavec_audit.dylib`; the mutation-court receipt lives
+  `target/audit/libcgap_audit.dylib`; the mutation-court receipt lives
   behind `make gate-parquet` (requires `docs/mutation-court-backlog.txt`).
 - Wording discipline: no repo claim survives as "zero conditional branches"
   without the body/latch/dispatch scoping (register R4).
 
 ### Verified
 
-Every row was executed 2026-10-29/30 in `/Users/sac/avec` with exit codes
+Every row was executed 2026-10-29/30 in `/Users/sac/cgap` with exit codes
 captured in the receipt docs.
 
 - `cargo test --workspace` — exit 0; 26 passed / 0 failed (arrow 15,
@@ -90,7 +95,7 @@ captured in the receipt docs.
   0 allocs, 16-lane 74.8 GiB/s. Receipt R2. Machine-local.
 - gate3 — pyarrow `pa.Array._import_from_c` parity; exit 0, bitwise,
   100000 rows, 14285 nulls. Receipt R4.
-- ggen-marketplace check + gate-witness courts — exit 0, avec-pack
+- ggen-marketplace check + gate-witness courts — exit 0, cgap-pack
   qualify=ok, 5 cases, ALIVE standing. Receipt R6.
 - footprint — `scripts/footprint.sh`; exit 101, BLOCKED, no artifact.
   Conflicting 10123 B PASS in `docs/wasm-footprint.txt` (Discrepancy 1).

@@ -1,5 +1,5 @@
 #!/bin/sh
-# scripts/footprint.sh — wasm32-wasip1 footprint gate for avec.
+# scripts/footprint.sh — wasm32-wasip1 footprint gate for cgap.
 #
 # Charter CTQ-4: <= 100 KiB stripped (TARGET), 250 KiB USL.
 #
@@ -12,7 +12,7 @@
 #     the #[lang] form is nightly-only),
 # and exports over a C ABI: wasm_version (NUL-terminated version string,
 # single-sourced from the crate manifest), wasm_mask_words
-# (avec_arrow::bitmap), wasm_unpack_1bit + wasm_rle_decode (avec_parquet).
+# (cgap_arrow::bitmap), wasm_unpack_1bit + wasm_rle_decode (cgap_parquet).
 # Because the exports reference kernel code, every retained byte after
 # wasm-opt -Oz is code a real wasm consumer linking these kernels would
 # carry — no whole-archive relink tricks (the previous harness was retired;
@@ -59,7 +59,7 @@ command -v node >/dev/null 2>&1 || fail "node not on PATH (node execution court 
 [ -f "$WASM_CRATE/Cargo.toml" ] || fail "crate manifest missing: $WASM_CRATE/Cargo.toml"
 [ -f "$WASM_CRATE/src/lib.rs" ] || fail "crate source missing: $WASM_CRATE/src/lib.rs"
 
-echo "== avec WASM footprint gate (crates/wasm-footprint) =="
+echo "== cgap WASM footprint gate (crates/wasm-footprint) =="
 echo "rustc:    $(rustc --version)"
 echo "cargo:    $(cargo --version)"
 echo "wasm-opt: $("$OPT_BIN" --version)"
@@ -116,12 +116,12 @@ OPT="$WASM_CRATE/target/$TARGET/release/wasm_footprint.opt.wasm"
 # bytes. First failed assertion exits 2 (fail-closed).
 # ---------------------------------------------------------------------------
 echo "-- node execution court (optimized artifact, real execution)..."
-NODE_COURT_JS="$(mktemp "${TMPDIR:-/tmp}/avec_node_court.XXXXXX.js")"
+NODE_COURT_JS="$(mktemp "${TMPDIR:-/tmp}/cgap_node_court.XXXXXX.js")"
 cleanup() { rm -f "$NODE_COURT_JS"; }
 trap cleanup EXIT INT TERM
 cat > "$NODE_COURT_JS" <<'NODE_EOF'
 'use strict';
-// avec node execution court: instantiate the optimized wasm footprint
+// cgap node execution court: instantiate the optimized wasm footprint
 // artifact and assert on real returned bytes. Exit 0 all pass; exit 2 on
 // the first failure.
 const fs = require('fs');

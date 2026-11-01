@@ -1,4 +1,4 @@
-# avec — DFLSS gate surface (DMEDI Measure = real commands, real exits)
+# cgap — DFLSS gate surface (DMEDI Measure = real commands, real exits)
 # Lane-owned file. Each gate runs the REAL command; a nonzero exit fails the
 # target (fail-closed). No mocked, skipped, or silenced gates.
 #
@@ -31,10 +31,10 @@ endif
 # shasum needs -a 256 to select the digest; sha256sum does not.
 SHA_FLAGS := $(if $(findstring shasum,$(notdir $(SHA_CMD))),-a 256,)
 
-GATE0_FILES := include/avec_c_data.h \
-               include/avec_format_codes.h \
-               crates/avec-arrow/src/generated_layout.rs \
-               crates/avec-arrow/src/generated_version.rs
+GATE0_FILES := include/cgap_c_data.h \
+               include/cgap_format_codes.h \
+               crates/cgap-arrow/src/generated_layout.rs \
+               crates/cgap-arrow/src/generated_version.rs
 
 test:
 	cargo test --workspace
@@ -45,21 +45,21 @@ test:
 gate0:
 	@echo "== gate0: ggen sync replay determinism + freestanding C header =="
 	ggen sync run
-	for f in $(GATE0_FILES); do $(SHA_CMD) $(SHA_FLAGS) $$f; done > /tmp/avec_gate0_run1.sha
+	for f in $(GATE0_FILES); do $(SHA_CMD) $(SHA_FLAGS) $$f; done > /tmp/cgap_gate0_run1.sha
 	ggen sync run
-	for f in $(GATE0_FILES); do $(SHA_CMD) $(SHA_FLAGS) $$f; done > /tmp/avec_gate0_run2.sha
-	cmp /tmp/avec_gate0_run1.sha /tmp/avec_gate0_run2.sha
-	cat /tmp/avec_gate0_run2.sha
+	for f in $(GATE0_FILES); do $(SHA_CMD) $(SHA_FLAGS) $$f; done > /tmp/cgap_gate0_run2.sha
+	cmp /tmp/cgap_gate0_run1.sha /tmp/cgap_gate0_run2.sha
+	cat /tmp/cgap_gate0_run2.sha
 	echo "gate0: byte-stable replay proof PASS"
-	cc -std=c99 -ffreestanding -Wall -Wextra -pedantic -c include/avec_c_data.h -o /tmp/avec_h_gate0.o
+	cc -std=c99 -ffreestanding -Wall -Wextra -pedantic -c include/cgap_c_data.h -o /tmp/cgap_h_gate0.o
 	echo "gate0: header compile PASS"
 
 # Gate 1: CTQ-3 — scan kernels must compile to machine code with zero
 # conditional branches inside each kernel symbol's extent. Builds the audit
-# profile cdylib first (branch_audit.py disassembles target/audit/libavec_audit.dylib).
+# profile cdylib first (branch_audit.py disassembles target/audit/libcgap_audit.dylib).
 gate1:
 	@echo "== gate1: CC=1 machine-code branch audit =="
-	cargo build --profile audit -p avec-audit
+	cargo build --profile audit -p cgap-audit
 	python3 scripts/branch_audit.py
 	printf 'mutation court: see receipts (cargo mutants run is long; recorded in docs/RECEIPTS.md)\n'
 
@@ -69,10 +69,10 @@ gate2:
 	cargo run --release -p bench
 
 # Gate 3: C Data Interface wire parity. The harness CDLL-loads
-# target/debug/libavec_ffi.dylib, so the debug cdylib must exist first.
+# target/debug/libcgap_ffi.dylib, so the debug cdylib must exist first.
 gate3:
 	@echo "== gate3: C Data Interface wire parity (pyarrow _import_from_c) =="
-	cargo build -p avec-ffi
+	cargo build -p cgap-ffi
 	/Users/sac/.local/bin/uv run --with pyarrow python3 scripts/gate3_cdata.py
 
 gates: gate0 gate1 gate2 gate3
@@ -85,9 +85,9 @@ lint:
 	exit $$st
 
 publish-check:
-	cargo publish --dry-run --allow-dirty -p avec-arrow
-	cargo publish --dry-run --allow-dirty -p avec-blake3
-	cargo publish --dry-run --allow-dirty -p avec-parquet
+	cargo publish --dry-run --allow-dirty -p cgap-arrow
+	cargo publish --dry-run --allow-dirty -p cgap-blake3
+	cargo publish --dry-run --allow-dirty -p cgap-parquet
 
 # --- OPT-L9 additions ---------------------------------------------------------
 
@@ -130,8 +130,8 @@ symbol-gate:
 
 test-beam:
 	@echo "== test-beam: NIF membrane + resource bin + sched crossover =="
-	cargo build -p avec-beam
-	cargo build --release -p avec-beam
+	cargo build -p cgap-beam
+	cargo build --release -p cgap-beam
 	escript test/beam_test.escript
 	escript test/resource_bin.escript
 	escript test/sched_crossover.escript

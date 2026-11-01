@@ -62,9 +62,9 @@ TTL_PREAMBLE = """@prefix stardf: <https://stardf.dev/vocab#> .
 # Contract header properties are pinned by the contract; measured-value
 # predicates are emitted in the stardf: namespace (see CTQ_MAP note).
 stardf:contract-v26_10_31 a stardf:PerformanceReceiptContract ;
-    stardf:targetCrate "avec" ;
+    stardf:targetCrate "cgap" ;
     stardf:predecessor "purrdf" ;
-    stardf:dataPlane "avec" ;
+    stardf:dataPlane "cgap" ;
     stardf:conformanceSuite "W3C-RDF-1.2-SHACL-RDFC-1.0" ;
     stardf:benchInvocation "cargo bench -p bench --bench v26_10_31 -- --color never" ;
     stardf:divanVersion "0.1.21" ;

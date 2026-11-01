@@ -1,6 +1,6 @@
-//! Arrow accessor micro-benches (lane OPT20-L7, avec version 26.10.29).
+//! Arrow accessor micro-benches (lane OPT20-L7, cgap version 26.10.29).
 //!
-//! Four measurements over the real frozen accessors of `avec-arrow`:
+//! Four measurements over the real frozen accessors of `cgap-arrow`:
 //!
 //! - `varlen u32 row-scan`: [`Varlen::row`] sequential full-scan read. The
 //!   64 MiB payload buffer is walked row by row, every payload byte folded,
@@ -34,12 +34,12 @@
 //! line's basis) and Mrows/s (over logical rows walked). State the basis,
 //! never make the reader guess.
 
-use avec_arrow::VERSION_C;
-use avec_arrow::primitive::{Primitive, PrimitiveBuilder};
-use avec_arrow::runend::RunEndEncodedBuilder;
-use avec_arrow::slice::slice;
-use avec_arrow::varlen::{Varlen, VarlenBuilder};
-use avec_arrow::views::{ViewVec, ViewVecBuilder};
+use cgap_arrow::VERSION_C;
+use cgap_arrow::primitive::{Primitive, PrimitiveBuilder};
+use cgap_arrow::runend::RunEndEncodedBuilder;
+use cgap_arrow::slice::slice;
+use cgap_arrow::varlen::{Varlen, VarlenBuilder};
+use cgap_arrow::views::{ViewVec, ViewVecBuilder};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::hint::black_box;
 use std::sync::atomic::{AtomicUsize, Ordering};

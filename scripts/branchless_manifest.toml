@@ -44,7 +44,7 @@ updated = "8-kernel inventory: V2-closure added quad untranspose (documented bli
 # SPOT, not a gate-covered kernel: in the audit-profile rlib the untranspose
 # body renders as <ltmp0> under BOTH Apple objdump AND homebrew llvm-objdump
 # 21.1.7 (/opt/homebrew/opt/llvm/bin), while nm sees the mangled global text
-# symbol __RNvMNtCs9DwzS8jbwzX_10avec_arrow9transposeNtB2_11QuadColumns11untranspose
+# symbol __RNvMNtCs9DwzS8jbwzX_10cgap_arrow9transposeNtB2_11QuadColumns11untranspose
 # (T, 0x0..0x124, next symbol at 0x124). The gate therefore attributes 0
 # in-scope instructions to this kernel — the region lands in the loud
 # skipped_out_of_scope count, never in the hits. Authoritative count
@@ -61,7 +61,7 @@ updated = "8-kernel inventory: V2-closure added quad untranspose (documented bli
 # cbnz/b.ls) fails the row.
 [[kernel]]
 name = "quad untranspose"
-owner = "crates/avec-arrow/src/transpose.rs"
+owner = "crates/cgap-arrow/src/transpose.rs"
 scope_pattern = "untranspose"
 accepted_remainder = [
   "CAPACITY_OVERFLOW_GUARD",  # b.ls — len*64 byte-size overflow check selecting
@@ -86,7 +86,7 @@ observed_mnemonics = ["cbz", "cbnz", "b", "b.ne", "b.ls"]
 # ---------------------------------------------------------------------------
 [[kernel]]
 name = "quad transpose / unpack"
-owner = "crates/avec-arrow/src/transpose.rs"
+owner = "crates/cgap-arrow/src/transpose.rs"
 scope_pattern = "transpose"
 accepted_remainder = [
   "ALLOCATOR_NULL_CHECK",  # 9x cbz — allocator null-checks the toolchain emits
@@ -100,7 +100,7 @@ accepted_remainder = [
 # scripts/audit_branchless.sh, audit profile, aarch64):
 # 12 unique sites — 9x allocator cbz (0x16c..0x284) + zero-trip cbz (0x150)
 # + entry b (0x228) + latch b.ne (0x2dc). The previously-cited 24 was the
-# same 12 counted across both audited artifact copies (libavec_arrow.rlib
+# same 12 counted across both audited artifact copies (libcgap_arrow.rlib
 # and its deps/ duplicate); ceiling kept at 24 to cover that counting mode.
 expected_max_count = 24
 gate_mode = "INFORMATIONAL"
@@ -108,7 +108,7 @@ observed_mnemonics = ["cbz", "b", "b.ne"]
 
 [[kernel]]
 name = "equality masks (quad equality)"
-owner = "crates/avec-arrow/src/predicates.rs"
+owner = "crates/cgap-arrow/src/predicates.rs"
 scope_pattern = "predicates"
 accepted_remainder = [
   "CAPACITY_ASSERT",  # b.lo — capacity assert guard
@@ -119,13 +119,13 @@ gate_mode = "INFORMATIONAL"
 observed_mnemonics = ["b.lo", "b.ne"]
 
 # ---------------------------------------------------------------------------
-# avec-git kernels (wave-8 lane 3, inventory-completeness closure, spec 27 §6).
-# NOTE: the gate's default artifact set is avec-arrow + avec-blake3 only;
-# these kernels are adjudicated by passing the avec-git audit-profile rlib
+# cgap-git kernels (wave-8 lane 3, inventory-completeness closure, spec 27 §6).
+# NOTE: the gate's default artifact set is cgap-arrow + cgap-blake3 only;
+# these kernels are adjudicated by passing the cgap-git audit-profile rlib
 # explicitly, e.g.
-#   CARGO_TARGET_DIR=<tmp> cargo build --profile audit -p avec-git
+#   CARGO_TARGET_DIR=<tmp> cargo build --profile audit -p cgap-git
 #   BRANCHLESS_SCOPE='6lookup|6offset' PATH=/opt/homebrew/opt/llvm/bin:$PATH \
-#     scripts/audit_branchless.sh <tmp>/audit/libavec_git.rlib
+#     scripts/audit_branchless.sh <tmp>/audit/libcgap_git.rlib
 # (llvm-objdump required: Apple objdump renders mach-o symbols as <ltmp0>,
 #  which defeats name scoping entirely.)
 # The default BRANCHLESS_SCOPE already contains "ladder"; ladder_search's own
@@ -134,7 +134,7 @@ observed_mnemonics = ["b.lo", "b.ne"]
 
 [[kernel]]
 name = "git idx constant-time ladder lookup"
-owner = "crates/avec-git/src/ladder.rs (emitted as avec_git::idx_read::IdxV2::lookup)"
+owner = "crates/cgap-git/src/ladder.rs (emitted as cgap_git::idx_read::IdxV2::lookup)"
 scope_pattern = "6lookup"
 accepted_remainder = [
   "ALLOCATOR_NULL_CHECK",   # cbz — entry-path null/truncation checks on the
@@ -160,7 +160,7 @@ observed_mnemonics = ["cbz", "b", "b.ne", "b.eq", "b.hi", "b.ls", "b.hs", "tbnz"
 
 [[kernel]]
 name = "offset-MSB large-offset select"
-owner = "crates/avec-git/src/idx_read.rs (avec_git::idx_read::IdxV2::offset)"
+owner = "crates/cgap-git/src/idx_read.rs (cgap_git::idx_read::IdxV2::offset)"
 scope_pattern = "6offset"
 accepted_remainder = [
   "TRUNCATION_GUARD",    # b.ls — small_off+4>len and large_end<=len bounds
@@ -180,13 +180,13 @@ gate_mode = "INFORMATIONAL"
 observed_mnemonics = ["b.ls", "b"]
 
 # ---------------------------------------------------------------------------
-# avec-blake3 kernel (wave-8 lane 3). Lane 1 is editing multi_chunk.rs
+# cgap-blake3 kernel (wave-8 lane 3). Lane 1 is editing multi_chunk.rs
 # concurrently — counts below are wave-8-observed at multi_chunk.rs
 # sha256 dccfa01149c300b3ac7a73e2e5c243d0c787de2f, 2026-10-30T20:43-0700.
 
 [[kernel]]
 name = "blake3 4-way chunk compressor"
-owner = "crates/avec-blake3/src/multi_chunk.rs"
+owner = "crates/cgap-blake3/src/multi_chunk.rs"
 scope_pattern = "chunks_4way"
 accepted_remainder = [
   "ZERO_TRIP_GUARD",  # cbz — block-count zero-trip guard before the loop
@@ -204,7 +204,7 @@ observed_mnemonics = ["cbz", "b", "b.ne"]
 
 # ---------------------------------------------------------------------------
 # Default-scope collision register (wave-8 lane 3). The default scope's `ct_`
-# alternative substring-matches "stru(ct_)" in these avec-arrow FFI/map
+# alternative substring-matches "stru(ct_)" in these cgap-arrow FFI/map
 # symbols, so the default gate pulls them into scope although they are not
 # hot-path kernels. They were failing as unlisted symbols under the pre-wave
 # manifest too (verified by replaying the default gate against the 2-kernel
@@ -215,7 +215,7 @@ observed_mnemonics = ["cbz", "b", "b.ne"]
 
 [[kernel]]
 name = "default-scope collision: c_abi_nested FFI release helpers"
-owner = "crates/avec-arrow/src/c_abi_nested.rs (owner lane to reclaim)"
+owner = "crates/cgap-arrow/src/c_abi_nested.rs (owner lane to reclaim)"
 scope_pattern = "release_struct_(array|schema)"
 accepted_remainder = [
   "ALLOCATOR_NULL_CHECK",  # cbz — entry null-checks
@@ -234,7 +234,7 @@ observed_mnemonics = ["cbz", "b", "b.eq"]
 
 [[kernel]]
 name = "default-scope collision: perfect_hash try_build"
-owner = "crates/avec-arrow/src/perfect_hash.rs (owner lane to reclaim)"
+owner = "crates/cgap-arrow/src/perfect_hash.rs (owner lane to reclaim)"
 scope_pattern = "9try_build"
 accepted_remainder = [
   "ALLOCATOR_NULL_CHECK",  # cbz — entry null-checks

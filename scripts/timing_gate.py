@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Data-independence timing gate for the avec hot-path kernels (lane PCL4).
+"""Data-independence timing gate for the cgap hot-path kernels (lane PCL4).
 
 Branch-free control flow is not constant time. This gate MEASURES the real
 max/min timing ratios of the hot kernels across the input contrasts the
@@ -244,7 +244,7 @@ CLAIM_KERNEL_CONTRASTS = {
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="avec data-independence timing gate")
+    ap = argparse.ArgumentParser(description="cgap data-independence timing gate")
     ap.add_argument("--runs", type=int, default=3,
                     help="runs per binary for the noise envelope (default 3)")
     ap.add_argument("--bin-dir", type=Path, default=BIN_DIR)

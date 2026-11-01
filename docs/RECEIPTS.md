@@ -1,6 +1,6 @@
-# AVEC v26.10.29 Manufacturing Receipts
+# CGAP v26.10.29 Manufacturing Receipts
 
-Collected: 2026-10-30T00:14:34Z - 00:14:37Z, host Darwin 25.2.0, repo `/Users/sac/avec`.
+Collected: 2026-10-30T00:14:34Z - 00:14:37Z, host Darwin 25.2.0, repo `/Users/sac/cgap`.
 
 Toolchain observed: rustc 1.97.0 (2d8144b78 2026-07-07), cargo 1.97.0, ggen 26.10.11,
 wasm-opt version 112.
@@ -30,32 +30,32 @@ Exit: 0. Build was warm ("Finished `test` profile ... in 0.05s").
 
 | Crate | Target | Passed |
 |---|---|---|
-| avec-arrow | lib unittests | 15 |
-| avec-parquet | lib unittests | 11 |
-| avec-audit | lib unittests | 0 (no tests) |
-| avec-beam | lib unittests | 0 (no tests) |
-| avec-ffi | lib unittests | 0 (no tests) |
+| cgap-arrow | lib unittests | 15 |
+| cgap-parquet | lib unittests | 11 |
+| cgap-audit | lib unittests | 0 (no tests) |
+| cgap-beam | lib unittests | 0 (no tests) |
+| cgap-ffi | lib unittests | 0 (no tests) |
 | bench | bin unittests | 0 (no tests) |
-| avec-arrow / avec-ffi / avec-parquet | doc-tests | 0 each |
+| cgap-arrow / cgap-ffi / cgap-parquet | doc-tests | 0 each |
 
 Total: 26 passed, 0 failed.
 
 Verbatim excerpts:
 
 ```text
-Running unittests src/lib.rs (target/debug/deps/avec_arrow-76a7889e2db7accc)
+Running unittests src/lib.rs (target/debug/deps/cgap_arrow-76a7889e2db7accc)
 test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; 0.00s
 
-Running unittests src/lib.rs (target/debug/deps/avec_parquet-a93d3cbc33c7ccab)
+Running unittests src/lib.rs (target/debug/deps/cgap_parquet-a93d3cbc33c7ccab)
 test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; 0.00s
 ```
 
-Note: `crates/avec-parquet` is not listed in `[workspace] members` but is a path
+Note: `crates/cgap-parquet` is not listed in `[workspace] members` but is a path
 dependency of `crates/audit` and `crates/bench`, which auto-promotes it to workspace
 membership; its 11 tests ran under `--workspace`.
 
 Compiles clean of errors; warnings observed (unused_mut, dead_code, unused_imports,
-unused_variables) in avec-arrow, avec-ffi, bench compile units.
+unused_variables) in cgap-arrow, cgap-ffi, bench compile units.
 
 Verdict: ALIVE - 26 passed / 0 failed across all workspace members.
 
@@ -83,7 +83,7 @@ Verdict: ALIVE - single-core 58.903 GiB/s, 0 allocs; 16-lane 74.8 GiB/s.
 ## Receipt 3: Branch Audit (Zero Conditional Branches)
 
 ```bash
-cargo build --profile audit -p avec-audit
+cargo build --profile audit -p cgap-audit
 python3 scripts/branch_audit.py
 ```
 
@@ -104,7 +104,7 @@ audit_unpack_8bit      OK
 BRANCH AUDIT PASS: 0 conditional branches across all audited kernels
 ```
 
-All 9 kernel symbols located in the disassembly of `target/audit/libavec_audit.dylib`
+All 9 kernel symbols located in the disassembly of `target/audit/libcgap_audit.dylib`
 (non-vacuous: a missing symbol exits 1); every kernel contains 0 conditional branches
 (b.cc/cbz/cbnz/tbz/tbnz/x86 jcc family).
 
@@ -113,7 +113,7 @@ Verdict: ALIVE - 0 conditional branches across all 9 audited kernels.
 ## Receipt 4: Gate 3 - C Data Interface Wire Parity
 
 ```bash
-cargo build -p avec-ffi
+cargo build -p cgap-ffi
 python3 scripts/gate3_cdata.py
 ```
 
@@ -136,22 +136,22 @@ Verdict: ALIVE - bitwise wire parity through the C Data Interface.
 
 ```bash
 ggen sync run   # twice
-shasum -a 256 include/avec_c_data.h include/avec_format_codes.h \
-  crates/avec-arrow/src/generated_layout.rs \
-  crates/avec-arrow/src/generated_version.rs   # pre-run, post-run-1, post-run-2
-cc -std=c99 -ffreestanding -Wall -Wextra -pedantic -c include/avec_c_data.h \
-  -o /tmp/avec_h_receipts.o
+shasum -a 256 include/cgap_c_data.h include/cgap_format_codes.h \
+  crates/cgap-arrow/src/generated_layout.rs \
+  crates/cgap-arrow/src/generated_version.rs   # pre-run, post-run-1, post-run-2
+cc -std=c99 -ffreestanding -Wall -Wextra -pedantic -c include/cgap_c_data.h \
+  -o /tmp/cgap_h_receipts.o
 ```
 
 Both sync runs exit 0. Generator decisions in BOTH runs (verbatim):
 
 ```json
 "decisions": {
-  "crates/avec-arrow/src/generated_layout.rs": "skipped: unchanged: content identical",
-  "crates/avec-arrow/src/generated_version.rs": "skipped: unchanged: content identical",
+  "crates/cgap-arrow/src/generated_layout.rs": "skipped: unchanged: content identical",
+  "crates/cgap-arrow/src/generated_version.rs": "skipped: unchanged: content identical",
   "generated/subject-count.txt": "skipped: unchanged: content identical",
-  "include/avec_c_data.h": "skipped: unchanged: content identical",
-  "include/avec_format_codes.h": "skipped: unchanged: content identical"
+  "include/cgap_c_data.h": "skipped: unchanged: content identical",
+  "include/cgap_format_codes.h": "skipped: unchanged: content identical"
 },
 "written": []
 ```
@@ -159,21 +159,21 @@ Both sync runs exit 0. Generator decisions in BOTH runs (verbatim):
 sha256 of all four files identical across pre-run / round 1 / round 2
 (observed three times each):
 
-- `include/avec_c_data.h`
+- `include/cgap_c_data.h`
   - `05ac80b69f87ad2680ed406b1fcfc105dd530f26961b450c7ea79b20ac9cc07e`
-- `include/avec_format_codes.h`
+- `include/cgap_format_codes.h`
   - `92b9b0bd352df990362672407615c13e819f6f41ee571f17187115db9da19eee`
-- `crates/avec-arrow/src/generated_layout.rs`
+- `crates/cgap-arrow/src/generated_layout.rs`
   - `86e89638756fe9bf025949f9e5263c44c5c4739a3d98e7bb1b90fc60c396f976`
-- `crates/avec-arrow/src/generated_version.rs`
+- `crates/cgap-arrow/src/generated_version.rs`
   - `abfd4e705ef8a0163944535ce7ffd8d3990ef6dbcb6a3320e806a6088b643fff`
 
 Closure identity: `graph_hash_hex`
 `ca2bf16965ff9034d6cb9ffe36deb42b6f25c3cf2cfd0f5ee358142752fdaf00`, pack
-`avec-pack` `3e5357379e80de0c57e5ee2aede54a1f8ea1154ff6197e1007ecbd09d019ae7e`,
+`cgap-pack` `3e5357379e80de0c57e5ee2aede54a1f8ea1154ff6197e1007ecbd09d019ae7e`,
 actuator `ggen@26.10.11`.
 
-cc gate exit 0; produced `/tmp/avec_h_receipts.o` (708864 bytes, observed via ls).
+cc gate exit 0; produced `/tmp/cgap_h_receipts.o` (708864 bytes, observed via ls).
 
 Verdict: ALIVE - byte-identical replay across two runs; header compiles clean
 under C99 + -ffreestanding + -pedantic with zero warnings emitted (exit 0).
@@ -182,8 +182,8 @@ under C99 + -ffreestanding + -pedantic with zero warnings emitted (exit 0).
 
 ```bash
 cd /Users/sac/ggen-marketplace
-python3 scripts/marketplace.py check avec-pack
-python3 scripts/check_gate_witness_courts.py | grep avec
+python3 scripts/marketplace.py check cgap-pack
+python3 scripts/check_gate_witness_courts.py | grep cgap
 ```
 
 Marketplace check exit 0 (verbatim):
@@ -192,9 +192,9 @@ Marketplace check exit 0 (verbatim):
 check ok packs=1 turtle=ok qualify=ok
 ```
 
-avec-pack court line from the courts JSON (fields transcribed verbatim):
+cgap-pack court line from the courts JSON (fields transcribed verbatim):
 
-- pack: avec-pack
+- pack: cgap-pack
 - case_count: 5
 - require_fail: true, require_pass: true (anti-vacuity pair)
 - schema: ggen.semantic-gate-witness-court/1
@@ -202,7 +202,7 @@ avec-pack court line from the courts JSON (fields transcribed verbatim):
 
 Marketplace overall: configured_pack_count 46, standing ALIVE.
 
-Verdict: ALIVE - avec-pack qualified (turtle=ok, qualify=ok) with ALIVE court
+Verdict: ALIVE - cgap-pack qualified (turtle=ok, qualify=ok) with ALIVE court
 standing, 5 cases, both negative and positive required.
 
 ## Receipt 7: WASM Footprint Gate
@@ -221,14 +221,14 @@ rustc:   rustc 1.97.0 (2d8144b78 2026-07-07)
 cargo:   cargo 1.97.0 (c980f4866 2026-06-30)
 wasm-opt: wasm-opt version 112 (version_112)
 target:  wasm32-wasip1
--- cargo rustc --release --target wasm32-wasip1 -p avec-arrow --crate-type cdylib
+-- cargo rustc --release --target wasm32-wasip1 -p cgap-arrow --crate-type cdylib
 error: no global memory allocator found but one is required; link to std or add
 `#[global_allocator]` to a static item that implements the GlobalAlloc trait
 error: `#[panic_handler]` function required, but not found
-error: could not compile `avec-arrow` (lib) due to 2 previous errors
+error: could not compile `cgap-arrow` (lib) due to 2 previous errors
 ```
 
-The wasm32-wasip1 cdylib build of avec-arrow requires a `#[global_allocator]` and
+The wasm32-wasip1 cdylib build of cgap-arrow requires a `#[global_allocator]` and
 `#[panic_handler]` (wasm cdylib target does not link the host std allocator).
 No `target/wasm32-wasip1/release/*.wasm` artifact was produced, so no byte size
 exists to report. The gate is fail-closed: it exits non-zero rather than reporting

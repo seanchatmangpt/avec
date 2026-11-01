@@ -1,4 +1,4 @@
-# Release Notes — avec v26.10.29
+# Release Notes — cgap v26.10.29
 
 Release v26.10.29, dated 2026-10-29 (`docs/DFLSS_CHARTER.md`, version table).
 
@@ -15,26 +15,26 @@ docs conflict on several values; conflicts are named in
 
 | crate | role (receipt docs) | publish |
 |---|---|---|
-| avec-arrow | in-memory columnar substrate, `no_std` + `alloc`, zero deps | true |
-| avec-parquet | branchless Parquet persistence kernels, `no_std`, zero deps | true |
-| avec-ffi | C-ABI cdylib membrane (Gate 3 surface) | false |
-| avec-beam | erl_nif membrane (BEAM latency receipt) | false |
-| avec-audit | cdylib forcing kernels into the branch-audit artifact | false |
+| cgap-arrow | in-memory columnar substrate, `no_std` + `alloc`, zero deps | true |
+| cgap-parquet | branchless Parquet persistence kernels, `no_std`, zero deps | true |
+| cgap-ffi | C-ABI cdylib membrane (Gate 3 surface) | false |
+| cgap-beam | erl_nif membrane (BEAM latency receipt) | false |
+| cgap-audit | cdylib forcing kernels into the branch-audit artifact | false |
 | bench | Gate 2 throughput + allocation-interception harness | false |
 | integration | integration test crate (`publish = false`) | false |
 | wasm-footprint | standalone footprint / symbol-gate artifact crate | false |
 
 Publish classification is transcribed from `publish = true|false` in each
-`crates/*/Cargo.toml`; the two publish-enabled crates are avec-arrow and
-avec-parquet.
+`crates/*/Cargo.toml`; the two publish-enabled crates are cgap-arrow and
+cgap-parquet.
 
 ### Kernel inventory (modules present on disk)
 
-avec-arrow (`crates/avec-arrow/src/`): `bitmap`, `primitive`, `varlen`,
+cgap-arrow (`crates/cgap-arrow/src/`): `bitmap`, `primitive`, `varlen`,
 `views`, `c_abi` (+ `c_abi_nested`), `silicon`, `buffer`, `runend`, `slice`,
 plus the generated `generated_layout` / `generated_version` pair.
 
-avec-parquet (`crates/avec-parquet/src/`): `rle`, `packing`, `unpack`,
+cgap-parquet (`crates/cgap-parquet/src/`): `rle`, `packing`, `unpack`,
 `encode_fast`, `dictionary`, `thrift`, `page`.
 
 ## Gate States (as receipted)
@@ -105,7 +105,7 @@ unpack random64: 19.186-39.074 GiB/s (w8 -> w1)
 
 ### Gate 3 — C Data Interface wire parity
 
-`cargo build -p avec-ffi` + `python3 scripts/gate3_cdata.py`, both exit 0:
+`cargo build -p cgap-ffi` + `python3 scripts/gate3_cdata.py`, both exit 0:
 int32 batch of 100000 rows, null every 7th row (null_count 14285 =
 floor(100000/7)), imported through pyarrow `pa.Array._import_from_c`
 (pyarrow 23.0.1 per charter); validity and values buffers verified BITWISE
@@ -134,12 +134,12 @@ Mechanism (from `scripts/symbol_gate.py`): PRIMARY (gating) scans the
 optimized wasm32-wasip1 artifact of `crates/wasm-footprint` for forbidden
 panicking/unwind/abort symbols — 0 forbidden symbols required; SECONDARY
 (informational, never gating) reports the std-linked host membranes
-`libavec_audit.dylib` / `libavec_ffi.dylib`; ANTI-VACUITY requires a
+`libcgap_audit.dylib` / `libcgap_ffi.dylib`; ANTI-VACUITY requires a
 panic-containing no_std probe to FIRE the scanner at both pipeline stages.
 **No run receipt for the symbol gate exists in `docs/`**; its state in this
 release's receipt set is UNVERIFIED. See Discrepancies.
 
-### BEAM latency (avec-beam membrane)
+### BEAM latency (cgap-beam membrane)
 
 CTQ: scheduler impact <= 50 us under heavy NIF churn. Receipt run
 (`test/beam_latency.escript`, OTP 28 / ERTS 16.2, host loadavg 14.14,
@@ -152,9 +152,9 @@ instrument on this host cannot resolve the CTQ either way; the absolute gate
 reads FAIL in both runs. Attribution probes: dirty-CPU flag honored (no
 churn-proportional drift at 1-churner scale).
 
-Other receipted numbers: `avec_get/2` median 0.084 us, p99 0.167 us
+Other receipted numbers: `cgap_get/2` median 0.084 us, p99 0.167 us
 (calibration floor 0.042 us median, NIF round-trip ~0.04 us class);
-`avec_new(16384, 0)` median 742.333 us on the dirty path, debug build.
+`cgap_new(16384, 0)` median 742.333 us on the dirty path, debug build.
 (`docs/BEAM_LATENCY.md`.)
 
 ## Known Open
@@ -167,15 +167,15 @@ Other receipted numbers: `avec_get/2` median 0.084 us, p99 0.167 us
    (idle floor 60x-220x the gate). Needs a noise-resolving instrument or an
    idle-host run.
 3. **symbol-gate secondary scope**: host-membrane scans are informational by
-   design (std-linked membranes would measure std, not avec); no run receipt
+   design (std-linked membranes would measure std, not cgap); no run receipt
    exists for either scope.
 4. **Parquet = kernels + minimal page framing, not the full file format**:
    charter out-of-scope declaration ("no page/file reader-writer");
-   `crates/avec-parquet/src/` carries the page-framing modules (`page`,
+   `crates/cgap-parquet/src/` carries the page-framing modules (`page`,
    `thrift`, `dictionary`) as kernels.
 5. **CTQ-4 wasm footprint** has no single receipted value (three-way doc
    conflict, Discrepancies 1).
-6. **avec-ffi / avec-beam runtime suites**: charter tracker marks both
+6. **cgap-ffi / cgap-beam runtime suites**: charter tracker marks both
    membranes PARTIAL (no runtime suite / no BEAM runtime test in repo;
    the BEAM latency receipt postdates that row).
 
@@ -189,7 +189,7 @@ Other receipted numbers: `avec_get/2` median 0.084 us, p99 0.167 us
 3. Reconcile CTQ-4: one footprint receipt of record (harness state, artifact
    byte size, target 100 vs 250 KiB) and a run receipt for `symbol-gate`.
 4. Extend the branch audit to the register's named uncovered kernels
-   (`Bitmap::is_all_valid`, `count_one_bits`, and the three avec-parquet
+   (`Bitmap::is_all_valid`, `count_one_bits`, and the three cgap-parquet
    per-lane bounds sites) per `docs/BRANCH_REGISTER.md` R3.
 5. Land the register's doc-correction sweep (R4) everywhere the unscoped
    "zero conditional branches" phrasing survives.
@@ -203,7 +203,7 @@ value B (source B).
    (release work order) vs **10123 B** combined stripped, PASS vs <= 100 KiB
    (`docs/wasm-footprint.txt`: arrow 10123 / parquet 245 / combined 10123
    stripped; raw 24801) vs **exit 101, no wasm artifact produced, CTQ-4 NOT
-   measured** (`docs/RECEIPTS.md` R7: avec-arrow wasm32-wasip1 cdylib fails
+   measured** (`docs/RECEIPTS.md` R7: cgap-arrow wasm32-wasip1 cdylib fails
    for lack of `#[global_allocator]` / `#[panic_handler]`) vs **harness
    absent, NO-MECHANISM, 250 KiB** (`docs/DFLSS_CHARTER.md`: CTQ-4 and
    out-of-scope section). Charter also records gate0 "not run" while
@@ -231,7 +231,7 @@ value B (source B).
 6. **BEAM CTQ register row** — the scheduler-impact CTQ (<= 50 us) is
    measured and FAIL in `docs/BEAM_LATENCY.md` but has no row in the charter
    CTQ register (CTQ-1..CTQ-5; M-04 is the branch-audit invariant); the
-   charter tracker's "avec-beam PARTIAL, no BEAM runtime test in repo" row
+   charter tracker's "cgap-beam PARTIAL, no BEAM runtime test in repo" row
    predates the latency receipt.
 7. **Gate 0 run state** — RECEIPTS.md R5: two sync runs + freestanding C99
    header compile, exit 0, byte-identical replay vs charter receipt table:
@@ -247,3 +247,13 @@ rustc 1.97.0 (2d8144b78 2026-07-07), cargo 1.97.0, ggen 26.10.11, wasm-opt
 version 112, pyarrow 23.0.1 (charter), OTP 28 / ERTS 16.2 (BEAM receipt).
 Host: macOS arm64 (Darwin 25.2.0). All bench/latency numbers are
 machine-local single runs under concurrent host load.
+
+---
+
+## Rename: avec→cgap (2026-10-31)
+
+Post-v26.10.29 rename: avec→cgap across crates, C ABI, BEAM NIFs, headers,
+docs; version frozen at 26.10.29 (no re-release — v26.10.29 receipts retain
+their recorded values). The license URN `urn:avec:license:p28-sil:v2.1.0-sovereign`
+intentionally retains the `avec` namespace (P28-SIL §9 instrument identity,
+unchanged by the rename).

@@ -2,7 +2,7 @@
 //! `docs/jira/v26.10.31/29-benchmark-harness-plan.md`.
 //!
 //! Subjects: (a) quad AoS->SoA transpose throughput, (b) branchless
-//! predicate filter throughput, (c) avec-blake3 tree-hash throughput
+//! predicate filter throughput, (c) cgap-blake3 tree-hash throughput
 //! (CTQ-06, LSL 8.5 / target 10.2 GiB/s per-core), (d) level-free Parquet
 //! page write/scan round-trip (CTQ-03 family).
 //!
@@ -10,10 +10,10 @@
 //! standing floors, until the divan2receipt converter + gage validation
 //! land (plan Sections "Gage R&R" / "divan2receipt").
 
-use avec_arrow::predicates::filter_quads_eq;
-use avec_arrow::transpose::{transpose, Quad64};
-use avec_blake3::hash_wide_simd;
-use avec_parquet::level_free::{write_page, read_page_payload, LevelFreeType};
+use cgap_arrow::predicates::filter_quads_eq;
+use cgap_arrow::transpose::{transpose, Quad64};
+use cgap_blake3::hash_wide_simd;
+use cgap_parquet::level_free::{write_page, read_page_payload, LevelFreeType};
 use divan::{Bencher, BytesCount};
 use std::hint::black_box;
 

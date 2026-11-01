@@ -1,17 +1,17 @@
-# Tutorial: Getting Started with `avec`
+# Tutorial: Getting Started with `cgap`
 
-This tutorial walks through building a 64-byte cache-aligned Arrow column, running a compressed-domain algebraic aggregation without unpacking, and computing a cryptographic Merkle root using `avec-blake3`.
+This tutorial walks through building a 64-byte cache-aligned Arrow column, running a compressed-domain algebraic aggregation without unpacking, and computing a cryptographic Merkle root using `cgap-blake3`.
 
 ---
 
 ## Step 1: Verify the Substrate Gates
 
-Run the fast core tests for `avec-arrow`, `avec-blake3`, and `avec-gpu`:
+Run the fast core tests for `cgap-arrow`, `cgap-blake3`, and `cgap-gpu`:
 
 ```bash
-cargo test -p avec-arrow --lib
-cargo test -p avec-blake3
-cargo test -p avec-gpu
+cargo test -p cgap-arrow --lib
+cargo test -p cgap-blake3
+cargo test -p cgap-gpu
 ```
 
 Run the civilizational phase-change benchmark suite:
@@ -25,7 +25,7 @@ Expected output:
 === 1. Compressed-Domain Algebraic Execution (sum_masked_vertical_128) ===
   w= 1 | physical:    7.86 GiB/s | LOGICAL UNCOMPRESSED:   503.11 GiB/s |  67525.7 Mrows/s | 0 allocs
 ...
-=== 5. Sovereign #![no_std] BLAKE3 (avec-blake3) ===
+=== 5. Sovereign #![no_std] BLAKE3 (cgap-blake3) ===
   64 KiB (64-chunk Merkle tree)      | throughput:    0.41 GiB/s | 0 allocs
   SIMD 4-way NEON parent reduction   | throughput:    1.31 GiB/s |    21.9 Mparents/s | 0 allocs
 ```
@@ -34,11 +34,11 @@ Expected output:
 
 ## Step 2: Build a 64-Byte Aligned Arrow Buffer & Compute its BLAKE3 Merkle Root
 
-Every `avec_arrow::Buf` is allocated on a 64-byte hardware cache-line boundary (invariant `M-03`), and `avec_arrow::mmu_arena::MmuBuf` aligns to a 16 KiB hardware MMU page boundary (`16,384` bytes).
+Every `cgap_arrow::Buf` is allocated on a 64-byte hardware cache-line boundary (invariant `M-03`), and `cgap_arrow::mmu_arena::MmuBuf` aligns to a 16 KiB hardware MMU page boundary (`16,384` bytes).
 
 ```rust
-use avec_arrow::Buf;
-use avec_blake3::{hash, hash_wide_simd, should_dispatch_gpu};
+use cgap_arrow::Buf;
+use cgap_blake3::{hash, hash_wide_simd, should_dispatch_gpu};
 
 fn main() {
     // 1. Allocate a 64 KiB buffer (64 chunks of 1024 bytes)
@@ -59,14 +59,14 @@ fn main() {
 
 ---
 
-## Step 3: Compressed-Domain Algebraic Sum (`avec-parquet`)
+## Step 3: Compressed-Domain Algebraic Sum (`cgap-parquet`)
 
 Instead of inflating 4-bit integers into 64-bit scalars in RAM before summing, `sum_masked_vertical_128` computes the filtered sum directly on vertical bit-slices:
 
 $$\sum_{i \in M} v_i = (k \cdot b) + \sum_{j=0}^{w-1} 2^j \cdot \text{popcnt}(B_j \land M)$$
 
 ```rust
-use avec_parquet::bitslice::{pack_vertical, sum_masked_vertical_128};
+use cgap_parquet::bitslice::{pack_vertical, sum_masked_vertical_128};
 
 fn example_compressed_sum() {
     let values: Vec<u32> = (0..128).map(|i| (i % 16) as u32).collect();

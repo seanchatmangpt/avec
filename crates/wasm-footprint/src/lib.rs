@@ -1,7 +1,7 @@
-//! wasm-footprint: the no_std cdylib link wrapper for the avec wasm
+//! wasm-footprint: the no_std cdylib link wrapper for the cgap wasm
 //! footprint gate (charter CTQ-4).
 //!
-//! `avec-arrow` and `avec-parquet` are `#![no_std]` + `alloc` libs that
+//! `cgap-arrow` and `cgap-parquet` are `#![no_std]` + `alloc` libs that
 //! deliberately omit `#[panic_handler]` and `#[global_allocator]` — those are
 //! consumer-supplied link glue. Building either crate directly as a wasm
 //! cdylib therefore fails to link. This crate is that consumer: it supplies
@@ -11,7 +11,7 @@
 //! whole-archive'd in).
 //!
 //! Glue supplied here:
-//! - bump allocator over a static 1 MiB, 64-byte-aligned array (the avec
+//! - bump allocator over a static 1 MiB, 64-byte-aligned array (the cgap
 //!   buffer alignment invariant), alignment honored by construction;
 //! - `#[panic_handler]` = halt loop;
 //! - `rust_eh_personality` stable symbol stub (`#[no_mangle] pub extern "C"`,
@@ -20,10 +20,10 @@
 //! Exports: `wasm_version` — C ABI returning a NUL-terminated version string
 //! (single-sourced from this crate's manifest via `CARGO_PKG_VERSION`); plus
 //! `wasm_mask_words`, `wasm_unpack_1bit`, `wasm_rle_decode` — thin C ABI
-//! wrappers over `avec_arrow::bitmap::mask_words`,
-//! `avec_parquet::unpack::unpack_1bit`, `avec_parquet::rle_decode`; plus
+//! wrappers over `cgap_arrow::bitmap::mask_words`,
+//! `cgap_parquet::unpack::unpack_1bit`, `cgap_parquet::rle_decode`; plus
 //! `wasm_decode_page_body_w4` — the W=4 constant-parameter page-body decode
-//! (record loop mirrored from `avec_parquet::rle::decode_into` with the
+//! (record loop mirrored from `cgap_parquet::rle::decode_into` with the
 //! width dispatch removed; differential-courted against the real decoder in
 //! `w4_courts` and from the JS side via the minted hex fixture in
 //! `scripts/wasm_bench.mjs`).
@@ -37,12 +37,12 @@
 use core::alloc::{GlobalAlloc, Layout};
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-use avec_parquet::ParquetError;
+use cgap_parquet::ParquetError;
 
 /// Heap capacity: 1 MiB.
 const HEAP_SIZE: usize = 1024 * 1024;
 
-/// 64-byte alignment is the avec buffer invariant (AVX-512 / NEON); putting
+/// 64-byte alignment is the cgap buffer invariant (AVX-512 / NEON); putting
 /// it on the type makes the heap base aligned by construction, not by luck.
 #[repr(C, align(64))]
 struct Heap {
@@ -208,7 +208,7 @@ fn u32_slice_mut<'a>(ptr: *mut u32, len: usize) -> &'a mut [u32] {
     }
 }
 
-/// C ABI over [`avec_arrow::bitmap::mask_words`]: `out[i] = valid[i] & pred[i]`
+/// C ABI over [`cgap_arrow::bitmap::mask_words`]: `out[i] = valid[i] & pred[i]`
 /// for `n` lanes (kernel clamps to the shortest input internally).
 #[no_mangle]
 pub extern "C" fn wasm_mask_words(
@@ -217,14 +217,14 @@ pub extern "C" fn wasm_mask_words(
     out: *mut u64,
     n: usize,
 ) {
-    avec_arrow::bitmap::mask_words(
+    cgap_arrow::bitmap::mask_words(
         u64_slice(valid, n),
         u64_slice(pred, n),
         u64_slice_mut(out, n),
     );
 }
 
-/// C ABI over [`avec_parquet::unpack::unpack_1bit`]: expand `src_len` packed
+/// C ABI over [`cgap_parquet::unpack::unpack_1bit`]: expand `src_len` packed
 /// u64 words into `out_len` one-bit-per-lane u64 values.
 #[no_mangle]
 pub extern "C" fn wasm_unpack_1bit(
@@ -233,13 +233,13 @@ pub extern "C" fn wasm_unpack_1bit(
     out: *mut u64,
     out_len: usize,
 ) {
-    avec_parquet::unpack::unpack_1bit(
+    cgap_parquet::unpack::unpack_1bit(
         u64_slice(src, src_len),
         u64_slice_mut(out, out_len),
     );
 }
 
-/// C ABI over [`avec_parquet::rle_decode`]. Returns 0 on success, 1 on a
+/// C ABI over [`cgap_parquet::rle_decode`]. Returns 0 on success, 1 on a
 /// typed decode error (fail-closed status code; no panics cross the ABI).
 #[no_mangle]
 pub extern "C" fn wasm_rle_decode(
@@ -248,7 +248,7 @@ pub extern "C" fn wasm_rle_decode(
     out: *mut u32,
     out_len: usize,
 ) -> i32 {
-    match avec_parquet::rle_decode(u8_slice(src, src_len), u32_slice_mut(out, out_len)) {
+    match cgap_parquet::rle_decode(u8_slice(src, src_len), u32_slice_mut(out, out_len)) {
         Ok(()) => 0,
         Err(_) => 1,
     }
@@ -265,7 +265,7 @@ const W4_VALUE_BYTES: usize = (W4_BITS as usize).div_ceil(8);
 /// Decode an RLE/bit-packed hybrid page BODY whose bit width is the
 /// constant `W4_BITS` (4), writing `out_len` u32 lanes.
 ///
-/// Wire form is exactly [`avec_parquet::rle::decode_into`]'s: a leading
+/// Wire form is exactly [`cgap_parquet::rle::decode_into`]'s: a leading
 /// bit-width byte, then records —
 /// - repeated run: varint header `(count << 1) | 0`, one LE value of
 ///   `ceil(w/8)` bytes (1 byte at w=4),
@@ -273,7 +273,7 @@ const W4_VALUE_BYTES: usize = (W4_BITS as usize).div_ceil(8);
 ///   words LE, each word 8 lanes of `w` bits LSB-first (at w=4 one lane
 ///   occupies one whole byte), zero-padded final group.
 ///
-/// This is the [`avec_parquet::rle::decode_into`] record loop replicated
+/// This is the [`cgap_parquet::rle::decode_into`] record loop replicated
 /// with the width dispatch removed: `W4_MASK`/`W4_VALUE_BYTES` fold to
 /// constants, and the arm bodies mirror the general decoder's math exactly
 /// (differential court `w4_courts::differential_vs_decode_into` proves the
@@ -281,7 +281,7 @@ const W4_VALUE_BYTES: usize = (W4_BITS as usize).div_ceil(8);
 /// `scripts/wasm_bench.mjs` carries a fixture generated by that court and
 /// re-proves the equality through the compiled wasm artifact).
 ///
-/// Contract mirrors [`avec_parquet::rle::decode_into`]: `Ok(n)` is the lane
+/// Contract mirrors [`cgap_parquet::rle::decode_into`]: `Ok(n)` is the lane
 /// count written (the page may end at a record boundary before `out`
 /// fills); typed error on malformed input, never a panic.
 fn decode_page_body_w4(src: &[u8], out: &mut [u32]) -> Result<usize, ParquetError> {
@@ -358,7 +358,7 @@ fn decode_page_body_w4(src: &[u8], out: &mut [u32]) -> Result<usize, ParquetErro
 }
 
 /// Bounded varint read — byte-for-byte mirror of the crate's private
-/// `read_varint` (crates/avec-parquet/src/rle.rs), which is not `pub` and so
+/// `read_varint` (crates/cgap-parquet/src/rle.rs), which is not `pub` and so
 /// cannot be called from this wrapper crate.
 fn read_varint(src: &[u8], pos: &mut usize) -> Result<u64, ParquetError> {
     let mut value: u64 = 0;
@@ -398,7 +398,7 @@ pub extern "C" fn wasm_decode_page_body_w4(
 }
 
 /// W=4 differential courts: the hand-specialized record loop must agree
-/// lane-exact with the real [`avec_parquet::rle::decode_into`] on
+/// lane-exact with the real [`cgap_parquet::rle::decode_into`] on
 /// encoder-produced bodies, and refuse every other width. Also mints the
 /// hex fixture the JS court in `scripts/wasm_bench.mjs` embeds (provenance
 /// comment there names this test).
@@ -408,8 +408,8 @@ mod w4_courts {
 
     use super::decode_page_body_w4;
     use std::{format, println, string::String, vec};
-    use avec_parquet::rle::decode_into;
-    use avec_parquet::rle_encode;
+    use cgap_parquet::rle::decode_into;
+    use cgap_parquet::rle_encode;
     use std::vec::Vec;
 
     fn hex(bytes: &[u8]) -> String {
@@ -470,7 +470,7 @@ mod w4_courts {
                 .expect_err("non-4 width must be refused");
             assert_eq!(
                 err,
-                avec_parquet::ParquetError::UnsupportedBitWidth(bits),
+                cgap_parquet::ParquetError::UnsupportedBitWidth(bits),
                 "width {bits}"
             );
             // Fail-closed: no lane written on refusal.
@@ -479,7 +479,7 @@ mod w4_courts {
         // Empty body: typed EOF, not a panic.
         assert_eq!(
             decode_page_body_w4(&[], &mut []),
-            Err(avec_parquet::ParquetError::UnexpectedEof)
+            Err(cgap_parquet::ParquetError::UnexpectedEof)
         );
     }
 

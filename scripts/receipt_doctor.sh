@@ -80,14 +80,14 @@ map_command_to_paths() {
         *"audit_branchless"*)
             echo "$REPO/scripts/audit_branchless.sh"
             echo "$REPO/scripts/branchless_manifest.toml"
-            echo "$REPO/crates/avec-arrow/src"
+            echo "$REPO/crates/cgap-arrow/src"
             ;;
         *"cfg_homology"*)
             echo "$REPO/scripts/cfg_homology.sh"
             echo "$REPO/scripts/cfg_homology_cases"
-            echo "$REPO/crates/avec-arrow/src"
-            echo "$REPO/crates/avec-blake3/src"
-            echo "$REPO/crates/avec-git/src"
+            echo "$REPO/crates/cgap-arrow/src"
+            echo "$REPO/crates/cgap-blake3/src"
+            echo "$REPO/crates/cgap-git/src"
             ;;
         *"divan2receipt"*)
             echo "$REPO/scripts/divan2receipt.py"
@@ -97,25 +97,25 @@ map_command_to_paths() {
             ;;
         *"blake3_throughput"*)
             echo "$REPO/crates/bench"
-            echo "$REPO/crates/avec-blake3/src"
+            echo "$REPO/crates/cgap-blake3/src"
             ;;
         *"ctq_report"*|*"cpk_study"*)
             # CTQ-03 parquet roundtrip, CTQ-05 admission pipeline, CTQ-06
             # blake3, CTQ-04 transpose (crates/bench/src/bin headers).
             echo "$REPO/crates/bench"
-            echo "$REPO/crates/avec-arrow/src"
-            echo "$REPO/crates/avec-blake3/src"
-            echo "$REPO/crates/avec-parquet/src"
+            echo "$REPO/crates/cgap-arrow/src"
+            echo "$REPO/crates/cgap-blake3/src"
+            echo "$REPO/crates/cgap-parquet/src"
             echo "$REPO/crates/integration/src"
             echo "$REPO/crates/integration/tests"
             ;;
         *"gage_rr"*)
             echo "$REPO/crates/bench"
-            echo "$REPO/crates/avec-blake3/src"
+            echo "$REPO/crates/cgap-blake3/src"
             ;;
         *"parquet_throughput"*)
             echo "$REPO/crates/bench"
-            echo "$REPO/crates/avec-parquet/src"
+            echo "$REPO/crates/cgap-parquet/src"
             ;;
         *"verify_v26"*)
             echo "$REPO/crates/cli/src"
@@ -134,8 +134,8 @@ map_command_to_paths() {
             ;;
         *" -p "*)
             # Generic cargo test/check/run/build -p CRATE: that crate's surface.
-            # Crate NAME -> dir via the workspace map (avec-integration lives in
-            # crates/integration, avec-cli in crates/cli, bench in crates/bench).
+            # Crate NAME -> dir via the workspace map (cgap-integration lives in
+            # crates/integration, cgap-cli in crates/cli, bench in crates/bench).
             local crate cdir
             crate="$(printf '%s' "$cmd" | sed -E 's/.* -p ([^ ]+).*/\1/')"
             cdir="$(crate_dir "$crate")"
@@ -230,8 +230,8 @@ EOF
 }
 
 # Build a workspace crate-name -> directory map once (crate names are NOT
-# always their directory names: -p avec-integration lives in crates/integration,
-# -p avec-cli in crates/cli, -p bench in crates/bench).
+# always their directory names: -p cgap-integration lives in crates/integration,
+# -p cgap-cli in crates/cli, -p bench in crates/bench).
 build_crate_map() {
     : >"$CRATE_MAP"
     local d name

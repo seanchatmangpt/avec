@@ -7,9 +7,9 @@ description = "Gate 2 harness: line-rate benches, alloc interception, branch aud
 publish = false
 
 [dependencies]
-avec-arrow = { path = "../avec-arrow" }
-avec-blake3 = { path = "../avec-blake3" }
-avec-parquet = { path = "../avec-parquet", features = ["std"] }
+cgap-arrow = { path = "../cgap-arrow" }
+cgap-blake3 = { path = "../cgap-blake3" }
+cgap-parquet = { path = "../cgap-parquet", features = ["std"] }
 
 [dev-dependencies]
 divan = "0.1.21"

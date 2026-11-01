@@ -5,7 +5,7 @@
 //! Exit 0 only if no row is FAIL; SKIPs are listed explicitly.
 //!
 //! Wave-4 lane 7 upgrades:
-//! - FR-04 runs the REAL git court in-process: avec-git pack -> temp repo ->
+//! - FR-04 runs the REAL git court in-process: cgap-git pack -> temp repo ->
 //!   `git fsck --full` + `git verify-pack -v` + `git cat-file -p` via
 //!   std::process::Command; row PASS only if git accepts, git stderr embedded.
 //! - FR-06 extends to a >1KiB input (2048-byte deterministic pattern),
@@ -13,11 +13,11 @@
 //!   else against the published spec test vector.
 //! - summary.timing carries per-gate wall-clock microseconds.
 
-use avec_arrow::buffer::Buf;
-use avec_arrow::layout::Quad64;
-use avec_blake3::hash;
-use avec_git::pack_write::{build_pack_and_idx, parse_idx_v2, parse_pack_v2};
-use avec_parquet::rle::{rle_decode, rle_encode};
+use cgap_arrow::buffer::Buf;
+use cgap_arrow::layout::Quad64;
+use cgap_blake3::hash;
+use cgap_git::pack_write::{build_pack_and_idx, parse_idx_v2, parse_pack_v2};
+use cgap_parquet::rle::{rle_decode, rle_encode};
 use std::fs;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
@@ -94,7 +94,7 @@ fn main() {
 
     let mut rows: Vec<Row> = Vec::new();
 
-    // ---- FR-01: size/alignment of the quad record via avec-arrow types ----
+    // ---- FR-01: size/alignment of the quad record via cgap-arrow types ----
     rows.push(timed!("FR-01", {
         let quad_size = std::mem::size_of::<Quad64>();
         let quad_align = std::mem::align_of::<Quad64>();
@@ -140,13 +140,13 @@ fn main() {
         }
     }));
 
-    // ---- FR-03: RLE round-trip via avec-parquet ----
+    // ---- FR-03: RLE round-trip via cgap-parquet ----
     rows.push(timed!("FR-03", {
         let vals: Vec<u32> = (0..10_000u32)
             .map(|i| if i % 3 == 0 { 7 } else { i & 0xFF })
             .collect();
         let enc = rle_encode(&vals, 8);
-        let enc_fast = avec_parquet::encode_fast::rle_encode_fast(&vals, 8);
+        let enc_fast = cgap_parquet::encode_fast::rle_encode_fast(&vals, 8);
         let mut dec = vec![0u32; vals.len()];
         let rt = rle_decode(&enc, &mut dec);
         match rt {
@@ -303,7 +303,7 @@ fn main() {
         id: "FR-07",
         gate: "BEAM interop",
         status: "SKIP",
-        evidence: esc("requires a live BEAM (avec-beam NIF harness); owned by the integration lane, not runnable in this in-process battery"),
+        evidence: esc("requires a live BEAM (cgap-beam NIF harness); owned by the integration lane, not runnable in this in-process battery"),
     });
 
     let has_fail = rows.iter().any(|r| r.status == "FAIL");
@@ -363,14 +363,14 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// Real-git FR-04 court: install the avec-git pack+idx into a fresh temp
+/// Real-git FR-04 court: install the cgap-git pack+idx into a fresh temp
 /// repo, then let git 2.x judge it: fsck --full, verify-pack -v, cat-file -p
 /// on every object. Ok(evidence) only if git accepts everything; Err carries
 /// git's stderr verbatim.
 fn real_git_court(
     pack: &[u8],
     idx: &[u8],
-    entries: &[avec_git::pack_write::IdxEntry],
+    entries: &[cgap_git::pack_write::IdxEntry],
 ) -> Result<String, String> {
     // git availability is a hard precondition — never silently SKIP.
     let gv = run_git(Path::new("."), &["--version"], "git --version")?;
@@ -385,7 +385,7 @@ fn real_git_court(
         .map(|d| d.as_nanos())
         .unwrap_or(0);
     let root = std::env::temp_dir().join(format!(
-        "avec-verify-v26-fr04-{}-{nanos}",
+        "cgap-verify-v26-fr04-{}-{nanos}",
         std::process::id()
     ));
     fs::create_dir_all(&root).map_err(|e| format!("temp dir: {e}"))?;
@@ -398,7 +398,7 @@ fn git_court_in(
     root: &PathBuf,
     pack: &[u8],
     idx: &[u8],
-    entries: &[avec_git::pack_write::IdxEntry],
+    entries: &[cgap_git::pack_write::IdxEntry],
     version: &str,
 ) -> Result<String, String> {
     let init = run_git(root, &["init", "-q"], "git init")?;

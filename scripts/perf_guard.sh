@@ -42,8 +42,8 @@ log() { echo "[perf_guard] $*" >&2; }
 die() { log "FAIL: $*"; exit 1; }
 
 # ------------------------------------------------------- 1. build --------
-log "building release (avec-blake3, avec-integration, bench)..."
-cargo build --release -p avec-blake3 -p avec-integration -p bench \
+log "building release (cgap-blake3, cgap-integration, bench)..."
+cargo build --release -p cgap-blake3 -p cgap-integration -p bench \
   || die "release build failed (BUILD-BROKEN)"
 
 CTQ_BIN="$REPO/target/release/ctq_report"

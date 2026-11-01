@@ -2,8 +2,8 @@
 name = "wasm-footprint"
 version = "26.10.29"
 edition = "2021"
-description = "no_std cdylib wrapper supplying the wasm link glue (panic handler + global allocator) around the avec-arrow / avec-parquet kernels; the wasm32-wasip1 footprint subject measured by scripts/footprint.sh"
-repository = "https://github.com/seanchatmangpt/avec"
+description = "no_std cdylib wrapper supplying the wasm link glue (panic handler + global allocator) around the cgap-arrow / cgap-parquet kernels; the wasm32-wasip1 footprint subject measured by scripts/footprint.sh"
+repository = "https://github.com/seanchatmangpt/cgap"
 authors = ["Sean Chatman <info@chatmangpt.com>"]
 publish = false
 
@@ -11,11 +11,11 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-avec-arrow = { path = "../avec-arrow" }
-avec-parquet = { path = "../avec-parquet" }
+cgap-arrow = { path = "../cgap-arrow" }
+cgap-parquet = { path = "../cgap-parquet" }
 
 [dev-dependencies]
-avec-blake3 = { path = "../avec-blake3" }
+cgap-blake3 = { path = "../cgap-blake3" }
 
 [profile.release]
 lto = "thin"

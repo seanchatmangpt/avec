@@ -8,22 +8,22 @@
 //!
 //! Path map (contract: encode_fast on the write side, decode_into on the
 //! decode sides as applicable):
-//! - dict write  = [`avec_parquet::encode_fast::rle_encode_fast`] over the
+//! - dict write  = [`cgap_parquet::encode_fast::rle_encode_fast`] over the
 //!   index stream (pre-flight asserts byte-identity with
-//!   [`avec_parquet::dictionary::encode_page`], the gated module writer,
+//!   [`cgap_parquet::dictionary::encode_page`], the gated module writer,
 //!   so the timed fast path IS the dict page on the wire);
-//! - dict read   = [`avec_parquet::dictionary::decode_page`] — `decode_into`
+//! - dict read   = [`cgap_parquet::dictionary::decode_page`] — `decode_into`
 //!   lands the index lanes in place, then the in-place gather expands them
 //!   through the dictionary (that gather is the dict read-side overhead);
 //! - literal write = `rle_encode_fast` over the values at the same kernel
 //!   width (parity vs `rle_encode` asserted in pre-flight);
-//! - literal read  = [`avec_parquet::rle::decode_into`] directly.
+//! - literal read  = [`cgap_parquet::rle::decode_into`] directly.
 //!
 //! Bytes-moved conventions (house): encode/build = input bytes (16M u32 =
 //! 64 MiB walked); decode = output bytes (16M u32 = 64 MiB written).
 //!
 //! Cardinality -> width law: 2 -> 1 bit, 16 -> 4 bits, 256 -> 8 bits
-//! ([`avec_parquet::dictionary::required_bits`]), so the sweep exercises
+//! ([`cgap_parquet::dictionary::required_bits`]), so the sweep exercises
 //! kernel widths {1, 4, 8}.
 //!
 //! The stream is deterministic LCG over the full `card` domain (no planted
@@ -38,9 +38,9 @@
 //! groups), so on literal-heavy data the dict win vs plain u32 is the same
 //! ~4x at cards 2 / 16 / 256, not a per-cardinality multiple.
 
-use avec_parquet::dictionary::{decode_page, encode_page, required_bits, DictionaryBuilder};
-use avec_parquet::encode_fast::rle_encode_fast;
-use avec_parquet::rle::{decode_into, rle_encode};
+use cgap_parquet::dictionary::{decode_page, encode_page, required_bits, DictionaryBuilder};
+use cgap_parquet::encode_fast::rle_encode_fast;
+use cgap_parquet::rle::{decode_into, rle_encode};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::hint::black_box;
 use std::sync::atomic::{AtomicUsize, Ordering};

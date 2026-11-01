@@ -1,19 +1,19 @@
 [package]
-name = "avec-cli"
+name = "cgap-cli"
 version = "26.10.29"
 edition = "2021"
-description = "Std-hosted CLI over the avec columnar kernels: version, mask line-rate bench, RLE encode comparison, 64-byte alignment probe."
-repository = "https://github.com/seanchatmangpt/avec"
+description = "Std-hosted CLI over the cgap columnar kernels: version, mask line-rate bench, RLE encode comparison, 64-byte alignment probe."
+repository = "https://github.com/seanchatmangpt/cgap"
 authors = ["Sean Chatman <info@chatmangpt.com>"]
 publish = false
 
 [dependencies]
-# Zero-dep repo-local kernels. avec-parquet is required by `bench-parquet`:
-# rle_encode / rle_encode_fast live in avec-parquet, not avec-arrow.
-avec-arrow = { path = "../avec-arrow" }
-avec-parquet = { path = "../avec-parquet" }
-avec-git = { path = "../avec-git" }
-avec-blake3 = { path = "../avec-blake3" }
+# Zero-dep repo-local kernels. cgap-parquet is required by `bench-parquet`:
+# rle_encode / rle_encode_fast live in cgap-parquet, not cgap-arrow.
+cgap-arrow = { path = "../cgap-arrow" }
+cgap-parquet = { path = "../cgap-parquet" }
+cgap-git = { path = "../cgap-git" }
+cgap-blake3 = { path = "../cgap-blake3" }
 
 # Profiles live at the workspace root (Cargo.toml [profile.release] is
 # identical); non-root [profile] sections are ignored and warn.

@@ -1,4 +1,4 @@
-//! FR-06 throughput bench (AVEC-111 / v26.10.31 spec §4-6) — plain std, no sleeps,
+//! FR-06 throughput bench (CGAP-111 / v26.10.31 spec §4-6) — plain std, no sleeps,
 //! min-of-N Instant-based rounds. CTQ-06 candidate receipt generator.
 //!
 //! Default: REPORT ONLY. Pass `--gate` to exit non-zero below the ratified LSL (1.0 GiB/s, 2026-10-31).
@@ -24,7 +24,7 @@ fn main() {
     let mut best = f64::INFINITY; // seconds
     for round in 0..ROUNDS {
         let t0 = Instant::now();
-        let digest = avec_blake3::hash_wide_simd(&buf);
+        let digest = cgap_blake3::hash_wide_simd(&buf);
         let dt = t0.elapsed().as_secs_f64();
         std::hint::black_box(&digest);
         if round == 0 || dt < best {

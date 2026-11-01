@@ -1,16 +1,16 @@
-# How-To Guide: Zero-Copy Metal Unified Memory, `avec-blake3`, and Gate Verification
+# How-To Guide: Zero-Copy Metal Unified Memory, `cgap-blake3`, and Gate Verification
 
-Task-oriented recipes for integrating `avec-blake3`, `avec-gpu`, and running the fail-closed verification gates.
+Task-oriented recipes for integrating `cgap-blake3`, `cgap-gpu`, and running the fail-closed verification gates.
 
 ---
 
-## 1. How to Wrap an Arrow Buffer into Apple Silicon Metal Unified Memory (`avec-gpu`)
+## 1. How to Wrap an Arrow Buffer into Apple Silicon Metal Unified Memory (`cgap-gpu`)
 
-On Apple Silicon, CPU and GPU share LPDDR5X DRAM. Use `avec_gpu::MetalSharedBuffer` to wrap a 64-byte aligned `Buf` or 16 KiB page-aligned `MmuBuf` into a Metal `id<MTLBuffer>` (`MTLResourceStorageModeShared`) with **zero bus copies**:
+On Apple Silicon, CPU and GPU share LPDDR5X DRAM. Use `cgap_gpu::MetalSharedBuffer` to wrap a 64-byte aligned `Buf` or 16 KiB page-aligned `MmuBuf` into a Metal `id<MTLBuffer>` (`MTLResourceStorageModeShared`) with **zero bus copies**:
 
 ```rust
-use avec_arrow::mmu_arena::MmuBuf;
-use avec_gpu::MetalSharedBuffer;
+use cgap_arrow::mmu_arena::MmuBuf;
+use cgap_gpu::MetalSharedBuffer;
 
 pub fn map_to_metal_zero_copy() {
     // Allocate a 16 KiB hardware page-aligned buffer
@@ -29,12 +29,12 @@ pub fn map_to_metal_zero_copy() {
 
 ---
 
-## 2. How to Run Horizontal SIMD BLAKE3 Parent Reduction (`avec-blake3`)
+## 2. How to Run Horizontal SIMD BLAKE3 Parent Reduction (`cgap-blake3`)
 
-When reducing a batch of 32-byte chunk chaining values (CVs) at the same depth of a BLAKE3 Merkle tree, call `avec_blake3::reduce_level_simd` to compress 4 parent pairs simultaneously in ARM64 NEON registers (or 8 parent pairs in x86_64 AVX2 registers):
+When reducing a batch of 32-byte chunk chaining values (CVs) at the same depth of a BLAKE3 Merkle tree, call `cgap_blake3::reduce_level_simd` to compress 4 parent pairs simultaneously in ARM64 NEON registers (or 8 parent pairs in x86_64 AVX2 registers):
 
 ```rust
-use avec_blake3::{hash_chunk, reduce_level_simd};
+use cgap_blake3::{hash_chunk, reduce_level_simd};
 
 pub fn reduce_64_chunks_simd(data_64k: &[u8; 65536]) -> [u32; 8] {
     let mut cvs = [[0u32; 8]; 64];
@@ -56,10 +56,10 @@ pub fn reduce_64_chunks_simd(data_64k: &[u8; 65536]) -> [u32; 8] {
 
 ## 3. How to Choose Between CPU SIMD and GPU Dispatch for BLAKE3
 
-Use `avec_blake3::should_dispatch_gpu(payload_len)` to route payloads across the 16 MiB crossover threshold:
+Use `cgap_blake3::should_dispatch_gpu(payload_len)` to route payloads across the 16 MiB crossover threshold:
 
 ```rust
-use avec_blake3::{hash_wide_simd, should_dispatch_gpu, GPU_CROSSOVER_BYTES};
+use cgap_blake3::{hash_wide_simd, should_dispatch_gpu, GPU_CROSSOVER_BYTES};
 
 pub fn adaptive_hash(payload: &[u8]) -> [u8; 32] {
     if !should_dispatch_gpu(payload.len()) {
@@ -89,6 +89,6 @@ PATH="/opt/homebrew/opt/llvm/bin:$PATH" make gate1
 To verify zero-copy C Data Interface export/import bitwise parity against PyArrow:
 
 ```bash
-cargo build -p avec-ffi
+cargo build -p cgap-ffi
 /Users/sac/.local/bin/uv run --with pyarrow python3 scripts/gate3_cdata.py
 ```

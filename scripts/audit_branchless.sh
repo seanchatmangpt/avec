@@ -4,7 +4,7 @@
 #
 # USAGE:
 #   scripts/audit_branchless.sh [OBJECT|STATICLIB ...]   audit given artifacts
-#       (default: builds avec-arrow + avec-blake3 release libs into a TEMP
+#       (default: builds cgap-arrow + cgap-blake3 release libs into a TEMP
 #        CARGO_TARGET_DIR; the repo tree is never disturbed)
 #   scripts/audit_branchless.sh --selftest
 #       runs the positive control (must detect branches in a fixture) and a
@@ -17,11 +17,11 @@
 #     ARM64  : b, b.cond, br, cbz, cbnz, tbz, tbnz   (bl/ret permitted)
 #   Scope (spec §3 honesty): whole-crate .text contains legitimate branches
 #   outside hot kernels, so only symbols whose mangled name matches a prefix
-#   in the SCOPE regex are audited. Default scope (avec-arrow hot-kernel
+#   in the SCOPE regex are audited. Default scope (cgap-arrow hot-kernel
 #   candidates): ladder|predicates|transpose|ct_ . Override with
 #   BRANCHLESS_SCOPE="p1|p2" (matched UNANCHORED against the demangled-
 #   shape symbol with any leading mach-o underscore stripped, so mangled
-#   Rust names like __ZN9avec_arrow7ladder... match "ladder"; pass ".*"
+#   Rust names like __ZN9cgap_arrow7ladder... match "ladder"; pass ".*"
 #   to audit everything — expect failures).
 #   Symbols outside scope are reported as SKIPPED counts, never silently.
 #
@@ -201,13 +201,13 @@ ARTIFACTS=()
 if [ $# -gt 0 ]; then
   ARTIFACTS=("$@")
 else
-  echo "== building avec-arrow, avec-blake3 (--profile audit: lto=false; the workspace release
+  echo "== building cgap-arrow, cgap-blake3 (--profile audit: lto=false; the workspace release
    profile is thin-LTO and emits bitcode-only rlibs, which objdump cannot disassemble)
  into $TMPDIR_GATE/target"
-  (cd "$REPO" && CARGO_TARGET_DIR="$TMPDIR_GATE/target" cargo build --profile audit -p avec-arrow -p avec-blake3) \
+  (cd "$REPO" && CARGO_TARGET_DIR="$TMPDIR_GATE/target" cargo build --profile audit -p cgap-arrow -p cgap-blake3) \
     || { echo "FATAL: cargo build failed" >&2; exit 3; }
   while IFS= read -r f; do ARTIFACTS+=("$f"); done \
-    < <(find "$TMPDIR_GATE/target/audit" -maxdepth 2 -name 'libavec_*.rlib' 2>/dev/null)
+    < <(find "$TMPDIR_GATE/target/audit" -maxdepth 2 -name 'libcgap_*.rlib' 2>/dev/null)
   [ ${#ARTIFACTS[@]} -gt 0 ] || { echo "FATAL: no artifacts produced by cargo build" >&2; exit 3; }
 fi
 

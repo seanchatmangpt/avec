@@ -1,7 +1,7 @@
 //! Error-path coverage sweep (wave-14 lane 16): every typed error variant of
-//! the storage plane — `avec_git::GitError`, `avec_git::inflate::InflateError`,
-//! `avec_parquet::scan::ScanError`, `avec_parquet::level_free::LevelFreeError`,
-//! plus `avec_audit`'s `AllocReport` — constructed and asserted at least once
+//! the storage plane — `cgap_git::GitError`, `cgap_git::inflate::InflateError`,
+//! `cgap_parquet::scan::ScanError`, `cgap_parquet::level_free::LevelFreeError`,
+//! plus `cgap_audit`'s `AllocReport` — constructed and asserted at least once
 //! from OUTSIDE the owning crates (integration court, not a unit test).
 //!
 //! Per-variant provenance for variants already covered by existing tests is
@@ -17,23 +17,23 @@
 
 #![forbid(unsafe_code)]
 
-use avec_audit::alloc_counter::with_alloc_tracking;
-use avec_git::deflate::zlib_compress;
-use avec_git::deflate::zlib_decompress;
-use avec_git::idx_read::IdxV2;
-use avec_git::inflate::{InflateError, inflate, zlib_decode};
-use avec_git::pack_write::{
+use cgap_audit::alloc_counter::with_alloc_tracking;
+use cgap_git::deflate::zlib_compress;
+use cgap_git::deflate::zlib_decompress;
+use cgap_git::idx_read::IdxV2;
+use cgap_git::inflate::{InflateError, inflate, zlib_decode};
+use cgap_git::pack_write::{
     IdxEntry, MAX_OBJECTS, build_pack_and_idx, encode_object_header, parse_idx_v2, parse_pack_v2,
     sha1, write_idx_v2, write_pack_v2,
 };
-use avec_git::GitError;
-use avec_parquet::level_free::{
+use cgap_git::GitError;
+use cgap_parquet::level_free::{
     LevelFreeError, LevelFreeType, WireSchemaElement, admit_schema, ptype, read_page_payload,
     repetition, write_page,
 };
-use avec_parquet::rle::ParquetError;
-use avec_parquet::scan::{FixtureColumn, ParquetFile, PhysType, ScanError, write_fixture_file};
-use avec_parquet::thrift::{
+use cgap_parquet::rle::ParquetError;
+use cgap_parquet::scan::{FixtureColumn, ParquetFile, PhysType, ScanError, write_fixture_file};
+use cgap_parquet::thrift::{
     DataPageHeaderV2, PageHeader, ThriftError, ctype, read_page_header, write_binary_field,
     write_field_header, write_i32_field, write_i64_field, write_page_header,
 };
@@ -57,7 +57,7 @@ fn nanos() -> u128 {
 impl TempFile {
     fn write(name: &str, bytes: &[u8]) -> TempFile {
         let mut p = std::env::temp_dir();
-        p.push(format!("avec_errpath_{name}_{}_{}", std::process::id(), nanos()));
+        p.push(format!("cgap_errpath_{name}_{}_{}", std::process::id(), nanos()));
         std::fs::write(&p, bytes).expect("write court file");
         TempFile { path: p }
     }
@@ -407,7 +407,7 @@ fn inflate_dynamic_header_error_paths() {
 fn scan_open_error_paths() {
     // Io: the path does not exist; File::open fails before any mmap.
     let mut missing = std::env::temp_dir();
-    missing.push(format!("avec_errpath_absent_{}_{}", std::process::id(), nanos()));
+    missing.push(format!("cgap_errpath_absent_{}_{}", std::process::id(), nanos()));
     assert_eq!(ParquetFile::open(&missing).map(|_| ()), Err(ScanError::Io));
 
     // EmptyFile: a zero-length file has no footer to map.
@@ -502,7 +502,7 @@ fn scan_page_error_paths() {
         Err(ScanError::Thrift(ThriftError::MissingRequiredField(1)))
     );
 
-    // Page (DEAD VARIANT — finding): no code path in avec-parquet constructs
+    // Page (DEAD VARIANT — finding): no code path in cgap-parquet constructs
     // ScanError::Page; only its Display arm exists (scan.rs). No public API
     // can produce it, so the contract is pinned directly here and the matrix
     // flags it for deletion or wiring.
@@ -598,7 +598,7 @@ fn level_free_error_paths() {
 
 // ------------------------------------------------------ AllocReport court --
 
-/// `avec_audit::alloc_counter::AllocReport` from a foreign crate: the
+/// `cgap_audit::alloc_counter::AllocReport` from a foreign crate: the
 /// tracking scopes report zero/nonzero/nested-delta counts, and a typed
 /// error path (checksum refusal) is allocation-free.
 #[test]

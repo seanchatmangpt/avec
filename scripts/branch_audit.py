@@ -11,10 +11,10 @@ SCOPE LAW — why extents, not just the audit_* wrappers: the wrappers in
 crates/audit/src/lib.rs are deliberately trivial stubs (slice construction +
 call). The pre-2026-10-29 gate scanned only wrapper extents and therefore
 passed 9/9 while every real kernel body (mangled callees like
-__RNvNtCs..._10avec_arrow6bitmap10mask_words) went unaudited. This gate scans
+__RNvNtCs..._10cgap_arrow6bitmap10mask_words) went unaudited. This gate scans
 wrapper extents AND transitive kernel-callee extents in the same artifact.
 The callee match is a legacy-mangling substring (crate + fn components with
-length prefixes, e.g. "10avec_arrow6bitmap10mask_words"), which is stable
+length prefixes, e.g. "10cgap_arrow6bitmap10mask_words"), which is stable
 across rebuilds because it skips the crate disambiguator (Cs<16hex>_).
 
 CLASSIFICATION LAW — every conditional branch in an audited extent must be
@@ -42,7 +42,7 @@ relaxed. observed < budget passes and is printed as a tightening
 opportunity (thresholds only ever tighten).
 
 NEON EXTENT RULE — the audited surface named in the silicon.rs disclosure
-(crates/avec-arrow/src/silicon.rs, mask_words_neon):
+(crates/cgap-arrow/src/silicon.rs, mask_words_neon):
   VEC-PRIMARY  the first SIMD loop in address order (the 4-word-stride NEON
                body: ldp q / and.16b / stp q). Must EXIST, must contain SIMD
                ops, and its body must carry 0 conditional branches.
@@ -70,7 +70,7 @@ import subprocess
 import sys
 
 ARTIFACTS = [
-    "target/audit/libavec_audit.dylib",
+    "target/audit/libcgap_audit.dylib",
 ]
 
 # Audit-cdylib wrapper extents. These are stubs by construction (slice
@@ -103,16 +103,16 @@ WRAPPERS = [
 #   unpack_8bit   1 loop with 6 backedges + 9 in-body per-chunk dispatch
 #                 conds + 1 guard                           => (6, 9, 1)
 KERNEL_CALLEES = [
-    (r"10avec_arrow6bitmap10mask_words$", "mask_words", (2, 0, 3)),
-    (r"10avec_arrow6bitmap11count_valid$", "count_valid", (2, 0, 3)),
-    (r"10avec_arrow7silicon15mask_words_neon$", "mask_words_neon", (3, 0, 4)),
-    (r"10avec_arrow6bitmapNtB2_6Bitmap12is_all_valid$",
+    (r"10cgap_arrow6bitmap10mask_words$", "mask_words", (2, 0, 3)),
+    (r"10cgap_arrow6bitmap11count_valid$", "count_valid", (2, 0, 3)),
+    (r"10cgap_arrow7silicon15mask_words_neon$", "mask_words_neon", (3, 0, 4)),
+    (r"10cgap_arrow6bitmapNtB2_6Bitmap12is_all_valid$",
      "is_all_valid", (1, 2, 4)),
-    (r"10avec_arrow6bitmap14count_one_bits$", "count_one_bits", (1, 2, 4)),
-    (r"12avec_parquet6unpack11unpack_1bit$", "unpack_1bit", (4, 3, 1)),
-    (r"12avec_parquet6unpack11unpack_2bit$", "unpack_2bit", (4, 3, 1)),
-    (r"12avec_parquet6unpack11unpack_4bit$", "unpack_4bit", (4, 3, 1)),
-    (r"12avec_parquet6unpack11unpack_8bit$", "unpack_8bit", (6, 9, 1)),
+    (r"10cgap_arrow6bitmap14count_one_bits$", "count_one_bits", (1, 2, 4)),
+    (r"12cgap_parquet6unpack11unpack_1bit$", "unpack_1bit", (4, 3, 1)),
+    (r"12cgap_parquet6unpack11unpack_2bit$", "unpack_2bit", (4, 3, 1)),
+    (r"12cgap_parquet6unpack11unpack_4bit$", "unpack_4bit", (4, 3, 1)),
+    (r"12cgap_parquet6unpack11unpack_8bit$", "unpack_8bit", (6, 9, 1)),
 ]
 
 # Kernels whose primary vector loop must exist as a SIMD loop with a
@@ -137,7 +137,7 @@ FAIL_BUDGETS = {
 # UNCOVERED law: the audit-vacuity incident (2026-10-29) happened because
 # real kernels (is_all_valid, count_one_bits) had no audit-crate caller, were
 # GC'd from the artifact, and were named NOWHERE — silence, not a documented
-# skip. Law: every avec_arrow/avec_parquet Rust-mangled extent present in the
+# skip. Law: every cgap_arrow/cgap_parquet Rust-mangled extent present in the
 # artifact must be covered by WRAPPERS or KERNEL_CALLEES; anything else is
 # named here with a reason and reviewed, or the gate exits 1. Empty means
 # every extent is audited; the gate always prints this section.
@@ -366,14 +366,14 @@ def main():
             return [(n, b) for n, b in extents
                     if pred(n[1:] if n.startswith("_") else n)]
 
-        # 0) UNCOVERED law: every avec kernel-crate extent in the artifact
+        # 0) UNCOVERED law: every cgap kernel-crate extent in the artifact
         #    must be registry-covered or explicitly allowlisted; otherwise it
         #    is an unaudited kernel body and the gate exits 1 (this silence is
         #    exactly how the original audit gap survived).
         uncovered = []
         for name, _body in extents:
             plain = name[1:] if name.startswith("_") else name
-            if not re.search(r"10avec_arrow|12avec_parquet", plain):
+            if not re.search(r"10cgap_arrow|12cgap_parquet", plain):
                 continue
             covered = (
                 any(re.search(p, plain) for p, _, _ in KERNEL_CALLEES)
@@ -456,7 +456,7 @@ def main():
             print(f"  - {f}")
         sys.exit(1)
     print(f"\nUNCOVERED KERNELS: "
-          f"{'none — every avec kernel extent is audited' if covered_extents else 'see failures above'}")
+          f"{'none — every cgap kernel extent is audited' if covered_extents else 'see failures above'}")
     print(
         f"BRANCH AUDIT PASS: branch-free inner-loop bodies: "
         f"{branch_free_kernels}/{kernels_scanned} kernels; "

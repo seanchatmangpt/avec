@@ -1,0 +1,14 @@
+[package]
+name = "cgap-git"
+version.workspace = true
+edition.workspace = true
+description = "Git Packfile v2 writer: stored blob objects, .idx v2 generation, in-crate SHA-1 and CRC32 (zero external dependencies)."
+repository.workspace = true
+authors.workspace = true
+publish = true
+
+[features]
+default = ["std"]
+std = []
+
+[dependencies]

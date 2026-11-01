@@ -10,7 +10,7 @@ over target/audit + target/release artifacts, rustc 1.97).
 
 All 6 loop-bearing wrappers (`_audit_mask_words/count_valid/unpack_1bit/
 2bit/4bit/8bit`) compile to 4–5-instruction shims ending in an unconditional
-tail `b` into mangled callees (`__RNvNtCs9DwzS8jbwzX_10avec_arrow6bitmap10mask_words`
+tail `b` into mangled callees (`__RNvNtCs9DwzS8jbwzX_10cgap_arrow6bitmap10mask_words`
 @0xf20 etc.) the audit never scanned; the COND regex deliberately does not
 match bare `b`. The "MISSING SYMBOLS" guard checked wrapper existence only,
 laundering the vacuity. **Class B (audit defect, not kernel defect).** Fixed
@@ -37,7 +37,7 @@ writing; independent sweeps reproduce its per-symbol budgets exactly).
   latch) + per-iter out-of-line `bl word`. GC'd from every audit artifact
   (no audit-crate caller). Routed to the gate lane for wrapping or explicit
   UNCOVERED naming.
-- avec-parquet: **zero** symbols were ever audited. Compiled findings:
+- cgap-parquet: **zero** symbols were ever audited. Compiled findings:
 
 | Site | file:line | Class | per-lane conditionals |
 |---|---|---|---|
@@ -82,13 +82,13 @@ body/latch/dispatch scoping. The honest claim, now enforced by the gate:
 
 ## Addendum — truth-pass transcription complete, 2026-10-29 (lane REL-L11, repo v26.10.29)
 
-Fresh `make branch-audit` this session, exit 0, over `target/audit/libavec_audit.dylib`:
+Fresh `make branch-audit` this session, exit 0, over `target/audit/libcgap_audit.dylib`:
 
 - The R1 callee-extent rewrite has landed. Per-symbol budgets reproduce R2 exactly:
   mask_words 2/0/3, count_valid 2/0/3, mask_words_neon 3/0/4, unpack_1/2/4bit 4/3/1
   each, unpack_8bit 6/9/1 — and R3's two uncovered kernels are now wrapped:
   is_all_valid 1/2/4, count_one_bits 1/2/4 (2 `slice_index_fail` fail-paths each),
-  with the gate printing "UNCOVERED KERNELS: none — every avec kernel extent is
+  with the gate printing "UNCOVERED KERNELS: none — every cgap kernel extent is
   audited". R3's parquet `rle.rs:229` / `rle.rs:122` / `packing.rs:63` sites remain
   OUTSIDE the audited symbol set (the audit crate wraps the parquet `unpack` family
   only); the R5 class counts are unchanged by this session.

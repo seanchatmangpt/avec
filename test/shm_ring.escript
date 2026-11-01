@@ -1,6 +1,6 @@
 #!/usr/bin/env escript
 %% test/shm_ring.escript — lane BEAM-L9. BEAM-side court for the POSIX-shm
-%% SPSC slot ring in crates/avec-beam/src/shm.rs. Version law 26.10.29.
+%% SPSC slot ring in crates/cgap-beam/src/shm.rs. Version law 26.10.29.
 %%
 %% The ring is self-contained Rust (zero crates, shm_open/mmap externs).
 %% src/lib.rs is owned by another lane this wave, so there is NO NIF surface
@@ -8,7 +8,7 @@
 %% same shm.rs source compiles into. The escript is the orchestrator and
 %% assertion layer:
 %%
-%%   Stage R (rustc): compile shm.rs two ways into /tmp/avec-l9 —
+%%   Stage R (rustc): compile shm.rs two ways into /tmp/cgap-l9 —
 %%     --test  -> shm_test   (in-process #[cfg(test)] suite, 7 tests)
 %%     bin     -> shm_helper (serve/child CLI)
 %%   Stage T (suite): run shm_test; require exit 0, "test result: ok",
@@ -38,9 +38,9 @@
 -export([main/1]).
 
 -define(VERSION, <<"26.10.29">>).
--define(ROOT, "/Users/sac/avec").
--define(SHM_RS, ?ROOT ++ "/crates/avec-beam/src/shm.rs").
--define(BUILD_DIR, "/tmp/avec-l9").
+-define(ROOT, "/Users/sac/cgap").
+-define(SHM_RS, ?ROOT ++ "/crates/cgap-beam/src/shm.rs").
+-define(BUILD_DIR, "/tmp/cgap-l9").
 -define(TEST_BIN, ?BUILD_DIR ++ "/shm_test").
 -define(HELPER_BIN, ?BUILD_DIR ++ "/shm_helper").
 -define(N_THR, 8192).  %% 8192 x 64 KiB = 512 MiB cross-process

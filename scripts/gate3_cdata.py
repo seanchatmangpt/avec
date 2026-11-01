@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Gate 3: C Data Interface wire-parity harness (pyarrow _import_from_c).
 
-Loads the avec-ffi cdylib, exports an i32 batch with nulls, imports through
+Loads the cgap-ffi cdylib, exports an i32 batch with nulls, imports through
 pyarrow's C Data Interface entry point, and asserts BITWISE equality of both
 buffers against python-recomputed ground truth. Exit 0 = wire parity.
 """
@@ -10,21 +10,21 @@ import sys
 
 import pyarrow as pa
 
-LIB = ctypes.CDLL("target/debug/libavec_ffi.dylib")
+LIB = ctypes.CDLL("target/debug/libcgap_ffi.dylib")
 for name, restype in [
-    ("avec_array_addr", ctypes.c_size_t),
-    ("avec_schema_addr", ctypes.c_size_t),
-    ("avec_batch_rows", ctypes.c_int64),
+    ("cgap_array_addr", ctypes.c_size_t),
+    ("cgap_schema_addr", ctypes.c_size_t),
+    ("cgap_batch_rows", ctypes.c_int64),
 ]:
     getattr(LIB, name).restype = restype
 
 N = 100_000
 NULL_EVERY = 7
 
-LIB.avec_i32_batch(N, NULL_EVERY)
-array_addr = LIB.avec_array_addr()
-schema_addr = LIB.avec_schema_addr()
-rows = LIB.avec_batch_rows()
+LIB.cgap_i32_batch(N, NULL_EVERY)
+array_addr = LIB.cgap_array_addr()
+schema_addr = LIB.cgap_schema_addr()
+rows = LIB.cgap_batch_rows()
 assert rows == N, f"rows mismatch: {rows}"
 assert array_addr and schema_addr, "null export slots"
 

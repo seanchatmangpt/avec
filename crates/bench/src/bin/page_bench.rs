@@ -1,8 +1,8 @@
 //! Full-pipeline page bench (lane OPT-L5).
 //!
 //! End-to-end DataPageV2 framing over the hybrid codec:
-//! [`avec_parquet::page::write_data_page_v2`] (thrift header + RLE body) and
-//! [`avec_parquet::page::decode_page_into`] (header parse + in-place body
+//! [`cgap_parquet::page::write_data_page_v2`] (thrift header + RLE body) and
+//! [`cgap_parquet::page::decode_page_into`] (header parse + in-place body
 //! decode), over repeated / literal / mix50 shapes at 64 MiB logical
 //! payload. Mirrors the parquet_bench house pattern: counting GlobalAlloc,
 //! min-of-5, black_box elision guards, and a full round-trip pre-flight per
@@ -19,9 +19,9 @@
 //! The `page lens` line carries the measured header/body wire lengths so
 //! stage times are derivable from the printed rates.
 
-use avec_parquet::page::{decode_page_into, write_data_page_v2};
-use avec_parquet::rle::{decode_into, rle_encode};
-use avec_parquet::thrift::{read_page_header, PageHeader};
+use cgap_parquet::page::{decode_page_into, write_data_page_v2};
+use cgap_parquet::rle::{decode_into, rle_encode};
+use cgap_parquet::thrift::{read_page_header, PageHeader};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::hint::black_box;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -194,7 +194,7 @@ fn main() {
         bench_line("write_hdr", shape, hdr_len as u64, HDR_ITERS, || {
             let h: &PageHeader = black_box(&header);
             hdr_buf.clear();
-            avec_parquet::thrift::write_page_header(&mut hdr_buf, h);
+            cgap_parquet::thrift::write_page_header(&mut hdr_buf, h);
             black_box(hdr_buf.len());
         });
 

@@ -2,14 +2,14 @@
 """Gate 3 (schema level): C Data Interface schema-parity harness.
 
 Extends gate3_cdata.py from wire parity to schema parity. Same cdylib
-(target/debug/libavec_ffi.dylib) and same ctypes surface — NO new avec-ffi
+(target/debug/libcgap_ffi.dylib) and same ctypes surface — NO new cgap-ffi
 exports; all schema-level facts are proven through pyarrow's public API on
 the imported array:
 
   1. type identity:      arr.type == pa.int32() and pa.types.is_integer
   2. null facts:         nullability flag + null counts match ground truth
                          for 3 different (n, null_every) configs
-  3. roundtrip:          pa.Array -> pa.Table('avec_col', nullable) ->
+  3. roundtrip:          pa.Array -> pa.Table('cgap_col', nullable) ->
                          to_batches -> .equals equivalence, plus a full
                          C-Data re-export -> re-import -> .equals
   4. bitwise buffers:    buffers() byte-equality vs recomputed ground truth,
@@ -24,18 +24,18 @@ import sys
 
 import pyarrow as pa
 
-REPO = "/Users/sac/avec"
-LIB_PATH = f"{REPO}/target/debug/libavec_ffi.dylib"
+REPO = "/Users/sac/cgap"
+LIB_PATH = f"{REPO}/target/debug/libcgap_ffi.dylib"
 LIB = ctypes.CDLL(LIB_PATH)
 for name, restype in [
-    ("avec_i32_batch", ctypes.c_size_t),  # returns the live ArrowArray pointer
-    ("avec_array_addr", ctypes.c_size_t),
-    ("avec_schema_addr", ctypes.c_size_t),
-    ("avec_batch_rows", ctypes.c_int64),
+    ("cgap_i32_batch", ctypes.c_size_t),  # returns the live ArrowArray pointer
+    ("cgap_array_addr", ctypes.c_size_t),
+    ("cgap_schema_addr", ctypes.c_size_t),
+    ("cgap_batch_rows", ctypes.c_int64),
 ]:
     getattr(LIB, name).restype = restype
 
-# include/avec_c_data.h struct layouts (spec ABI).
+# include/cgap_c_data.h struct layouts (spec ABI).
 SCHEMA_FLAGS_OFFSET = 24  # format(0) name(8) metadata(16) flags(24)
 SCHEMA_FORMAT_OFFSET = 0
 SCHEMA_NAME_OFFSET = 8
@@ -43,10 +43,10 @@ ARRAY_LENGTH_OFFSET = 0  # length(0) null_count(8) offset(16) n_buffers(24)
 ARRAY_NULL_COUNT_OFFSET = 8
 ARRAY_OFFSET_OFF = 16
 ARRAY_N_BUFFERS_OFFSET = 24
-ARROW_FLAG_NULLABLE = 2  # include/avec_c_data.h
+ARROW_FLAG_NULLABLE = 2  # include/cgap_c_data.h
 
 # Configs: (n, null_every). Config B exercises the all-valid wire shape
-# (null_every <= 0 pushes no nulls; avec-arrow drops the validity buffer).
+# (null_every <= 0 pushes no nulls; cgap-arrow drops the validity buffer).
 CONFIGS = [
     (100_000, 7),
     (1_000, 0),
@@ -56,7 +56,7 @@ SLICE_OFF, SLICE_LEN = 100, 1000
 
 
 def ground_truth(n, null_every):
-    """Pattern from crates/avec-ffi/src/lib.rs:25: null iff i %% ne == ne-1,
+    """Pattern from crates/cgap-ffi/src/lib.rs:25: null iff i %% ne == ne-1,
     else value i (as i32); null slots carry Scalar::ZERO (deterministic 0)."""
     validity = [null_every <= 0 or i % null_every != null_every - 1 for i in range(n)]
     values = [(i if v else 0) & 0xFFFFFFFF for i, v in enumerate(validity)]
@@ -87,10 +87,10 @@ def run_config(tag, n, null_every):
     validity, exp_validity, exp_values = ground_truth(n, null_every)
     exp_nulls = validity.count(False)
 
-    LIB.avec_i32_batch(n, null_every)
-    array_addr = LIB.avec_array_addr()
-    schema_addr = LIB.avec_schema_addr()
-    rows = LIB.avec_batch_rows()
+    LIB.cgap_i32_batch(n, null_every)
+    array_addr = LIB.cgap_array_addr()
+    schema_addr = LIB.cgap_schema_addr()
+    rows = LIB.cgap_batch_rows()
     assert rows == n, f"rows mismatch: {rows}"
     assert array_addr and schema_addr, "null export slots"
 
@@ -128,12 +128,12 @@ def run_config(tag, n, null_every):
         f"length={w_length}, offset={w_offset}, n_buffers={w_nbuf}",
     )
 
-    # (3) roundtrip: Array -> Table('avec_col', nullable) -> to_batches ->
+    # (3) roundtrip: Array -> Table('cgap_col', nullable) -> to_batches ->
     # .equals, then full C-Data re-export -> re-import -> .equals
-    schema = pa.schema([pa.field("avec_col", pa.int32(), nullable=True)])
+    schema = pa.schema([pa.field("cgap_col", pa.int32(), nullable=True)])
     table = pa.Table.from_arrays([arr], schema=schema)
-    f = table.schema.field("avec_col")
-    assert f.name == "avec_col" and f.nullable, f"table field: {f}"
+    f = table.schema.field("cgap_col")
+    assert f.name == "cgap_col" and f.nullable, f"table field: {f}"
     batches = table.to_batches()
     assert sum(len(b) for b in batches) == n and len(batches) >= 1
     col = batches[0].column(0)

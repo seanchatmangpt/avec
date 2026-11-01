@@ -1,4 +1,4 @@
-//! sovereign-e2e — the minimal runnable demo of the avec thesis.
+//! sovereign-e2e — the minimal runnable demo of the cgap thesis.
 //!
 //! One dataset, three planes, one receipt:
 //!
@@ -16,13 +16,13 @@
 use core::fmt::Debug;
 use std::process::exit;
 
-use avec_arrow::layout::{Quad64, QUAD_ALIGN, QUAD_SIZE};
-use avec_blake3::hash;
-use avec_parquet::level_free::{write_file, LevelFreeColumn, LevelFreeType};
-use avec_parquet::scan::{parse_footer, PhysType};
-use avec_parquet::thrift::{encoding, read_page_header};
-use avec_git::inflate::zlib_decode;
-use avec_git::pack_write::{
+use cgap_arrow::layout::{Quad64, QUAD_ALIGN, QUAD_SIZE};
+use cgap_blake3::hash;
+use cgap_parquet::level_free::{write_file, LevelFreeColumn, LevelFreeType};
+use cgap_parquet::scan::{parse_footer, PhysType};
+use cgap_parquet::thrift::{encoding, read_page_header};
+use cgap_git::inflate::zlib_decode;
+use cgap_git::pack_write::{
     build_pack_and_idx, encode_object_header, git_object_oid, parse_idx_v2, parse_pack_v2,
 };
 
@@ -123,7 +123,7 @@ fn main() {
         })
         .collect();
 
-    // Alignment is a build-time law in avec-arrow; witness it at runtime.
+    // Alignment is a build-time law in cgap-arrow; witness it at runtime.
     let base = quads.as_ptr() as usize;
     require(
         stage,

@@ -1,4 +1,4 @@
-//! Cross-crate integration tests for avec-arrow (lane INTEGRATION).
+//! Cross-crate integration tests for cgap-arrow (lane INTEGRATION).
 //!
 //! Chicago discipline: real collaborators only — the real builders, the real
 //! C Data Interface structs heaped exactly as a foreign importer would hold
@@ -8,10 +8,10 @@
 use core::ffi::{c_char, CStr};
 use core::slice;
 
-use avec_arrow::c_abi::ForeignArray;
-use avec_arrow::{
+use cgap_arrow::c_abi::ForeignArray;
+use cgap_arrow::{
     export, ArrowSchema, Primitive, PrimitiveBuilder, VarlenBuilder, ViewVecBuilder,
-    AVEC_FLAG_NULLABLE,
+    CGAP_FLAG_NULLABLE,
 };
 
 /// Importer duty for the schema half of the pair: `export` allocates the
@@ -61,7 +61,7 @@ fn c_abi_export_import_roundtrip_bitwise_and_double_release() {
     assert_eq!(array.n_buffers, 2);
     assert_eq!(array.offset, 0);
     assert_eq!(array.n_children, 0);
-    assert_eq!(schema.flags, AVEC_FLAG_NULLABLE);
+    assert_eq!(schema.flags, CGAP_FLAG_NULLABLE);
     assert_eq!(
         unsafe { CStr::from_ptr(schema.format) }.to_bytes(),
         b"i",
@@ -188,7 +188,7 @@ fn alignment_law_u64_across_sizes() {
 
 #[test]
 fn format_codes_match_arrow_scalar_table() {
-    // `generated_layout` is a private module of avec-arrow (not re-exported
+    // `generated_layout` is a private module of cgap-arrow (not re-exported
     // from lib.rs), so the LAYOUT_SPECS cross-check is unreachable from an
     // external crate; the contract fallback applies — assert the literal
     // Arrow scalar format-code table in type order.
@@ -283,13 +283,13 @@ fn views_inline_foreign_boundary_roundtrip() {
         rows.len() * 16,
         "one 16-byte descriptor per row"
     );
-    assert_eq!(avec_arrow::views::MAX_INLINE, 12);
+    assert_eq!(cgap_arrow::views::MAX_INLINE, 12);
 
     // Branchless classification must agree with the 12-byte law everywhere,
     // including both boundaries.
     for (i, r) in rows.iter().enumerate() {
         let len = r.map_or(0, |bytes| bytes.len()) as u32;
-        let inline = avec_arrow::views::is_inline(len) == 1;
+        let inline = cgap_arrow::views::is_inline(len) == 1;
         assert_eq!(inline, len <= 12, "is_inline({len}) misclassifies row {i}");
     }
 

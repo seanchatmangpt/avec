@@ -8,7 +8,7 @@
 //! and the MIN round is the receipt — contention only ever slows a round down,
 //! so the minimum is the closest approach to the kernel's true line rate.
 
-use avec_arrow::bitmap::mask_words;
+use cgap_arrow::bitmap::mask_words;
 use std::hint::black_box;
 use std::sync::Barrier;
 use std::sync::atomic::{AtomicUsize, Ordering};

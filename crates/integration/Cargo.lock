@@ -3,12 +3,12 @@
 version = 4
 
 [[package]]
-name = "avec-arrow"
+name = "cgap-arrow"
 version = "26.10.29"
 
 [[package]]
-name = "avec-integration"
+name = "cgap-integration"
 version = "26.10.29"
 dependencies = [
- "avec-arrow",
+ "cgap-arrow",
 ]

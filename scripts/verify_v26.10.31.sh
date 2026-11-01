@@ -91,33 +91,33 @@ elif [ ! -s "$BASELINE" ]; then
   : # empty baseline from a prior green run, nothing to do
 fi
 
-run_gate test-avec-arrow   cargo test -p avec-arrow
-# avec-parquet gates require the std feature to compile its test harness.
-run_gate test-avec-parquet cargo test -p avec-parquet --features std
-run_gate test-avec-git     cargo test -p avec-git
-run_gate test-avec-blake3  cargo test -p avec-blake3
-run_gate test-integration  cargo test -p avec-integration
+run_gate test-cgap-arrow   cargo test -p cgap-arrow
+# cgap-parquet gates require the std feature to compile its test harness.
+run_gate test-cgap-parquet cargo test -p cgap-parquet --features std
+run_gate test-cgap-git     cargo test -p cgap-git
+run_gate test-cgap-blake3  cargo test -p cgap-blake3
+run_gate test-integration  cargo test -p cgap-integration
 
-# avec-beam spawns a real BEAM VM; timeout-guard at 10 min, loud skip on
+# cgap-beam spawns a real BEAM VM; timeout-guard at 10 min, loud skip on
 # timeout so a hung BEAM never silently fails or silently passes.
 BEAM_RC=0
-timeout 600 cargo test -p avec-beam > "$TMPDIR_V/beam.out" 2>&1 || BEAM_RC=$?
+timeout 600 cargo test -p cgap-beam > "$TMPDIR_V/beam.out" 2>&1 || BEAM_RC=$?
 if [ "$BEAM_RC" -eq 0 ]; then
-  printf '| `test-avec-beam` | PASS | 0 |\n' >> "$TABLE"
-  printf '%s\n' "test-avec-beam" >> "$NAMES"
-  tail -12 "$TMPDIR_V/beam.out" > "$TMPDIR_V/tail_test-avec-beam"
-  echo "GATE test-avec-beam       PASS              exit=0" >&2
+  printf '| `test-cgap-beam` | PASS | 0 |\n' >> "$TABLE"
+  printf '%s\n' "test-cgap-beam" >> "$NAMES"
+  tail -12 "$TMPDIR_V/beam.out" > "$TMPDIR_V/tail_test-cgap-beam"
+  echo "GATE test-cgap-beam       PASS              exit=0" >&2
 elif [ "$BEAM_RC" -eq 124 ]; then
-  printf '| `test-avec-beam` | SKIP | 124 |\n' >> "$TABLE"
-  printf '%s\n' "test-avec-beam" >> "$NAMES"
-  tail -12 "$TMPDIR_V/beam.out" > "$TMPDIR_V/tail_test-avec-beam"
-  echo "GATE test-avec-beam       SKIP (timeout 600s) exit=124" >&2
+  printf '| `test-cgap-beam` | SKIP | 124 |\n' >> "$TABLE"
+  printf '%s\n' "test-cgap-beam" >> "$NAMES"
+  tail -12 "$TMPDIR_V/beam.out" > "$TMPDIR_V/tail_test-cgap-beam"
+  echo "GATE test-cgap-beam       SKIP (timeout 600s) exit=124" >&2
 else
-  printf '| `test-avec-beam` | FAIL | %s |\n' "$BEAM_RC" >> "$TABLE"
-  printf '%s\n' "test-avec-beam" >> "$NAMES"
-  tail -12 "$TMPDIR_V/beam.out" > "$TMPDIR_V/tail_test-avec-beam"
+  printf '| `test-cgap-beam` | FAIL | %s |\n' "$BEAM_RC" >> "$TABLE"
+  printf '%s\n' "test-cgap-beam" >> "$NAMES"
+  tail -12 "$TMPDIR_V/beam.out" > "$TMPDIR_V/tail_test-cgap-beam"
   FAIL_ANY=1
-  echo "GATE test-avec-beam       FAIL              exit=$BEAM_RC" >&2
+  echo "GATE test-cgap-beam       FAIL              exit=$BEAM_RC" >&2
 fi
 
 if [ -x scripts/audit_branchless.sh ]; then
@@ -133,7 +133,7 @@ fi
 # depend on a stale prebuilt target/); timeout-guard at 5 min, loud skip on
 # timeout so a hung run never silently fails or silently passes.
 CLI_RC=0
-timeout 300 cargo run -q -p avec-cli --bin verify_v26 > "$TMPDIR_V/cli.out" 2>&1 || CLI_RC=$?
+timeout 300 cargo run -q -p cgap-cli --bin verify_v26 > "$TMPDIR_V/cli.out" 2>&1 || CLI_RC=$?
 if [ "$CLI_RC" -eq 0 ]; then
   printf '| `cli-verify` | PASS | 0 |\n' >> "$TABLE"
   printf '%s\n' "cli-verify" >> "$NAMES"
@@ -152,7 +152,7 @@ else
   echo "GATE cli-verify         FAIL              exit=$CLI_RC" >&2
 fi
 
-run_gate test-audit cargo test -p avec-audit
+run_gate test-audit cargo test -p cgap-audit
 
 # ---------------------------------------------------------------------------
 # Emit verify-latest.md

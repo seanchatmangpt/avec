@@ -7,7 +7,7 @@ live in the `Makefile`, `justfile`, and `scripts/verify_v26.10.31.sh`.
 
 ## Contents
 
-1. [avec-beam tests: nif_not_loaded / stale dylib](#1-avec-beam-tests-nif_not_loaded--stale-dylib)
+1. [cgap-beam tests: nif_not_loaded / stale dylib](#1-cgap-beam-tests-nif_not_loaded--stale-dylib)
 2. [Gate passes with 0 tests: doc-test parse trap](#2-gate-passes-with-0-tests-doc-test-parse-trap)
 3. [Branchless audit false-matches bic/blr](#3-branchless-audit-false-matches-bicblr)
 4. [objdump refuses rlibs / `<ltmp0>` symbols](#4-objdump-refuses-rlibs--ltmp0-symbols)
@@ -17,17 +17,17 @@ live in the `Makefile`, `justfile`, and `scripts/verify_v26.10.31.sh`.
 8. [fsck_court inflate errors: stored body](#8-fsck_court-inflate-errors-stored-body)
 9. [pyshacl missing: validate_ontology.sh refuses](#9-pyshacl-missing-validate_ontologysh-refuses)
 
-## 1. avec-beam tests: nif_not_loaded / stale dylib
+## 1. cgap-beam tests: nif_not_loaded / stale dylib
 
-**Symptom.** `cargo test -p avec-beam` dies with `nif_not_loaded`, or bridge tests fail
+**Symptom.** `cargo test -p cgap-beam` dies with `nif_not_loaded`, or bridge tests fail
 against symbols the current source no longer has.
 **Cause.** `cargo test` does not rebuild the cdylib; the tests dlopen a stale `.dylib`
 left by an earlier build.
 **Fix.** Build before test:
 
 ```sh
-cargo build -p avec-beam
-cargo test -p avec-beam
+cargo build -p cgap-beam
+cargo test -p cgap-beam
 ```
 
 `make test-beam` already orders it this way (Makefile:131-136). Census receipt:
@@ -39,12 +39,12 @@ cargo test -p avec-beam
 **Symptom.** A test gate exits 0 but reports "0 passed; 0 failed" — it tested nothing.
 **Cause.** Doc-test parse trap: the LAST `test result:` line can be a 0-test doc-test
 section, so last-line parsing hides the real totals. Separately, bare
-`cargo test -p avec-parquet` (default features) collects the std-gated courts as 0.
+`cargo test -p cgap-parquet` (default features) collects the std-gated courts as 0.
 **Fix.** Sum ALL `test result:` lines per crate, never the last (method:
 `docs/jira/v26.10.31/63-test-census.md`). Run the std courts explicitly:
 
 ```sh
-cargo test -p avec-parquet --features std
+cargo test -p cgap-parquet --features std
 ```
 
 ## 3. Branchless audit false-matches bic/blr
@@ -106,7 +106,7 @@ root-workspace member.
 
 ## 8. fsck_court inflate errors: stored body
 
-**Symptom.** The avec-git `fsck_court` fails with inflate errors on pack bodies.
+**Symptom.** The cgap-git `fsck_court` fails with inflate errors on pack bodies.
 **Cause.** The pack writer emits zlib (RFC 1950) bodies as of wave 4; a stored-body
 expectation predates the deflate landing.
 **Fix.** Stored-body errors mean you are on a pre-deflate tree — update the tree; do
@@ -149,10 +149,10 @@ measured a transient FAIL self-healing in ~4 minutes). For adjudication
 runs, wait for a quiet tree; the gage/CTQ-04 SKIP-NOISY gate is the
 timing-side analogue of the same discipline.
 
-## 11. Verify ladder transient FAIL on test-avec-beam
+## 11. Verify ladder transient FAIL on test-cgap-beam
 
 **Symptom**: the ladder's beam gate fails (exit 101, bridge-contract test
-FAIL) while `cargo test -p avec-beam` passes in isolation minutes later.
+FAIL) while `cargo test -p cgap-beam` passes in isolation minutes later.
 
 **Cause**: the bridge-contract test stages the just-built dylib into the
 escript temp dir; under concurrent cargo activity on the shared tree the

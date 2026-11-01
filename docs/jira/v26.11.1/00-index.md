@@ -112,6 +112,14 @@ Filenames below are relative to `tickets/`.
 | p05 | `p05-wave4-plan.md` | Wave 4 (Falcon) plan — void unless p01 admits |
 | p06 | `p06-wave5-plan.md` | Wave 5 (integration/release) plan |
 
+### Root — rename sub-milestone (registered 2026-10-31, D11 amendment)
+
+| Lane | File | Hook |
+|---|---|---|
+| rename-1 | `01-rename-impact-survey.md` | avec -> cgap impact survey (ALIVE census, D-points) |
+| rename-2 | `02-rename-plan.md` | avec -> cgap executable plan (P0-P7, D1-D12, R1-R12) — |
+  the executable spec; any other rename prose does not supersede it |
+
 ### waves/ — Phase 2-6 PRD/ARD docs (W1-W5)
 
 Filenames below are relative to `waves/`.

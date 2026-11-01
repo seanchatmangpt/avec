@@ -13,10 +13,10 @@ consumer actually links: the optimized (-Oz) cdylib. So the gate is:
     panicking/unwind/abort/throw symbols.
 
   SECONDARY (informational, NEVER gating): the std-linked host membranes
-    libavec_audit.dylib / libavec_ffi.dylib. Reported with counts.
+    libcgap_audit.dylib / libcgap_ffi.dylib. Reported with counts.
     Rationale: these are host runtime glue, std-linked by construction
     (format!/Vec/BufWriter pull the full std::panicking machinery), so
-    gating them would measure std, not avec. The substrate's no_std law is
+    gating them would measure std, not cgap. The substrate's no_std law is
     proven by the wasm gate; the host membranes are not the substrate.
 
   ANTI-VACUITY (gating on vacuity): a panic-containing no_std wasm crate
@@ -30,15 +30,15 @@ consumer actually links: the optimized (-Oz) cdylib. So the gate is:
   THIRD (GATING): version-string integrity over BINARY CONTENT (not symbol
     names): count the byte sequence b"26.10.29\x00" (the NUL-terminated
     release version, single-sourced from the workspace manifest via
-    CARGO_PKG_VERSION / the ggen-generated avec_arrow::VERSION_C) in each
+    CARGO_PKG_VERSION / the ggen-generated cgap_arrow::VERSION_C) in each
     shipped artifact and enforce a per-artifact EXACT-COUNT law:
       optimized wasm      -> exactly 1 (it exports wasm_version() returning
                              the NUL-terminated string)
-      libavec_ffi.dylib   -> exactly 1 (exposes avec_version via VERSION_C)
-      libavec_audit.dylib -> exactly 0 (crates/audit has no version export;
+      libcgap_ffi.dylib   -> exactly 1 (exposes cgap_version via VERSION_C)
+      libcgap_audit.dylib -> exactly 0 (crates/audit has no version export;
                              VERSION_C is unreferenced there and linker-GC'd
                              — witnessed 2026-10-29: fresh `cargo build
-                             --profile audit -p avec-audit` then byte-count 0)
+                             --profile audit -p cgap-audit` then byte-count 0)
     Any mismatch fires: 2+ = version stamped twice (duplication), 0 on a
     version-carrying artifact = drift/bump without re-pinning the gate.
     Anti-vacuity: byte-level shims on a /tmp COPY of the optimized wasm
@@ -99,21 +99,21 @@ OPT_WASM = os.path.join(WASM_RELEASE_DIR, "wasm_footprint.opt.wasm")
 # --- secondary subjects (informational, never gating) ----------------------
 HOST_ARTIFACTS = [
     (
-        "avec-audit membrane (audit profile)",
-        ["cargo", "build", "--profile", "audit", "-p", "avec-audit"],
-        os.path.join("target", "audit", "libavec_audit.dylib"),
+        "cgap-audit membrane (audit profile)",
+        ["cargo", "build", "--profile", "audit", "-p", "cgap-audit"],
+        os.path.join("target", "audit", "libcgap_audit.dylib"),
     ),
     (
-        "avec-ffi membrane (release profile)",
-        ["cargo", "build", "--release", "-p", "avec-ffi"],
-        os.path.join("target", "release", "libavec_ffi.dylib"),
+        "cgap-ffi membrane (release profile)",
+        ["cargo", "build", "--release", "-p", "cgap-ffi"],
+        os.path.join("target", "release", "libcgap_ffi.dylib"),
     ),
 ]
 
 # --- third check: version-string integrity (GATING) -------------------------
 # The release version as a NUL-terminated C string. Single-sourced upstream:
 # workspace Cargo.toml -> CARGO_PKG_VERSION (wasm) / ggen-generated
-# avec_arrow::VERSION_C (host). Pinned here as bytes; if the release bumps
+# cgap_arrow::VERSION_C (host). Pinned here as bytes; if the release bumps
 # without re-pinning, the version-carrying artifacts count 0 and the gate
 # FAILS closed (drift arm), printing the manifest cross-check note.
 EXPECTED_VERSION = "26.10.29"
@@ -133,19 +133,19 @@ VERSION_SUBJECTS = [
         "exactly-once is the law (2+ = stamped twice, 0 = drift)",
     ),
     (
-        "avec-ffi membrane (release profile)",
+        "cgap-ffi membrane (release profile)",
         os.path.relpath(
-            os.path.join(REPO_ROOT, "target", "release", "libavec_ffi.dylib"),
+            os.path.join(REPO_ROOT, "target", "release", "libcgap_ffi.dylib"),
             REPO_ROOT,
         ),
         1,
-        "exposes avec_version via avec_arrow::VERSION_C (ggen-generated, "
+        "exposes cgap_version via cgap_arrow::VERSION_C (ggen-generated, "
         "ontology-single-sourced); exactly-once is the law",
     ),
     (
-        "avec-audit membrane (audit profile)",
+        "cgap-audit membrane (audit profile)",
         os.path.relpath(
-            os.path.join(REPO_ROOT, "target", "audit", "libavec_audit.dylib"),
+            os.path.join(REPO_ROOT, "target", "audit", "libcgap_audit.dylib"),
             REPO_ROOT,
         ),
         0,
@@ -629,7 +629,7 @@ def main() -> int:
             print(f"      ... and {len(hits) - MAX_PRINTED_HITS} more")
     print(
         "  rationale: std-linked host runtime glue; the substrate's no_std "
-        "law is proven by the wasm gate — host dylibs measure std, not avec"
+        "law is proven by the wasm gate — host dylibs measure std, not cgap"
     )
 
     # [3] version-string integrity (third check, GATING) ---------------------

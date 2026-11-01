@@ -10,9 +10,9 @@ Published-system figures (BitWeaving, FastLanes, BtrBlocks, BLAKE3) are cited-co
 
 | claim | verdict | receipt |
 |---|---|---|
-| Uncompressed PLAIN pages decode by pointer slice | CONFIRMED | `cargo test -p avec-parquet` aligned_interop 4/4; `aligned_decode: 38.59 GiB/s vs RLE 0.66` (PCL2 run) |
+| Uncompressed PLAIN pages decode by pointer slice | CONFIRMED | `cargo test -p cgap-parquet` aligned_interop 4/4; `aligned_decode: 38.59 GiB/s vs RLE 0.66` (PCL2 run) |
 | 64B header padding is external-reader safe | REFUTED | PCL2: every standard reader parses the declared Thrift length — padding reads as values; padding scheme dropped pre-ship |
-| avec pages load in external tools | CONFIRMED (via page_aligned) | `PYARROW-RECEIPT pyarrow=23.0.1 rows=256 type=fixed_size_binary[1] fidelity=EXACT`; corruption test flips fidelity=MISMATCH |
+| cgap pages load in external tools | CONFIRMED (via page_aligned) | `PYARROW-RECEIPT pyarrow=23.0.1 rows=256 type=fixed_size_binary[1] fidelity=EXACT`; corruption test flips fidelity=MISMATCH |
 | crate::thrift frames interoperable pages | REFUTED -> FIXED (this session) | PCL2: DataPageHeaderV2 slots 4-7 swapped vs parquet.thrift — internally self-consistent, externally rejected. Writer/reader/fixtures corrected to 4=encoding, 5=def_len, 6=rep_len, 7=is_compressed; thrift 16/16 + page 31/31 green. Fresh pyarrow receipt through the FIXED writer pending (page_aligned carries the byte-exact proof meanwhile) |
 
 ## L3 — Compressed-domain filter
@@ -75,7 +75,7 @@ sub-us sensor (get 0.042 us; 50 us CTQ UNSUPPORTED instrument-class); scheduling
 crossover (dirty flag never wins n=1000..262144); thrift slot-swap fix (this
 session, pending fresh external receipt).
 
-## L11 — Civilizational Phase Changes & Sovereign `avec-blake3` / `avec-gpu`
+## L11 — Civilizational Phase Changes & Sovereign `cgap-blake3` / `cgap-gpu`
 
 | claim | verdict | receipt |
 |---|---|---|
@@ -83,8 +83,8 @@ session, pending fresh external receipt).
 | Zero-probe perfect minimal hashing (`PerfectMap`) | CONFIRMED | `phase_change_bench`: **0.54 ns/lookup** (1,855.4 Mlookups/s); 0 collision probe branches; 0 allocs |
 | 16 KiB MMU hardware page-aligned arena (`MmuBuf`) | CONFIRMED | `phase_change_bench`: **1,303.24 GiB/s** allocation & 16,384B page-boundary alignment |
 | In-register $GF(2^{128})$ homomorphic fingerprint (`Fingerprint`) | CONFIRMED | `phase_change_bench`: **4.08 GiB/s** line rate; 0 extra memory passes |
-| Sovereign `#![no_std]` BLAKE3 (`avec-blake3`) + 4-way NEON / 8-way AVX2 parent reduction | CONFIRMED | `cargo test -p avec-blake3`: 14/14 official BLAKE3 multi-block & multi-chunk Merkle vectors + 64/65-chunk SIMD parity; `phase_change_bench`: 1.31 GiB/s (21.9 Mparents/s) SIMD parent reduction, 0 allocs |
-| Apple Silicon Metal Unified Memory zero-copy bridge (`avec-gpu`) | CONFIRMED | `cargo test -p avec-gpu`: `MetalSharedBuffer` wraps 64B `Buf` & 16 KiB `MmuBuf` via `MTLResourceStorageModeShared` (`newBufferWithBytesNoCopy`) with 0 bus copies |
+| Sovereign `#![no_std]` BLAKE3 (`cgap-blake3`) + 4-way NEON / 8-way AVX2 parent reduction | CONFIRMED | `cargo test -p cgap-blake3`: 14/14 official BLAKE3 multi-block & multi-chunk Merkle vectors + 64/65-chunk SIMD parity; `phase_change_bench`: 1.31 GiB/s (21.9 Mparents/s) SIMD parent reduction, 0 allocs |
+| Apple Silicon Metal Unified Memory zero-copy bridge (`cgap-gpu`) | CONFIRMED | `cargo test -p cgap-gpu`: `MetalSharedBuffer` wraps 64B `Buf` & 16 KiB `MmuBuf` via `MTLResourceStorageModeShared` (`newBufferWithBytesNoCopy`) with 0 bus copies |
 
 ## Open ledger (honest)
 

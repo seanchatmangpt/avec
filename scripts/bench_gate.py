@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bench regression gate for the avec mask + parquet + page benches.
+"""Bench regression gate for the cgap mask + parquet + page benches.
 
 Runs all three Gate-2 bench binaries (`cargo run --release -p bench --bin
 bench|parquet_bench|page_bench`), parses the MIN throughput receipt lines,

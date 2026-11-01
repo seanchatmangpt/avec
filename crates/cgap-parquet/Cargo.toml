@@ -1,0 +1,20 @@
+[package]
+name = "cgap-parquet"
+version.workspace = true
+edition.workspace = true
+description = "Parquet persistence kernels with branch-free inner-loop bodies: bit-unpacking, SWAR RLE, page-to-buffer decode (no_std, zero dependencies)."
+repository.workspace = true
+authors.workspace = true
+publish = true
+
+[features]
+default = []
+std = []
+
+[dependencies]
+
+[dev-dependencies]
+# tests/codec_properties.rs (wave-14 lane 10): Quad64 wire round-trip property
+# reaches the real cgap-arrow layout — same crate-as-dev-dep pattern as
+# cgap-ffi. Workspace path dep; adds no external dependency.
+cgap-arrow = { path = "../cgap-arrow" }

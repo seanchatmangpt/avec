@@ -29,8 +29,8 @@
 //! fan-out lanes; treat the min-of-rounds as the defensible figure, the
 //! mean as the load witness.
 
-use avec_parquet::level_free::{write_file, LevelFreeColumn, LevelFreeType};
-use avec_parquet::scan::ParquetFile;
+use cgap_parquet::level_free::{write_file, LevelFreeColumn, LevelFreeType};
+use cgap_parquet::scan::ParquetFile;
 use std::fs;
 use std::hint::black_box;
 use std::time::Instant;
@@ -82,7 +82,7 @@ fn main() {
     let on_disk = file_bytes.len();
 
     let mut path = std::env::temp_dir();
-    path.push(format!("avec_parquet_tp_{}.parquet", std::process::id()));
+    path.push(format!("cgap_parquet_tp_{}.parquet", std::process::id()));
     fs::write(&path, &file_bytes).expect("write fixture file");
     let path_copy = path.clone();
 

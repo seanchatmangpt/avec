@@ -1,6 +1,6 @@
 # Data Independence Audit
 
-Lane PCL4, 2026-10-29, avec version 26.10.29. Standing: PARTIAL_ALIVE —
+Lane PCL4, 2026-10-29, cgap version 26.10.29. Standing: PARTIAL_ALIVE —
 the register below is executed against real sources (file:line re-read this
 session) and the contrasts the existing bench binaries embed were measured
 (`scripts/timing_gate.py`, commands + exits in "Measured Evidence"). The
@@ -61,13 +61,13 @@ version 26.10.29).
 
 | kernel | location | access pattern |
 |---|---|---|
-| `mask_words` | `crates/avec-arrow/src/bitmap.rs:34-41` | fixed-stride AND, latch only; NEON twin `silicon.rs:41-71`, body branch-free |
-| `count_valid` | `crates/avec-arrow/src/bitmap.rs:46-55` | fixed stride + popcount |
-| `unpack_1/2/4/8bit` | `crates/avec-parquet/src/unpack.rs:7-76` | fixed stride, clamped tail; width dispatch `unpack.rs:80-89` is framing |
-| `pack_bits` | `crates/avec-parquet/src/packing.rs:28-50` | fixed per-lane shift/or, bit-accumulator |
-| `unpack_bits_tight` | `crates/avec-parquet/src/packing.rs:63-91` | fixed per-lane work over `out.len()` |
-| `PrimitiveBuilder::push` | `crates/avec-arrow/src/primitive.rs:153-159` | `Option` discriminant branch but both arms are one value store + one bool store; work = f(n) only |
-| `Sliced::get` | `crates/avec-arrow/src/slice.rs:107-114` | fixed base + `(offset+i)*WIDTH`; validity bit read fixed |
+| `mask_words` | `crates/cgap-arrow/src/bitmap.rs:34-41` | fixed-stride AND, latch only; NEON twin `silicon.rs:41-71`, body branch-free |
+| `count_valid` | `crates/cgap-arrow/src/bitmap.rs:46-55` | fixed stride + popcount |
+| `unpack_1/2/4/8bit` | `crates/cgap-parquet/src/unpack.rs:7-76` | fixed stride, clamped tail; width dispatch `unpack.rs:80-89` is framing |
+| `pack_bits` | `crates/cgap-parquet/src/packing.rs:28-50` | fixed per-lane shift/or, bit-accumulator |
+| `unpack_bits_tight` | `crates/cgap-parquet/src/packing.rs:63-91` | fixed per-lane work over `out.len()` |
+| `PrimitiveBuilder::push` | `crates/cgap-arrow/src/primitive.rs:153-159` | `Option` discriminant branch but both arms are one value store + one bool store; work = f(n) only |
+| `Sliced::get` | `crates/cgap-arrow/src/slice.rs:107-114` | fixed base + `(offset+i)*WIDTH`; validity bit read fixed |
 
 Caveat measured on this class: address-independence is not
 cycle-independence. See the `mask_words` measurement below.
@@ -76,23 +76,23 @@ cycle-independence. See the `mask_words` measurement below.
 
 | kernel | location | dependent variable |
 |---|---|---|
-| `decode_into` | `crates/avec-parquet/src/rle.rs:170-239` | record-type branch on wire header (`rle.rs:188`); per-record work = run-fill `fill` vs literal unpack; page record structure is the wire's public framing. Conditional TL if the page itself is secret (enclave decode) |
-| `RunEndEncoded::decode_to_dense` | `crates/avec-arrow/src/runend.rs:122-138` | writes are exactly 1/row (fixed); branch cadence and `vals[run]` touches follow run boundaries carried in the (visible) `run_ends` buffer. Conditional TL if the array is secret |
-| `Bitmap::from_bools` | `crates/avec-arrow/src/bitmap.rs:104-118` | store executed only for `true` (store count = popcount); the all-valid early return (`bitmap.rs:105-107`) makes validity-buffer existence data-dependent — observable metadata framing |
-| `Bitmap::set` | `crates/avec-arrow/src/bitmap.rs:150-157` | set vs clear RMW choice on data; both touch the same byte (address-independent) |
+| `decode_into` | `crates/cgap-parquet/src/rle.rs:170-239` | record-type branch on wire header (`rle.rs:188`); per-record work = run-fill `fill` vs literal unpack; page record structure is the wire's public framing. Conditional TL if the page itself is secret (enclave decode) |
+| `RunEndEncoded::decode_to_dense` | `crates/cgap-arrow/src/runend.rs:122-138` | writes are exactly 1/row (fixed); branch cadence and `vals[run]` touches follow run boundaries carried in the (visible) `run_ends` buffer. Conditional TL if the array is secret |
+| `Bitmap::from_bools` | `crates/cgap-arrow/src/bitmap.rs:104-118` | store executed only for `true` (store count = popcount); the all-valid early return (`bitmap.rs:105-107`) makes validity-buffer existence data-dependent — observable metadata framing |
+| `Bitmap::set` | `crates/cgap-arrow/src/bitmap.rs:150-157` | set vs clear RMW choice on data; both touch the same byte (address-independent) |
 
 ### TIMING-LEAKING
 
 | kernel | location | leak channel |
 |---|---|---|
-| `RunEndEncoded::get` | `crates/avec-arrow/src/runend.rs:105-115` | `partition_point` (`runend.rs:113`) probe path = f(run_ends, i): per-row timing resolves run structure; log-probe count and probed cache lines depend on the row's position among secret run boundaries |
-| `rle_encode` run scan | `crates/avec-parquet/src/rle.rs:82-84`, literal coalesce `rle.rs:94-103` | scan length = run length in the value stream: encode time is a ruler for the run-length histogram of secret data |
-| `rle_encode_fast` | `crates/avec-parquet/src/encode_fast.rs:83-86`, `batch_end` `encode_fast.rs:41-56` | same run scan + 64-lane `windows(3)` first-triple search; identical dependence |
-| `DictionaryBuilder::push` | `crates/avec-parquet/src/dictionary.rs:103-114` | `BTreeMap::get` descent path = f(value); first-seen insert allocates: timing maps the distinct-value structure |
-| `decode_page` gather | `crates/avec-parquet/src/dictionary.rs:206-214` | `dict[ix]` with `ix` = decoded data lane: gather addresses are secret-dependent; channel is coarse (dict <= 1 KiB <= 16 cache lines) |
-| `ViewVec::row` | `crates/avec-arrow/src/views.rs:60-70` | branch at `views.rs:64` on `is_inline(len)` selects which buffer the returned address comes from; address + length of the slice = f(payload length). Note: `is_inline` itself is branchless (`views.rs:18-23`) but `row()` branches on its result — the module's "branchless" claim covers the classifier arithmetic, not the row branch |
-| `ViewVecBuilder::push` | `crates/avec-arrow/src/views.rs:103-128` | inline/foreign branch; foreign path appends to `data`, so the NEXT row's foreign offset = f(all prior lengths) |
-| `VarlenBuilder::push` / `Varlen::row` | `crates/avec-arrow/src/varlen.rs:157-169` / `100-105` | offsets reads are fixed-stride, but the payload slice `[a..b]` = f(offsets); offsets ARE the secret payload lengths |
+| `RunEndEncoded::get` | `crates/cgap-arrow/src/runend.rs:105-115` | `partition_point` (`runend.rs:113`) probe path = f(run_ends, i): per-row timing resolves run structure; log-probe count and probed cache lines depend on the row's position among secret run boundaries |
+| `rle_encode` run scan | `crates/cgap-parquet/src/rle.rs:82-84`, literal coalesce `rle.rs:94-103` | scan length = run length in the value stream: encode time is a ruler for the run-length histogram of secret data |
+| `rle_encode_fast` | `crates/cgap-parquet/src/encode_fast.rs:83-86`, `batch_end` `encode_fast.rs:41-56` | same run scan + 64-lane `windows(3)` first-triple search; identical dependence |
+| `DictionaryBuilder::push` | `crates/cgap-parquet/src/dictionary.rs:103-114` | `BTreeMap::get` descent path = f(value); first-seen insert allocates: timing maps the distinct-value structure |
+| `decode_page` gather | `crates/cgap-parquet/src/dictionary.rs:206-214` | `dict[ix]` with `ix` = decoded data lane: gather addresses are secret-dependent; channel is coarse (dict <= 1 KiB <= 16 cache lines) |
+| `ViewVec::row` | `crates/cgap-arrow/src/views.rs:60-70` | branch at `views.rs:64` on `is_inline(len)` selects which buffer the returned address comes from; address + length of the slice = f(payload length). Note: `is_inline` itself is branchless (`views.rs:18-23`) but `row()` branches on its result — the module's "branchless" claim covers the classifier arithmetic, not the row branch |
+| `ViewVecBuilder::push` | `crates/cgap-arrow/src/views.rs:103-128` | inline/foreign branch; foreign path appends to `data`, so the NEXT row's foreign offset = f(all prior lengths) |
+| `VarlenBuilder::push` / `Varlen::row` | `crates/cgap-arrow/src/varlen.rs:157-169` / `100-105` | offsets reads are fixed-stride, but the payload slice `[a..b]` = f(offsets); offsets ARE the secret payload lengths |
 
 ## Measured Evidence
 
@@ -270,7 +270,7 @@ Ordered by leak severity x feasibility:
 ## ADDENDUM — lane HWL5, 2026-10-29: two of the three named TL surfaces
 
 Standing: PARTIAL_ALIVE. Two fixed-access-pattern kernels landed in
-`crates/avec-parquet/src/oblivious.rs` (new file, 490 lines, no_std, zero
+`crates/cgap-parquet/src/oblivious.rs` (new file, 490 lines, no_std, zero
 deps): `oblivious_gather_small` and `oblivious_masked_compact`. Both are
 differentially proven and measured against their leaky originals. The
 timing numbers below are receipts of the 21:17 run on the load-bound host;

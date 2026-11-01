@@ -31,12 +31,12 @@
 use std::hint::black_box;
 use std::time::Instant;
 
-use avec_arrow::layout::Quad64 as LayoutQuad;
-use avec_arrow::layout::QUAD_SIZE;
-use avec_arrow::predicates::filter_quads_eq;
-use avec_arrow::transpose::transpose;
-use avec_blake3::{hash, hash_many_simd};
-use avec_parquet::level_free::{read_page_payload, write_page, LevelFreeType};
+use cgap_arrow::layout::Quad64 as LayoutQuad;
+use cgap_arrow::layout::QUAD_SIZE;
+use cgap_arrow::predicates::filter_quads_eq;
+use cgap_arrow::transpose::transpose;
+use cgap_blake3::{hash, hash_many_simd};
+use cgap_parquet::level_free::{read_page_payload, write_page, LevelFreeType};
 
 const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
 /// d2 control-chart constant for moving ranges (subgroup size 2).
@@ -353,13 +353,13 @@ fn ctq04_variance() -> (String, f64) {
     const N: usize = 4096;
     const RUNS: usize = 100;
 
-    let mut aos: Vec<avec_arrow::transpose::Quad64> = Vec::with_capacity(N);
+    let mut aos: Vec<cgap_arrow::transpose::Quad64> = Vec::with_capacity(N);
     let mut x: u64 = 0x9E37_79B9_7F4A_7C15;
     for i in 0..N {
         x ^= x << 13;
         x ^= x >> 7;
         x ^= x << 17;
-        aos.push(avec_arrow::transpose::Quad64 {
+        aos.push(cgap_arrow::transpose::Quad64 {
             s_id: i as u32,
             p_id: (x >> 32) as u32,
             o_id: x as u32,

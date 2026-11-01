@@ -1,5 +1,5 @@
-defmodule AvecEx.MixProject do
-  @moduledoc "Mix project for the avec-beam Elixir wrapper (lane REL-L9)."
+defmodule CgapEx.MixProject do
+  @moduledoc "Mix project for the cgap-beam Elixir wrapper (lane REL-L9)."
 
   use Mix.Project
 
@@ -7,7 +7,7 @@ defmodule AvecEx.MixProject do
 
   def project do
     [
-      app: :avec_ex,
+      app: :cgap_ex,
       version: @version,
       elixir: "~> 1.19",
       elixirc_paths: elixirc_paths(Mix.env()),

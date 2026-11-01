@@ -1,7 +1,7 @@
 //! NEON vs portable `mask_words` A/B bench (lane OPT20-L8).
 //!
-//! Measures [`avec_arrow::silicon::mask_words_neon`] against the house
-//! portable kernel [`avec_arrow::bitmap::mask_words`] on the SAME buffers:
+//! Measures [`cgap_arrow::silicon::mask_words_neon`] against the house
+//! portable kernel [`cgap_arrow::bitmap::mask_words`] on the SAME buffers:
 //! `out[i] = valid[i] & pred[i]` over n u64 words, sizes {1K, 64K, 1M, 8M}
 //! words, min-of-7 rounds. This settles whether the NEON path earns its keep
 //! on M-series silicon.
@@ -23,8 +23,8 @@
 //! cfg; the dispatch line names the compiled path so a ratio near 1.0 from
 //! a fallback is never mistaken for a silicon result.
 
-use avec_arrow::bitmap::mask_words;
-use avec_arrow::silicon::mask_words_neon;
+use cgap_arrow::bitmap::mask_words;
+use cgap_arrow::silicon::mask_words_neon;
 use std::hint::black_box;
 use std::time::Instant;
 

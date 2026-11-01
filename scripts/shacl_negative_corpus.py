@@ -39,7 +39,7 @@ ROOT = Path(__file__).resolve().parent.parent
 ARTIFACT = ROOT / "docs/jira/v26.10.31/19-ontology-ttl.md"
 
 SH = Namespace("http://www.w3.org/ns/shacl#")
-AVEC = Namespace("https://avec.chatman.dev/ontology/26.10.31#")
+CGAP = Namespace("https://avec.chatman.dev/ontology/26.10.31#")
 NC = Namespace("https://avec.chatman.dev/negative-corpus#")
 
 CODE_RE = re.compile(r"REFUSAL-\d+")
@@ -59,27 +59,27 @@ BRIEF_CODES = {
 
 # id, shape, perturbed path, mutant python value, description
 CASES = [
-    ("N-01", AVEC.ArrowExecutionPlaneShape, AVEC.cacheLineAlignmentBytes,
+    ("N-01", CGAP.ArrowExecutionPlaneShape, CGAP.cacheLineAlignmentBytes,
      32, "cacheLineAlignmentBytes 64 -> 32"),
-    ("N-02", AVEC.ArrowExecutionPlaneShape, AVEC.nullBitmapPresent,
+    ("N-02", CGAP.ArrowExecutionPlaneShape, CGAP.nullBitmapPresent,
      True, "nullBitmapPresent false -> true"),
-    ("N-03", AVEC.ArrowExecutionPlaneShape, AVEC.cyclomaticComplexity,
+    ("N-03", CGAP.ArrowExecutionPlaneShape, CGAP.cyclomaticComplexity,
      2, "cyclomaticComplexity 1 -> 2 (kernel M=2)"),
-    ("N-04", AVEC.ParquetPersistencePlaneShape, AVEC.definitionLevelByteLength,
+    ("N-04", CGAP.ParquetPersistencePlaneShape, CGAP.definitionLevelByteLength,
      4, "definitionLevelByteLength 0 -> 4"),
-    ("N-05", AVEC.ParquetPersistencePlaneShape, AVEC.repetitionLevelByteLength,
+    ("N-05", CGAP.ParquetPersistencePlaneShape, CGAP.repetitionLevelByteLength,
      1, "repetitionLevelByteLength 0 -> 1"),
-    ("N-06", AVEC.ParquetPersistencePlaneShape, AVEC.decodeThroughputGiBs,
+    ("N-06", CGAP.ParquetPersistencePlaneShape, CGAP.decodeThroughputGiBs,
      Literal("60", datatype=XSD.decimal), "decodeThroughputGiBs 74.8 -> 60 (< LSL 70)"),
-    ("N-07", AVEC.GitSequencingPlaneShape, AVEC.searchLadderStages,
+    ("N-07", CGAP.GitSequencingPlaneShape, CGAP.searchLadderStages,
      32, "searchLadderStages 16 -> 32"),
 ]
 
 # Paths constrained by sh:minInclusive/sh:maxInclusive have no sh:hasValue term
 # to copy; their control (conforming) values are pinned here.
 CONTROL_OVERRIDES = {
-    AVEC.decodeThroughputGiBs: Literal("74.8", datatype=XSD.decimal),
-    AVEC.searchTimeVarianceNs: Literal("1.0", datatype=XSD.decimal),
+    CGAP.decodeThroughputGiBs: Literal("74.8", datatype=XSD.decimal),
+    CGAP.searchTimeVarianceNs: Literal("1.0", datatype=XSD.decimal),
 }
 
 

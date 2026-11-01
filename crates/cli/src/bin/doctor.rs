@@ -1,4 +1,4 @@
-//! `doctor` — one-shot health check for the avec v26.10.31 workspace
+//! `doctor` — one-shot health check for the cgap v26.10.31 workspace
 //! (wave-10 lane 2).
 //!
 //! Ten checks, each GREEN / YELLOW / RED with a one-line detail and an
@@ -488,7 +488,7 @@ fn render_table(checks: &[Check], root: &Path) -> String {
     let name_w = checks.iter().map(|c| c.name.len()).max().unwrap_or(4).max(4);
     let st_w = 6; // "YELLOW"
     let mut out = String::new();
-    out.push_str("avec doctor — v26.10.31 workspace health check\n");
+    out.push_str("cgap doctor — v26.10.31 workspace health check\n");
     out.push_str(&format!("repo: {}\n\n", root.display()));
     out.push_str(&format!(
         "{:<id_w$}  {:<name_w$}  {:<st_w$}  DETAIL\n",

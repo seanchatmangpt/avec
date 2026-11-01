@@ -1,7 +1,7 @@
 /* examples/c99_consumer/main.c — hand-written C99 consumer (NOT generated).
  *
- * REL-L2 smoke (v26.10.29): proves the ggen-generated avec headers serve a
- * real freestanding C consumer with no avec library to link — the headers
+ * REL-L2 smoke (v26.10.29): proves the ggen-generated cgap headers serve a
+ * real freestanding C consumer with no cgap library to link — the headers
  * are the whole product. Build: see scripts/c99_smoke.sh.
  *
  * Compile-time layout law (Apache Arrow C Data Interface ABI, LP64):
@@ -23,74 +23,74 @@
 #include <string.h> /* strcmp */
 #include <inttypes.h>
 
-#include "avec_c_data.h"
+#include "cgap_c_data.h"
 
-/* Double inclusion is deliberate: avec_format_codes.h's include guard is
- * mismatched (#ifndef AVEC_FORMAT_CODES_H vs #define AVEC_FORMAT_CODES_C_H),
+/* Double inclusion is deliberate: cgap_format_codes.h's include guard is
+ * mismatched (#ifndef CGAP_FORMAT_CODES_H vs #define CGAP_FORMAT_CODES_C_H),
  * so idempotence rests on C99 6.10.3p2 (identical macro redefinition is
  * legal) — this TU compiles and runs with the file included twice. Known
  * diagnostic, external to this lane: clang's -Wheader-guard fires on that
  * header even at single inclusion (verified with a one-include TU); it is
  * the only diagnostic in this build and originates in include/, not here. */
-#include "avec_format_codes.h"
-#include "avec_format_codes.h"
+#include "cgap_format_codes.h"
+#include "cgap_format_codes.h"
 
 /* --- C99 compile-time assert (negative array size) ----------------------- */
 
-#define AVEC_STATIC_ASSERT(cond, tag)                                          \
-  typedef char avec_static_assert_##tag[(cond) ? 1 : -1]
+#define CGAP_STATIC_ASSERT(cond, tag)                                          \
+  typedef char cgap_static_assert_##tag[(cond) ? 1 : -1]
 
 /* Exact offsets/sizes below hold only when pointers are 8 bytes (LP64). */
-AVEC_STATIC_ASSERT(sizeof(void *) == 8, lp64_pointers_are_8_bytes);
+CGAP_STATIC_ASSERT(sizeof(void *) == 8, lp64_pointers_are_8_bytes);
 
 /* struct ArrowArray: 5 x int64 (0..39) then 5 pointers (40..79) = 80. */
-AVEC_STATIC_ASSERT(sizeof(struct ArrowArray) == 80, arrow_array_size_80_lp64);
-AVEC_STATIC_ASSERT(offsetof(struct ArrowArray, length) == 0, array_length_first);
-AVEC_STATIC_ASSERT(offsetof(struct ArrowArray, buffers) == 40, array_buffers_40);
-AVEC_STATIC_ASSERT(offsetof(struct ArrowArray, release) == 64, array_release_64);
-AVEC_STATIC_ASSERT(offsetof(struct ArrowArray, private_data) == 72,
+CGAP_STATIC_ASSERT(sizeof(struct ArrowArray) == 80, arrow_array_size_80_lp64);
+CGAP_STATIC_ASSERT(offsetof(struct ArrowArray, length) == 0, array_length_first);
+CGAP_STATIC_ASSERT(offsetof(struct ArrowArray, buffers) == 40, array_buffers_40);
+CGAP_STATIC_ASSERT(offsetof(struct ArrowArray, release) == 64, array_release_64);
+CGAP_STATIC_ASSERT(offsetof(struct ArrowArray, private_data) == 72,
                    array_private_data_72);
-AVEC_STATIC_ASSERT(offsetof(struct ArrowArray, release) <
+CGAP_STATIC_ASSERT(offsetof(struct ArrowArray, release) <
                        offsetof(struct ArrowArray, private_data),
                    array_release_precedes_private_data);
-AVEC_STATIC_ASSERT(offsetof(struct ArrowArray, private_data) + sizeof(void *) ==
+CGAP_STATIC_ASSERT(offsetof(struct ArrowArray, private_data) + sizeof(void *) ==
                        sizeof(struct ArrowArray),
                    array_private_data_is_last_field);
 
 /* struct ArrowSchema: 3 char* (0..23) + 2 x int64 (24..39) + 4 pointers
  * (40..71) = 72 on LP64 (real ABI value; see file comment). */
-AVEC_STATIC_ASSERT(sizeof(struct ArrowSchema) == 72, arrow_schema_size_72_lp64);
-AVEC_STATIC_ASSERT(offsetof(struct ArrowSchema, format) == 0, schema_format_first);
-AVEC_STATIC_ASSERT(offsetof(struct ArrowSchema, flags) == 24, schema_flags_24);
-AVEC_STATIC_ASSERT(offsetof(struct ArrowSchema, release) == 56, schema_release_56);
-AVEC_STATIC_ASSERT(offsetof(struct ArrowSchema, private_data) == 64,
+CGAP_STATIC_ASSERT(sizeof(struct ArrowSchema) == 72, arrow_schema_size_72_lp64);
+CGAP_STATIC_ASSERT(offsetof(struct ArrowSchema, format) == 0, schema_format_first);
+CGAP_STATIC_ASSERT(offsetof(struct ArrowSchema, flags) == 24, schema_flags_24);
+CGAP_STATIC_ASSERT(offsetof(struct ArrowSchema, release) == 56, schema_release_56);
+CGAP_STATIC_ASSERT(offsetof(struct ArrowSchema, private_data) == 64,
                    schema_private_data_64);
-AVEC_STATIC_ASSERT(offsetof(struct ArrowSchema, release) <
+CGAP_STATIC_ASSERT(offsetof(struct ArrowSchema, release) <
                        offsetof(struct ArrowSchema, private_data),
                    schema_release_precedes_private_data);
-AVEC_STATIC_ASSERT(offsetof(struct ArrowSchema, private_data) + sizeof(void *) ==
+CGAP_STATIC_ASSERT(offsetof(struct ArrowSchema, private_data) + sizeof(void *) ==
                        sizeof(struct ArrowSchema),
                    schema_private_data_is_last_field);
 
 /* Flag macro values are part of the schema-flags ABI. */
-AVEC_STATIC_ASSERT(ARROW_FLAG_DICTIONARY_ORDERED == 1, flag_ordered_is_1);
-AVEC_STATIC_ASSERT(ARROW_FLAG_NULLABLE == 2, flag_nullable_is_2);
-AVEC_STATIC_ASSERT(ARROW_FLAG_MAP_KEYS_SORTED == 4, flag_map_sorted_is_4);
+CGAP_STATIC_ASSERT(ARROW_FLAG_DICTIONARY_ORDERED == 1, flag_ordered_is_1);
+CGAP_STATIC_ASSERT(ARROW_FLAG_NULLABLE == 2, flag_nullable_is_2);
+CGAP_STATIC_ASSERT(ARROW_FLAG_MAP_KEYS_SORTED == 4, flag_map_sorted_is_4);
 
 /* --- runtime checks on real state ---------------------------------------- */
 
-static int avec_failures = 0;
+static int cgap_failures = 0;
 
 #define CHECK(cond)                                                            \
   do {                                                                         \
     if (!(cond)) {                                                             \
-      avec_failures++;                                                         \
+      cgap_failures++;                                                         \
       printf("FAIL: %s\n", #cond);                                             \
     }                                                                          \
   } while (0)
 
 static void print_layout(void) {
-  printf("avec c99 smoke v26.10.29\n");
+  printf("cgap c99 smoke v26.10.29\n");
   printf("sizeof(void*)                = %zu\n", sizeof(void *));
   printf("sizeof(struct ArrowArray)    = %zu\n", sizeof(struct ArrowArray));
   printf("  offsetof release           = %zu\n",
@@ -107,8 +107,8 @@ static void print_layout(void) {
 }
 
 int main(void) {
-  const char *fmt_list_int32 = AVEC_FMT_LIST AVEC_FMT_INT32; /* "+li" */
-  const char *fmt_int32 = AVEC_FMT_INT32; /* "i" */
+  const char *fmt_list_int32 = CGAP_FMT_LIST CGAP_FMT_INT32; /* "+li" */
+  const char *fmt_int32 = CGAP_FMT_INT32; /* "i" */
   char fmt_ts_micro[32];
   int64_t flags = 0;
   struct ArrowArray arr;
@@ -161,15 +161,15 @@ int main(void) {
   CHECK(strcmp(fmt_int32, "i") == 0);
   CHECK(strcmp(fmt_list_int32, "+li") == 0);
   CHECK(strcmp(fmt_ts_micro, "tsu:UTC") == 0);
-  CHECK(AVEC_FMT_INT64[0] == 'l');
-  CHECK(AVEC_FMT_BOOLEAN[0] == 'b');
+  CHECK(CGAP_FMT_INT64[0] == 'l');
+  CHECK(CGAP_FMT_BOOLEAN[0] == 'b');
 
-  if (avec_failures == 0) {
+  if (cgap_failures == 0) {
     printf("format: %s (list of %s), ts=%s, flags=%" PRId64 "\n",
            schema.format, fmt_int32, fmt_ts_micro, schema.flags);
     puts("c99 smoke: ALL CHECKS PASSED");
   } else {
-    printf("c99 smoke: %d CHECK(S) FAILED\n", avec_failures);
+    printf("c99 smoke: %d CHECK(S) FAILED\n", cgap_failures);
   }
-  return avec_failures == 0 ? 0 : 1;
+  return cgap_failures == 0 ? 0 : 1;
 }

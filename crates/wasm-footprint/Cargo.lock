@@ -3,22 +3,22 @@
 version = 4
 
 [[package]]
-name = "avec-arrow"
+name = "cgap-arrow"
 version = "26.10.29"
 
 [[package]]
-name = "avec-blake3"
+name = "cgap-blake3"
 version = "26.10.29"
 
 [[package]]
-name = "avec-parquet"
+name = "cgap-parquet"
 version = "26.10.29"
 
 [[package]]
 name = "wasm-footprint"
 version = "26.10.29"
 dependencies = [
- "avec-arrow",
- "avec-blake3",
- "avec-parquet",
+ "cgap-arrow",
+ "cgap-blake3",
+ "cgap-parquet",
 ]

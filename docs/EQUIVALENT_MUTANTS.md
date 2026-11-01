@@ -1,6 +1,6 @@
 # Equivalent Mutants
 
-Ledger of the `avec-arrow` cargo-mutants survivors, lane OPT20-L2, v26.10.29: the 11
+Ledger of the `cgap-arrow` cargo-mutants survivors, lane OPT20-L2, v26.10.29: the 11
 rows named by the completed triage plus V5, a 12th survivor (varlen.rs:123) the
 confirmation scan surfaced. Every argument was re-derived from the current source on
 2026-10-29 (not copied from the prior lane receipt); the scan command is fixed in
@@ -11,8 +11,8 @@ confirmation scan surfaced. Every argument was re-derived from the current sourc
 Command (v26.10.29), run 2026-10-29, exit code 0, output `/tmp/opt20-mut-arrow`:
 
 ```sh
-cargo mutants --workspace --exclude avec-audit --exclude bench --exclude avec-ffi \
-  --exclude avec-beam --exclude avec-parquet -o /tmp/opt20-mut-arrow --timeout 60
+cargo mutants --workspace --exclude cgap-audit --exclude bench --exclude cgap-ffi \
+  --exclude cgap-beam --exclude cgap-parquet -o /tmp/opt20-mut-arrow --timeout 60
 ```
 
 Summary verbatim:
@@ -22,7 +22,7 @@ Summary verbatim:
 ```
 
 All 11 triage rows re-appear in `mutants.out/missed.txt` with the same site and
-operator. The scan also missed 12 avec-arrow mutants total (11 ledgered + V5) and 46
+operator. The scan also missed 12 cgap-arrow mutants total (11 ledgered + V5) and 46
 mutants in `crates/cli/src/main.rs`, which is outside this lane's scope.
 
 ## Register
@@ -175,11 +175,11 @@ mutants in `crates/cli/src/main.rs`, which is outside this lane's scope.
 ## Needs-kill
 
 None. All 12 rows re-derived from the current source; no row is NEEDS-KILL, so
-`crates/avec-arrow/tests/mutation_kills2.rs` is not required by this lane. V5 was not
+`crates/cgap-arrow/tests/mutation_kills2.rs` is not required by this lane. V5 was not
 in the triage's 11; it is registered here because the confirmation scan missed it and
 its argument re-derives cleanly (below).
 
 ## See Also
 
 - `docs/mutation-court-backlog.txt` (prior scan ledger; pre-edit line numbers)
-- `crates/avec-arrow/tests/mutation_kills.rs` (existing killing tests)
+- `crates/cgap-arrow/tests/mutation_kills.rs` (existing killing tests)

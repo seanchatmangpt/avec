@@ -1,114 +1,114 @@
-crates/avec-arrow/src/bitmap.rs:16:5: replace bitmap_words -> usize with 0
-crates/avec-arrow/src/bitmap.rs:16:5: replace bitmap_words -> usize with 1
-crates/avec-arrow/src/bitmap.rs:22:5: replace bcast8 -> u64 with 0
-crates/avec-arrow/src/bitmap.rs:22:5: replace bcast8 -> u64 with 1
-crates/avec-arrow/src/bitmap.rs:30:5: replace mask_words with ()
-crates/avec-arrow/src/bitmap.rs:32:13: replace < with == in mask_words
-crates/avec-arrow/src/bitmap.rs:32:13: replace < with > in mask_words
-crates/avec-arrow/src/bitmap.rs:32:13: replace < with <= in mask_words
-crates/avec-arrow/src/bitmap.rs:33:27: replace & with | in mask_words
-crates/avec-arrow/src/bitmap.rs:33:27: replace & with ^ in mask_words
-crates/avec-arrow/src/bitmap.rs:34:11: replace += with -= in mask_words
-crates/avec-arrow/src/bitmap.rs:34:11: replace += with *= in mask_words
-crates/avec-arrow/src/bitmap.rs:42:5: replace count_valid -> u64 with 0
-crates/avec-arrow/src/bitmap.rs:42:5: replace count_valid -> u64 with 1
-crates/avec-arrow/src/bitmap.rs:45:13: replace < with == in count_valid
-crates/avec-arrow/src/bitmap.rs:45:13: replace < with > in count_valid
-crates/avec-arrow/src/bitmap.rs:45:13: replace < with <= in count_valid
-crates/avec-arrow/src/bitmap.rs:46:13: replace += with -= in count_valid
-crates/avec-arrow/src/bitmap.rs:46:13: replace += with *= in count_valid
-crates/avec-arrow/src/bitmap.rs:46:36: replace & with | in count_valid
-crates/avec-arrow/src/bitmap.rs:46:36: replace & with ^ in count_valid
-crates/avec-arrow/src/bitmap.rs:64:5: replace clear_bit with ()
-crates/avec-arrow/src/bitmap.rs:64:18: replace &= with |= in clear_bit
-crates/avec-arrow/src/bitmap.rs:64:12: replace >> with << in clear_bit
-crates/avec-arrow/src/bitmap.rs:64:21: delete ! in clear_bit
-crates/avec-arrow/src/bitmap.rs:64:25: replace << with >> in clear_bit
-crates/avec-arrow/src/bitmap.rs:64:31: replace & with | in clear_bit
-crates/avec-arrow/src/bitmap.rs:64:31: replace & with ^ in clear_bit
-crates/avec-arrow/src/bitmap.rs:70:5: replace word_valid -> u64 with 0
-crates/avec-arrow/src/bitmap.rs:70:5: replace word_valid -> u64 with 1
-crates/avec-arrow/src/bitmap.rs:70:24: replace * with + in word_valid
-crates/avec-arrow/src/bitmap.rs:70:24: replace * with / in word_valid
-crates/avec-arrow/src/bitmap.rs:72:38: replace + with - in word_valid
-crates/avec-arrow/src/bitmap.rs:72:38: replace + with * in word_valid
-crates/avec-arrow/src/bitmap.rs:80:5: replace word_at -> u64 with 0
-crates/avec-arrow/src/bitmap.rs:80:5: replace word_at -> u64 with 1
-crates/avec-arrow/src/bitmap.rs:80:24: replace * with + in word_at
-crates/avec-arrow/src/bitmap.rs:80:24: replace * with / in word_at
-crates/avec-arrow/src/bitmap.rs:82:39: replace + with - in word_at
-crates/avec-arrow/src/bitmap.rs:82:39: replace + with * in word_at
-crates/avec-arrow/src/bitmap.rs:135:9: replace Bitmap::as_ptr -> *const u8 with Default::default()
-crates/avec-arrow/src/bitmap.rs:158:28: replace * with / in Bitmap::word
-crates/avec-arrow/src/bitmap.rs:168:9: replace Bitmap::words_len -> usize with 0
-crates/avec-arrow/src/bitmap.rs:168:9: replace Bitmap::words_len -> usize with 1
-crates/avec-arrow/src/bitmap.rs:177:17: replace < with > in Bitmap::is_all_valid
-crates/avec-arrow/src/bitmap.rs:178:18: replace += with -= in Bitmap::is_all_valid
-crates/avec-arrow/src/bitmap.rs:178:18: replace += with *= in Bitmap::is_all_valid
-crates/avec-arrow/src/bitmap.rs:179:15: replace += with -= in Bitmap::is_all_valid
-crates/avec-arrow/src/bitmap.rs:179:15: replace += with *= in Bitmap::is_all_valid
-crates/avec-arrow/src/bitmap.rs:182:17: replace > with >= in Bitmap::is_all_valid
-crates/avec-arrow/src/bitmap.rs:184:42: replace == with != in Bitmap::is_all_valid
-crates/avec-arrow/src/bitmap.rs:203:13: replace < with > in count_one_bits
-crates/avec-arrow/src/bitmap.rs:204:14: replace += with -= in count_one_bits
-crates/avec-arrow/src/bitmap.rs:204:14: replace += with *= in count_one_bits
-crates/avec-arrow/src/bitmap.rs:205:11: replace += with -= in count_one_bits
-crates/avec-arrow/src/bitmap.rs:205:11: replace += with *= in count_one_bits
-crates/avec-arrow/src/bitmap.rs:208:13: replace > with >= in count_one_bits
-crates/avec-arrow/src/buffer.rs:62:9: replace Buf::is_empty -> bool with true
-crates/avec-arrow/src/buffer.rs:111:9: replace <impl Drop for Buf>::drop with ()
-crates/avec-arrow/src/c_abi.rs:174:9: replace ForeignArray::len -> i64 with 0
-crates/avec-arrow/src/c_abi.rs:174:9: replace ForeignArray::len -> i64 with 1
-crates/avec-arrow/src/c_abi.rs:174:9: replace ForeignArray::len -> i64 with -1
-crates/avec-arrow/src/c_abi.rs:194:9: replace <impl Drop for ForeignArray>::drop with ()
-crates/avec-arrow/src/primitive.rs:67:9: replace Primitive<T>::is_empty -> bool with true
-crates/avec-arrow/src/primitive.rs:67:9: replace Primitive<T>::is_empty -> bool with false
-crates/avec-arrow/src/primitive.rs:67:18: replace == with != in Primitive<T>::is_empty
-crates/avec-arrow/src/primitive.rs:91:9: replace Primitive<T>::values_ptr -> *const u8 with Default::default()
-crates/avec-arrow/src/primitive.rs:97:9: replace Primitive<T>::validity_ptr -> *const u8 with Default::default()
-crates/avec-arrow/src/primitive.rs:106:9: replace Primitive<T>::buffers_aligned_64 -> bool with true
-crates/avec-arrow/src/primitive.rs:110:14: replace && with || in Primitive<T>::buffers_aligned_64
-crates/avec-arrow/src/primitive.rs:164:9: replace PrimitiveBuilder<T>::len -> usize with 0
-crates/avec-arrow/src/primitive.rs:164:9: replace PrimitiveBuilder<T>::len -> usize with 1
-crates/avec-arrow/src/varlen.rs:24:9: replace <impl Offset for u32>::format_family -> &'static str with ""
-crates/avec-arrow/src/varlen.rs:24:9: replace <impl Offset for u32>::format_family -> &'static str with "xyzzy"
-crates/avec-arrow/src/varlen.rs:48:9: replace <impl Offset for u64>::format_family -> &'static str with ""
-crates/avec-arrow/src/varlen.rs:48:9: replace <impl Offset for u64>::format_family -> &'static str with "xyzzy"
-crates/avec-arrow/src/varlen.rs:83:9: replace Varlen<O>::is_empty -> bool with true
-crates/avec-arrow/src/varlen.rs:83:9: replace Varlen<O>::is_empty -> bool with false
-crates/avec-arrow/src/varlen.rs:83:18: replace == with != in Varlen<O>::is_empty
-crates/avec-arrow/src/varlen.rs:95:9: replace Varlen<O>::data -> &[u8] with Vec::leak(Vec::new())
-crates/avec-arrow/src/varlen.rs:117:9: replace Varlen<O>::offsets_monotonic -> bool with true
-crates/avec-arrow/src/varlen.rs:118:27: replace || with && in Varlen<O>::offsets_monotonic
-crates/avec-arrow/src/varlen.rs:123:21: replace < with == in Varlen<O>::offsets_monotonic
-crates/avec-arrow/src/varlen.rs:123:21: replace < with > in Varlen<O>::offsets_monotonic
-crates/avec-arrow/src/varlen.rs:124:16: replace &= with |= in Varlen<O>::offsets_monotonic
-crates/avec-arrow/src/varlen.rs:124:44: replace + with * in Varlen<O>::offsets_monotonic
-crates/avec-arrow/src/views.rs:43:9: replace ViewVec::is_empty -> bool with true
-crates/avec-arrow/src/views.rs:43:9: replace ViewVec::is_empty -> bool with false
-crates/avec-arrow/src/views.rs:43:18: replace == with != in ViewVec::is_empty
-crates/avec-parquet/src/rle.rs:29:9: replace <impl fmt::Display for ParquetError>::fmt -> fmt::Result with Ok(Default::default())
-crates/avec-parquet/src/rle.rs:90:27: replace + with * in rle_encode
-crates/avec-parquet/src/rle.rs:93:29: replace < with > in rle_encode
-crates/avec-parquet/src/rle.rs:93:56: replace + with - in rle_encode
-crates/avec-parquet/src/rle.rs:101:27: replace - with + in rle_encode
-crates/avec-parquet/src/rle.rs:103:59: replace | with ^ in rle_encode
-crates/avec-parquet/src/rle.rs:110:27: replace < with <= in rle_encode
-crates/avec-parquet/src/rle.rs:141:36: replace - with + in rle_decode
-crates/avec-parquet/src/rle.rs:142:82: replace - with + in rle_decode
-crates/avec-parquet/src/rle.rs:142:82: replace - with / in rle_decode
-crates/avec-parquet/src/rle.rs:167:99: replace - with + in rle_decode
-crates/avec-parquet/src/rle.rs:167:99: replace - with / in rle_decode
-crates/avec-parquet/src/unpack.rs:11:14: replace < with <= in unpack_1bit
-crates/avec-parquet/src/unpack.rs:29:14: replace < with <= in unpack_2bit
-crates/avec-parquet/src/unpack.rs:30:28: replace < with <= in unpack_2bit
-crates/avec-parquet/src/unpack.rs:31:24: replace - with + in unpack_2bit
-crates/avec-parquet/src/unpack.rs:37:12: replace += with *= in unpack_2bit
-crates/avec-parquet/src/unpack.rs:47:14: replace < with <= in unpack_4bit
-crates/avec-parquet/src/unpack.rs:48:28: replace < with <= in unpack_4bit
-crates/avec-parquet/src/unpack.rs:49:24: replace - with + in unpack_4bit
-crates/avec-parquet/src/unpack.rs:55:12: replace += with *= in unpack_4bit
-crates/avec-parquet/src/unpack.rs:65:14: replace < with <= in unpack_8bit
-crates/avec-parquet/src/unpack.rs:66:28: replace < with <= in unpack_8bit
-crates/avec-parquet/src/unpack.rs:67:24: replace - with + in unpack_8bit
-crates/avec-parquet/src/unpack.rs:73:12: replace += with *= in unpack_8bit
+crates/cgap-arrow/src/bitmap.rs:16:5: replace bitmap_words -> usize with 0
+crates/cgap-arrow/src/bitmap.rs:16:5: replace bitmap_words -> usize with 1
+crates/cgap-arrow/src/bitmap.rs:22:5: replace bcast8 -> u64 with 0
+crates/cgap-arrow/src/bitmap.rs:22:5: replace bcast8 -> u64 with 1
+crates/cgap-arrow/src/bitmap.rs:30:5: replace mask_words with ()
+crates/cgap-arrow/src/bitmap.rs:32:13: replace < with == in mask_words
+crates/cgap-arrow/src/bitmap.rs:32:13: replace < with > in mask_words
+crates/cgap-arrow/src/bitmap.rs:32:13: replace < with <= in mask_words
+crates/cgap-arrow/src/bitmap.rs:33:27: replace & with | in mask_words
+crates/cgap-arrow/src/bitmap.rs:33:27: replace & with ^ in mask_words
+crates/cgap-arrow/src/bitmap.rs:34:11: replace += with -= in mask_words
+crates/cgap-arrow/src/bitmap.rs:34:11: replace += with *= in mask_words
+crates/cgap-arrow/src/bitmap.rs:42:5: replace count_valid -> u64 with 0
+crates/cgap-arrow/src/bitmap.rs:42:5: replace count_valid -> u64 with 1
+crates/cgap-arrow/src/bitmap.rs:45:13: replace < with == in count_valid
+crates/cgap-arrow/src/bitmap.rs:45:13: replace < with > in count_valid
+crates/cgap-arrow/src/bitmap.rs:45:13: replace < with <= in count_valid
+crates/cgap-arrow/src/bitmap.rs:46:13: replace += with -= in count_valid
+crates/cgap-arrow/src/bitmap.rs:46:13: replace += with *= in count_valid
+crates/cgap-arrow/src/bitmap.rs:46:36: replace & with | in count_valid
+crates/cgap-arrow/src/bitmap.rs:46:36: replace & with ^ in count_valid
+crates/cgap-arrow/src/bitmap.rs:64:5: replace clear_bit with ()
+crates/cgap-arrow/src/bitmap.rs:64:18: replace &= with |= in clear_bit
+crates/cgap-arrow/src/bitmap.rs:64:12: replace >> with << in clear_bit
+crates/cgap-arrow/src/bitmap.rs:64:21: delete ! in clear_bit
+crates/cgap-arrow/src/bitmap.rs:64:25: replace << with >> in clear_bit
+crates/cgap-arrow/src/bitmap.rs:64:31: replace & with | in clear_bit
+crates/cgap-arrow/src/bitmap.rs:64:31: replace & with ^ in clear_bit
+crates/cgap-arrow/src/bitmap.rs:70:5: replace word_valid -> u64 with 0
+crates/cgap-arrow/src/bitmap.rs:70:5: replace word_valid -> u64 with 1
+crates/cgap-arrow/src/bitmap.rs:70:24: replace * with + in word_valid
+crates/cgap-arrow/src/bitmap.rs:70:24: replace * with / in word_valid
+crates/cgap-arrow/src/bitmap.rs:72:38: replace + with - in word_valid
+crates/cgap-arrow/src/bitmap.rs:72:38: replace + with * in word_valid
+crates/cgap-arrow/src/bitmap.rs:80:5: replace word_at -> u64 with 0
+crates/cgap-arrow/src/bitmap.rs:80:5: replace word_at -> u64 with 1
+crates/cgap-arrow/src/bitmap.rs:80:24: replace * with + in word_at
+crates/cgap-arrow/src/bitmap.rs:80:24: replace * with / in word_at
+crates/cgap-arrow/src/bitmap.rs:82:39: replace + with - in word_at
+crates/cgap-arrow/src/bitmap.rs:82:39: replace + with * in word_at
+crates/cgap-arrow/src/bitmap.rs:135:9: replace Bitmap::as_ptr -> *const u8 with Default::default()
+crates/cgap-arrow/src/bitmap.rs:158:28: replace * with / in Bitmap::word
+crates/cgap-arrow/src/bitmap.rs:168:9: replace Bitmap::words_len -> usize with 0
+crates/cgap-arrow/src/bitmap.rs:168:9: replace Bitmap::words_len -> usize with 1
+crates/cgap-arrow/src/bitmap.rs:177:17: replace < with > in Bitmap::is_all_valid
+crates/cgap-arrow/src/bitmap.rs:178:18: replace += with -= in Bitmap::is_all_valid
+crates/cgap-arrow/src/bitmap.rs:178:18: replace += with *= in Bitmap::is_all_valid
+crates/cgap-arrow/src/bitmap.rs:179:15: replace += with -= in Bitmap::is_all_valid
+crates/cgap-arrow/src/bitmap.rs:179:15: replace += with *= in Bitmap::is_all_valid
+crates/cgap-arrow/src/bitmap.rs:182:17: replace > with >= in Bitmap::is_all_valid
+crates/cgap-arrow/src/bitmap.rs:184:42: replace == with != in Bitmap::is_all_valid
+crates/cgap-arrow/src/bitmap.rs:203:13: replace < with > in count_one_bits
+crates/cgap-arrow/src/bitmap.rs:204:14: replace += with -= in count_one_bits
+crates/cgap-arrow/src/bitmap.rs:204:14: replace += with *= in count_one_bits
+crates/cgap-arrow/src/bitmap.rs:205:11: replace += with -= in count_one_bits
+crates/cgap-arrow/src/bitmap.rs:205:11: replace += with *= in count_one_bits
+crates/cgap-arrow/src/bitmap.rs:208:13: replace > with >= in count_one_bits
+crates/cgap-arrow/src/buffer.rs:62:9: replace Buf::is_empty -> bool with true
+crates/cgap-arrow/src/buffer.rs:111:9: replace <impl Drop for Buf>::drop with ()
+crates/cgap-arrow/src/c_abi.rs:174:9: replace ForeignArray::len -> i64 with 0
+crates/cgap-arrow/src/c_abi.rs:174:9: replace ForeignArray::len -> i64 with 1
+crates/cgap-arrow/src/c_abi.rs:174:9: replace ForeignArray::len -> i64 with -1
+crates/cgap-arrow/src/c_abi.rs:194:9: replace <impl Drop for ForeignArray>::drop with ()
+crates/cgap-arrow/src/primitive.rs:67:9: replace Primitive<T>::is_empty -> bool with true
+crates/cgap-arrow/src/primitive.rs:67:9: replace Primitive<T>::is_empty -> bool with false
+crates/cgap-arrow/src/primitive.rs:67:18: replace == with != in Primitive<T>::is_empty
+crates/cgap-arrow/src/primitive.rs:91:9: replace Primitive<T>::values_ptr -> *const u8 with Default::default()
+crates/cgap-arrow/src/primitive.rs:97:9: replace Primitive<T>::validity_ptr -> *const u8 with Default::default()
+crates/cgap-arrow/src/primitive.rs:106:9: replace Primitive<T>::buffers_aligned_64 -> bool with true
+crates/cgap-arrow/src/primitive.rs:110:14: replace && with || in Primitive<T>::buffers_aligned_64
+crates/cgap-arrow/src/primitive.rs:164:9: replace PrimitiveBuilder<T>::len -> usize with 0
+crates/cgap-arrow/src/primitive.rs:164:9: replace PrimitiveBuilder<T>::len -> usize with 1
+crates/cgap-arrow/src/varlen.rs:24:9: replace <impl Offset for u32>::format_family -> &'static str with ""
+crates/cgap-arrow/src/varlen.rs:24:9: replace <impl Offset for u32>::format_family -> &'static str with "xyzzy"
+crates/cgap-arrow/src/varlen.rs:48:9: replace <impl Offset for u64>::format_family -> &'static str with ""
+crates/cgap-arrow/src/varlen.rs:48:9: replace <impl Offset for u64>::format_family -> &'static str with "xyzzy"
+crates/cgap-arrow/src/varlen.rs:83:9: replace Varlen<O>::is_empty -> bool with true
+crates/cgap-arrow/src/varlen.rs:83:9: replace Varlen<O>::is_empty -> bool with false
+crates/cgap-arrow/src/varlen.rs:83:18: replace == with != in Varlen<O>::is_empty
+crates/cgap-arrow/src/varlen.rs:95:9: replace Varlen<O>::data -> &[u8] with Vec::leak(Vec::new())
+crates/cgap-arrow/src/varlen.rs:117:9: replace Varlen<O>::offsets_monotonic -> bool with true
+crates/cgap-arrow/src/varlen.rs:118:27: replace || with && in Varlen<O>::offsets_monotonic
+crates/cgap-arrow/src/varlen.rs:123:21: replace < with == in Varlen<O>::offsets_monotonic
+crates/cgap-arrow/src/varlen.rs:123:21: replace < with > in Varlen<O>::offsets_monotonic
+crates/cgap-arrow/src/varlen.rs:124:16: replace &= with |= in Varlen<O>::offsets_monotonic
+crates/cgap-arrow/src/varlen.rs:124:44: replace + with * in Varlen<O>::offsets_monotonic
+crates/cgap-arrow/src/views.rs:43:9: replace ViewVec::is_empty -> bool with true
+crates/cgap-arrow/src/views.rs:43:9: replace ViewVec::is_empty -> bool with false
+crates/cgap-arrow/src/views.rs:43:18: replace == with != in ViewVec::is_empty
+crates/cgap-parquet/src/rle.rs:29:9: replace <impl fmt::Display for ParquetError>::fmt -> fmt::Result with Ok(Default::default())
+crates/cgap-parquet/src/rle.rs:90:27: replace + with * in rle_encode
+crates/cgap-parquet/src/rle.rs:93:29: replace < with > in rle_encode
+crates/cgap-parquet/src/rle.rs:93:56: replace + with - in rle_encode
+crates/cgap-parquet/src/rle.rs:101:27: replace - with + in rle_encode
+crates/cgap-parquet/src/rle.rs:103:59: replace | with ^ in rle_encode
+crates/cgap-parquet/src/rle.rs:110:27: replace < with <= in rle_encode
+crates/cgap-parquet/src/rle.rs:141:36: replace - with + in rle_decode
+crates/cgap-parquet/src/rle.rs:142:82: replace - with + in rle_decode
+crates/cgap-parquet/src/rle.rs:142:82: replace - with / in rle_decode
+crates/cgap-parquet/src/rle.rs:167:99: replace - with + in rle_decode
+crates/cgap-parquet/src/rle.rs:167:99: replace - with / in rle_decode
+crates/cgap-parquet/src/unpack.rs:11:14: replace < with <= in unpack_1bit
+crates/cgap-parquet/src/unpack.rs:29:14: replace < with <= in unpack_2bit
+crates/cgap-parquet/src/unpack.rs:30:28: replace < with <= in unpack_2bit
+crates/cgap-parquet/src/unpack.rs:31:24: replace - with + in unpack_2bit
+crates/cgap-parquet/src/unpack.rs:37:12: replace += with *= in unpack_2bit
+crates/cgap-parquet/src/unpack.rs:47:14: replace < with <= in unpack_4bit
+crates/cgap-parquet/src/unpack.rs:48:28: replace < with <= in unpack_4bit
+crates/cgap-parquet/src/unpack.rs:49:24: replace - with + in unpack_4bit
+crates/cgap-parquet/src/unpack.rs:55:12: replace += with *= in unpack_4bit
+crates/cgap-parquet/src/unpack.rs:65:14: replace < with <= in unpack_8bit
+crates/cgap-parquet/src/unpack.rs:66:28: replace < with <= in unpack_8bit
+crates/cgap-parquet/src/unpack.rs:67:24: replace - with + in unpack_8bit
+crates/cgap-parquet/src/unpack.rs:73:12: replace += with *= in unpack_8bit

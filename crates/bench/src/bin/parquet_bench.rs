@@ -13,9 +13,9 @@
 //!
 //! RLE shapes run at the canonical nibble width (4 bits).
 
-use avec_parquet::rle::rle_encode;
-use avec_parquet::unpack::unpack_bits;
-use avec_parquet::rle_decode;
+use cgap_parquet::rle::rle_encode;
+use cgap_parquet::unpack::unpack_bits;
+use cgap_parquet::rle_decode;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::hint::black_box;
 use std::sync::atomic::{AtomicUsize, Ordering};

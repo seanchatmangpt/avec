@@ -1,6 +1,6 @@
 # Getting Started
 
-10-minute onboarding for `avec`, a freestanding Apache Arrow columnar substrate.
+10-minute onboarding for `cgap`, a freestanding Apache Arrow columnar substrate.
 Every command below was executed on the reference host (arm64, Rust 1.97.0) before
 this document was written; expected outputs are quoted from those runs. Build times
 assume a warm `target/` cache; a cold build is slower.
@@ -51,7 +51,7 @@ before proceeding.
 Optional portability check (needs the wasm32 target above):
 
 ```bash
-cargo build -p avec-arrow --target wasm32-unknown-unknown
+cargo build -p cgap-arrow --target wasm32-unknown-unknown
 ```
 
 Expected: `Finished ... target(s) in <time>` with exit 0. Also receipted in
@@ -59,10 +59,10 @@ Expected: `Finished ... target(s) in <time>` with exit 0. Also receipted in
 
 ## Run the tests
 
-The fast signal — the avec-arrow unit suite:
+The fast signal — the cgap-arrow unit suite:
 
 ```bash
-cargo test -p avec-arrow --lib
+cargo test -p cgap-arrow --lib
 ```
 
 Expected final line:
@@ -75,7 +75,7 @@ test result: ok. 93 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 
 Do not read a crate's health off a single `test result:` line. A crate emits one
 result line per suite: `unittests`, each `tests/*.rs` file, and a `Doc-tests` line.
-Worse, `avec-arrow`'s `tests/mutation_kills.rs` emits **two** result lines (a nested
+Worse, `cgap-arrow`'s `tests/mutation_kills.rs` emits **two** result lines (a nested
 filtered libtest child, then the outer suite) — the trap found in the wild.
 
 Law: per crate, sum **all** `test result:` lines. The full census, with the
@@ -89,7 +89,7 @@ Status: **PENDING** — not yet on disk. `ls crates/cli/src/bin/` shows only
 `verify_v26.rs` at the time of writing. When the doctor lane lands, run:
 
 ```bash
-cargo run -q -p avec-cli --bin doctor
+cargo run -q -p cgap-cli --bin doctor
 ```
 
 No output block is quoted here: no receipt for it exists yet, and this document
@@ -102,7 +102,7 @@ ls crates/cli/src/bin/
 Interim health probe, verified live (the ladder's `cli-verify` gate payload):
 
 ```bash
-cargo run -q -p avec-cli --bin verify_v26
+cargo run -q -p cgap-cli --bin verify_v26
 ```
 
 Expected (exit 0; timings vary):
@@ -144,12 +144,12 @@ Gate table from the receipted run — all PASS:
 | Gate | Status | Exit |
 |------|--------|------|
 | `check-workspace` | PASS | 0 |
-| `test-avec-arrow` | PASS | 0 |
-| `test-avec-parquet` | PASS | 0 |
-| `test-avec-git` | PASS | 0 |
-| `test-avec-blake3` | PASS | 0 |
+| `test-cgap-arrow` | PASS | 0 |
+| `test-cgap-parquet` | PASS | 0 |
+| `test-cgap-git` | PASS | 0 |
+| `test-cgap-blake3` | PASS | 0 |
 | `test-integration` | PASS | 0 |
-| `test-avec-beam` | PASS | 0 |
+| `test-cgap-beam` | PASS | 0 |
 | `audit-branchless` | PASS | 0 |
 | `cli-verify` | PASS | 0 |
 | `test-audit` | PASS | 0 |

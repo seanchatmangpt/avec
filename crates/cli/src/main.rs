@@ -1,4 +1,4 @@
-//! `avec-cli` — std-hosted CLI over the avec columnar kernels.
+//! `cgap-cli` — std-hosted CLI over the cgap columnar kernels.
 //!
 //! Subcommands (std::env::args matching, no clap):
 //!
@@ -10,13 +10,13 @@
 //! - `align-test`   — allocates `Buf` sizes 1..1000 step 7, asserts 64-byte
 //!   alignment on every pointer, prints `align-test: 143/143 aligned`
 //!
-//! Dependencies: std + two zero-dep repo-local path crates (avec-arrow,
-//! avec-parquet). No external crates.
+//! Dependencies: std + two zero-dep repo-local path crates (cgap-arrow,
+//! cgap-parquet). No external crates.
 
-use avec_arrow::bitmap::mask_words;
-use avec_arrow::buffer::Buf;
-use avec_parquet::encode_fast::rle_encode_fast;
-use avec_parquet::rle::rle_encode;
+use cgap_arrow::bitmap::mask_words;
+use cgap_arrow::buffer::Buf;
+use cgap_parquet::encode_fast::rle_encode_fast;
+use cgap_parquet::rle::rle_encode;
 use std::hint::black_box;
 use std::process::exit;
 use std::time::Instant;
@@ -33,7 +33,7 @@ fn main() {
         Some("align-test") => cmd_align_test(),
         _ => {
             eprintln!(
-                "usage: avec-cli <version|bench-mask|bench-parquet|align-test>"
+                "usage: cgap-cli <version|bench-mask|bench-parquet|align-test>"
             );
             exit(2);
         }
@@ -159,7 +159,7 @@ fn cmd_align_test() {
     let mut aligned = 0usize;
     for len in sizes {
         let buf = Buf::new(len);
-        if (buf.as_ptr() as usize).is_multiple_of(avec_arrow::buffer::ALIGNMENT) {
+        if (buf.as_ptr() as usize).is_multiple_of(cgap_arrow::buffer::ALIGNMENT) {
             aligned += 1;
         } else {
             eprintln!("align-test FAIL: len {len} misaligned");

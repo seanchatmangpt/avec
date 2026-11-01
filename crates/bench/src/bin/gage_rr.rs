@@ -3,7 +3,7 @@
 //! Spec: docs/jira/v26.10.31/29-benchmark-harness-plan.md §3 (DMADV Measure gate).
 //!
 //! Method: N=10,000 repetitions of a fixed ~10µs workload (BLAKE3 over a fixed
-//! 4 KiB buffer, `avec_blake3::hash`), per-rep `Instant` deltas (monotonic,
+//! 4 KiB buffer, `cgap_blake3::hash`), per-rep `Instant` deltas (monotonic,
 //! CNTVCT-class on Apple Silicon), no sleeps.
 //!
 //! Stats: mean, median, p1, p99, stddev, coefficient of variation.
@@ -89,7 +89,7 @@ fn main() {
     let warmup_reps = 500;
     let mut sink: u8 = 0;
     for _ in 0..warmup_reps {
-        let d = avec_blake3::hash(std::hint::black_box(&buf));
+        let d = cgap_blake3::hash(std::hint::black_box(&buf));
         sink = sink.wrapping_add(d[0]);
     }
     let _ = writeln!(stderr, "warmup: {} reps, sink={}", warmup_reps, sink);
@@ -97,7 +97,7 @@ fn main() {
     let mut samples_us: Vec<f64> = Vec::with_capacity(n_reps);
     for _ in 0..n_reps {
         let t0 = Instant::now();
-        let d = avec_blake3::hash(std::hint::black_box(&buf));
+        let d = cgap_blake3::hash(std::hint::black_box(&buf));
         let dt = t0.elapsed().as_secs_f64() * 1e6;
         sink = sink.wrapping_add(d[0]);
         samples_us.push(dt);
@@ -106,7 +106,7 @@ fn main() {
     let _ = writeln!(stderr, "measured: {} reps", samples_us.len());
 
     // ---- Stats ----
-    let workload_desc = format!("avec_blake3::hash over fixed {}-byte buffer (scale {})", workload_len, scale);
+    let workload_desc = format!("cgap_blake3::hash over fixed {}-byte buffer (scale {})", workload_len, scale);
     let mut sorted = samples_us.clone();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
 

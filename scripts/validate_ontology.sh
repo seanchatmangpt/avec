@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# scripts/validate_ontology.sh — SHACL engine-validation of the AVEC canonical ontology.
+# scripts/validate_ontology.sh — SHACL engine-validation of the CGAP canonical ontology.
 # Fail-closed: any engine absence, parse error, or non-conformance exits non-zero.
 # Flow: extract TTL -> self-validate -> anti-vacuity perturbation court.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$ROOT/docs/jira/v26.10.31/19-ontology-ttl.md"
-TMP="$(mktemp -d /tmp/avec-shacl.XXXXXX)"
+TMP="$(mktemp -d /tmp/cgap-shacl.XXXXXX)"
 trap 'rm -rf "$TMP"' EXIT
 ONTO="$TMP/ontology.ttl"
 
@@ -30,7 +30,7 @@ fi
 
 # 4. Anti-vacuity court: perturb settlementLatencyNs 14900 -> 50000 in a copy;
 #    engine MUST report non-conformant on the mutant, else the gate is VACUOUS.
-sed 's/avec:settlementLatencyNs 14900/avec:settlementLatencyNs 50000/' "$ONTO" > "$TMP/mutant.ttl"
+sed 's/cgap:settlementLatencyNs 14900/cgap:settlementLatencyNs 50000/' "$ONTO" > "$TMP/mutant.ttl"
 cmp -s "$ONTO" "$TMP/mutant.ttl" && { echo "FAIL: perturbation did not mutate the TTL"; exit 1; }
 python3 -m pyshacl -e -f human "$TMP/mutant.ttl" > "$TMP/mut.txt" 2>&1 || true
 if grep -q "^Conforms: False" "$TMP/mut.txt"; then

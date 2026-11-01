@@ -20,8 +20,8 @@
 
 use std::time::Instant;
 
-use avec_blake3::multi_chunk::compress_chunks_4way;
-use avec_blake3::{compress_scalar, hash, hash_chunk, hash_many_simd, hash_wide_simd, IV, PARENT};
+use cgap_blake3::multi_chunk::compress_chunks_4way;
+use cgap_blake3::{compress_scalar, hash, hash_chunk, hash_many_simd, hash_wide_simd, IV, PARENT};
 
 struct Timing {
     best: f64,
@@ -115,7 +115,7 @@ fn finalize_root(stack: &mut [[u32; 8]; 54], mut stack_len: usize) -> [u8; 32] {
     res
 }
 
-const ROOT_FLAGS: u32 = avec_blake3::ROOT;
+const ROOT_FLAGS: u32 = cgap_blake3::ROOT;
 
 /// Replicated hash_many_simd: leaf 4-way batches + per-chunk stack merges +
 /// root finalization. Returns digest.

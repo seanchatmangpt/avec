@@ -1,6 +1,6 @@
-# avec
+# cgap
 
-avec is a freestanding columnar substrate built on one thesis: Apache Arrow (in-memory
+cgap is a freestanding columnar substrate built on one thesis: Apache Arrow (in-memory
 buffers), Apache Parquet DataPageV2 (encoded pages), and Git Packfile v2 (content-addressed
 objects) are three physical renderings of the same byte continuum. One layout discipline —
 64-byte-aligned buffers, LSB-first validity bitmaps, branch-free inner loops at Cyclomatic
@@ -13,9 +13,9 @@ What actually ships (2026-10-31, HEAD `ead4032`, numbers re-read from receipts o
 twelve crates, 661 tests green with 0 failed and 2 ignored
 (`docs/jira/v26.10.31/63-test-census.md`), the 10-gate verification ladder at 10/10 PASS
 (`docs/jira/v26.10.31/verify-latest.md`), a real-git fsck acceptance court
-(`crates/avec-git/tests/fsck_court.rs` feeds an avec-git-written pack to the real `git`
+(`crates/cgap-git/tests/fsck_court.rs` feeds an cgap-git-written pack to the real `git`
 binary — `git fsck --full`, `verify-pack -v`, `cat-file -p` — with a corruption
-anti-vacuity control), a real-BEAM NIF membrane (`crates/avec-beam`, bridge-contract
+anti-vacuity control), a real-BEAM NIF membrane (`crates/cgap-beam`, bridge-contract
 tests, receipt `gate-beam-bridge-v2` ALIVE), and a SHACL-conformant ontology with an
 anti-vacuity perturbation court (`scripts/validate_ontology.sh`, receipt
 `gate-shacl-v3` ALIVE).
@@ -33,23 +33,23 @@ pending. Decision package: `docs/jira/v26.10.31/59-ratification-package.md`.
 
 | crate | one-liner |
 |---|---|
-| `avec-arrow` | in-memory substrate (`no_std`, zero deps): 64 B-aligned `Buf`, SWAR, C ABI |
-| `avec-parquet` | Parquet kernels (`no_std`, zero deps): RLE, FFOR, level-free, DataPageV2 |
-| `avec-git` | Git Packfile v2 writer: stored blobs, `.idx` v2, in-crate SHA-1/CRC32/DEFLATE |
-| `avec-blake3` | sovereign `no_std` BLAKE3 tree hash; 4-way NEON / 8-way AVX2 parent reduction |
-| `avec-gpu` | Apple Silicon Metal unified-memory zero-copy bridge (`MetalSharedBuffer`) |
-| `avec-ffi` | C Data Interface cdylib membrane (Gate 3 wire parity) |
-| `avec-beam` | BEAM/AtomVM NIF membrane: GC-pinned resource binaries, POSIX SHM SPSC ring |
+| `cgap-arrow` | in-memory substrate (`no_std`, zero deps): 64 B-aligned `Buf`, SWAR, C ABI |
+| `cgap-parquet` | Parquet kernels (`no_std`, zero deps): RLE, FFOR, level-free, DataPageV2 |
+| `cgap-git` | Git Packfile v2 writer: stored blobs, `.idx` v2, in-crate SHA-1/CRC32/DEFLATE |
+| `cgap-blake3` | sovereign `no_std` BLAKE3 tree hash; 4-way NEON / 8-way AVX2 parent reduction |
+| `cgap-gpu` | Apple Silicon Metal unified-memory zero-copy bridge (`MetalSharedBuffer`) |
+| `cgap-ffi` | C Data Interface cdylib membrane (Gate 3 wire parity) |
+| `cgap-beam` | BEAM/AtomVM NIF membrane: GC-pinned resource binaries, POSIX SHM SPSC ring |
 | `audit` | CC=1 branch-audit cdylib forcing kernels into the artifact |
 | `bench` | gate harness: line-rate benches, alloc interception, `ctq_report` / `gage_rr` |
-| `cli` | `avec-cli` verbs + `verify_v26` machine report + `status` dashboard bin |
+| `cli` | `cgap-cli` verbs + `verify_v26` machine report + `status` dashboard bin |
 | `integration` | cross-crate tests: C-ABI roundtrip, alignment law, admission e2e |
 | `wasm-footprint` | `no_std` cdylib link glue; footprint subject of `scripts/footprint.sh` |
 
 Scoping that keeps the claims honest: "branchless" always means compiled inner-loop
 bodies branch-free — latches, dispatch, bounds checks, and fail paths are control flow,
 itemized per symbol by `make branch-audit` (register of record:
-`docs/BRANCH_REGISTER.md`). `avec-parquet` is minimal DataPageV2 page framing, not the
+`docs/BRANCH_REGISTER.md`). `cgap-parquet` is minimal DataPageV2 page framing, not the
 full Parquet format: no row groups, no footer, no compression.
 
 ## The triad
@@ -65,7 +65,7 @@ full Parquet format: no row groups, no footer, no compression.
             |                      |                      |
             +----------------------+----------------------+
                  one BLAKE3 content receipt binds all three
-              (avec-blake3 over the content-addressed graph)
+              (cgap-blake3 over the content-addressed graph)
 ```
 
 ## Quickstart
@@ -90,7 +90,7 @@ integration commit — the whole milestone is one uncommitted diff
 (`docs/jira/v26.10.31/65-coordinator-handoff.md`). Consolidated decision register:
 `docs/OPERATOR_DECISIONS.md` (pending lane 16 — not yet on disk).
 Observed drift: the generated version constant still reads 26.10.29
-(`ontology/avec.ttl`, `crates/avec-arrow/src/generated_version.rs`) while the milestone
+(`ontology/cgap.ttl`, `crates/cgap-arrow/src/generated_version.rs`) while the milestone
 is named v26.10.31.
 
 ## License
@@ -99,7 +99,9 @@ Governed by the P28 Sovereign Invariant License (P28-SIL v2.1.0,
 `urn:avec:license:p28-sil:v2.1.0-sovereign`): $50M universal safe harbor,
 covenant not to sue upon commercial regularization, ASC 450 / SOX
 302/404 evidentiary enforcement. No SPDX expression — the instrument is
-identified by URN. See [LICENSE.md](LICENSE.md) and
+identified by URN. Note: the license URN intentionally retains the
+`avec` namespace (`urn:avec:license:...`) — the 2026-10-31 avec→cgap rename
+does not change the instrument's identifier. See [LICENSE.md](LICENSE.md) and
 [LICENSE-P28-SIL.md](LICENSE-P28-SIL.md).
 
 ## Documentation map

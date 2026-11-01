@@ -29,9 +29,9 @@
 //! packed-domain scans over the same page re-read and re-decode bits each
 //! time instead.
 
-use avec_arrow::bitmap::set_bit;
-use avec_parquet::packed_filter::{filter_eq_packed, packed_rows};
-use avec_parquet::packing::{pack_bits, unpack_bits_tight};
+use cgap_arrow::bitmap::set_bit;
+use cgap_parquet::packed_filter::{filter_eq_packed, packed_rows};
+use cgap_parquet::packing::{pack_bits, unpack_bits_tight};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::hint::black_box;
 use std::sync::atomic::{AtomicUsize, Ordering};

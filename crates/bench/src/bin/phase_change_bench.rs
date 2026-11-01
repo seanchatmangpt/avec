@@ -1,9 +1,9 @@
 //! Dedicated release benchmark for the v26.10.29 Civilizational Phase Changes.
 
-use avec_arrow::fingerprint::Fingerprint;
-use avec_arrow::mmu_arena::MmuBuf;
-use avec_arrow::perfect_hash::PerfectMap;
-use avec_parquet::bitslice::{pack_vertical, sum_masked_vertical_128};
+use cgap_arrow::fingerprint::Fingerprint;
+use cgap_arrow::mmu_arena::MmuBuf;
+use cgap_arrow::perfect_hash::PerfectMap;
+use cgap_parquet::bitslice::{pack_vertical, sum_masked_vertical_128};
 
 use std::hint::black_box;
 use std::time::Instant;
@@ -35,7 +35,7 @@ fn time_min_fixed<F: FnMut() -> u64>(iters: usize, mut f: F) -> f64 {
 }
 
 fn main() {
-    println!("# avec v26.10.29 Civilizational Phase-Change Benchmark Suite");
+    println!("# cgap v26.10.29 Civilizational Phase-Change Benchmark Suite");
     println!("# Min-of-{ROUNDS} rounds, MIN is the receipt. Invariant: 0 post-init allocations\n");
 
     // 1. Compressed-Domain Algebraic Execution
@@ -134,10 +134,10 @@ fn main() {
     println!();
 
     // 5. Sovereign #![no_std] BLAKE3 Merkle Tree & SIMD 4-Way Parent Reduction
-    println!("=== 5. Sovereign #![no_std] BLAKE3 (avec-blake3) ===");
+    println!("=== 5. Sovereign #![no_std] BLAKE3 (cgap-blake3) ===");
     let payload: Vec<u8> = (0..(64 * 1024)).map(|i| (i % 251) as u8).collect();
     let secs_b3 = time_min_fixed(200, || {
-        let digest = avec_blake3::hash_wide_simd(&payload);
+        let digest = cgap_blake3::hash_wide_simd(&payload);
         digest[0] as u64
     });
     let b3_gib = payload.len() as f64 / secs_b3 / GIB;
@@ -148,13 +148,13 @@ fn main() {
 
     let mut base_cvs = [[0u32; 8]; 64];
     for (idx, cv) in base_cvs.iter_mut().enumerate() {
-        *cv = avec_blake3::IV;
+        *cv = cgap_blake3::IV;
         cv[0] ^= idx as u32;
     }
     let secs_parent = time_min_fixed(50_000, || {
         let mut cvs = base_cvs;
         let mut count = 64usize;
-        avec_blake3::reduce_level_simd(&mut cvs, &mut count);
+        cgap_blake3::reduce_level_simd(&mut cvs, &mut count);
         cvs[0][0] as u64
     });
     let parents_per_call = 32.0; // 64 child CVs -> 32 parent compressions (2048 bytes)

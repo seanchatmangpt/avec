@@ -25,7 +25,7 @@
 //!
 //! v26.10.29.
 
-use avec_parquet::bitslice::{pack_vertical, scan_range_vertical, scan_range_vertical_counted};
+use cgap_parquet::bitslice::{pack_vertical, scan_range_vertical, scan_range_vertical_counted};
 use std::hint::black_box;
 use std::time::Instant;
 

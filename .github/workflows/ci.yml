@@ -1,5 +1,5 @@
 # =============================================================================
-# avec CI — local-first mirror of the developer gate.
+# cgap CI — local-first mirror of the developer gate.
 #
 # PHILOSOPHY: CI MIRRORS the local gate; it never replaces it. The canonical
 # gate is `scripts/verify_v26.10.31.sh` run on the developer's machine — a
@@ -10,7 +10,7 @@
 # Jobs:
 #   verify     — runs scripts/verify_v26.10.31.sh verbatim (the local gate,
 #                unmodified). BEAM (Erlang/OTP) is installed best-effort with
-#                continue-on-error until the avec-beam gate is proven on a CI
+#                continue-on-error until the cgap-beam gate is proven on a CI
 #                runner; the gap is annotated loudly either way.
 #   courts     — adversarial courts: ontology SHACL validation (+ anti-vacuity
 #                mutant), branchless-kernel ABI selftest, CFG-homology mutant
@@ -51,9 +51,9 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      # BEAM gate: avec-beam spawns a real BEAM VM, so the gate needs
+      # BEAM gate: cgap-beam spawns a real BEAM VM, so the gate needs
       # erlang/otp. OTP setup is best-effort (continue-on-error) until the
-      # gate is proven on a CI runner. A missing `erl` makes test-avec-beam
+      # gate is proven on a CI runner. A missing `erl` makes test-cgap-beam
       # fail or timeout-skip LOUDLY inside the verify script (it is
       # timeout-guarded at 600s there) — never silently.
       - name: Install Erlang/OTP (best-effort — BEAM gate unproven on CI)
@@ -70,9 +70,9 @@ jobs:
         if: always()
         run: |
           if command -v erl >/dev/null 2>&1; then
-            echo "::warning::BEAM gate: OTP installed best-effort. test-avec-beam is UNPROVEN on CI runners until a green run witnesses it — the local gate stays canonical."
+            echo "::warning::BEAM gate: OTP installed best-effort. test-cgap-beam is UNPROVEN on CI runners until a green run witnesses it — the local gate stays canonical."
           else
-            echo "::warning::BEAM gate: OTP NOT available — test-avec-beam inside verify_v26.10.31.sh is expected to fail/skip. Disclosed gap; qualify OTP on CI before treating CI as authoritative for avec-beam."
+            echo "::warning::BEAM gate: OTP NOT available — test-cgap-beam inside verify_v26.10.31.sh is expected to fail/skip. Disclosed gap; qualify OTP on CI before treating CI as authoritative for cgap-beam."
           fi
 
       # Known transport note (pre-existing, owner: scripts lane I20): the
@@ -89,7 +89,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust (stable) — courts build avec crates and fixtures
+      - name: Install Rust (stable) — courts build cgap crates and fixtures
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo

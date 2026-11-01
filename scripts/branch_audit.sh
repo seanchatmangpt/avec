@@ -7,11 +7,11 @@
 set -eu
 cd "$(dirname "$0")/.."
 
-cargo build --release -p avec-arrow -p avec-parquet >/dev/null 2>&1
+cargo build --release -p cgap-arrow -p cgap-parquet >/dev/null 2>&1
 
-OBJ=target/release/libavec_arrow.rlib
-OBJP=target/release/libavec_parquet.rlib
-OBJD=target/release/libavec_ffi.dylib
+OBJ=target/release/libcgap_arrow.rlib
+OBJP=target/release/libcgap_parquet.rlib
+OBJD=target/release/libcgap_ffi.dylib
 for f in "$OBJ" "$OBJP" "$OBJD"; do
     [ -f "$f" ] || { echo "missing $f (build first)"; exit 1; }
 done

@@ -15,23 +15,23 @@
 //! value multiset as sorted, different order: the histogram control).
 //!
 //! Kernels under measurement (house contract list):
-//! - [`avec_arrow::bitmap::mask_words`] — u64 SWAR AND (value-independent by
+//! - [`cgap_arrow::bitmap::mask_words`] — u64 SWAR AND (value-independent by
 //!   construction; the instrument should show ~1.0x spread),
-//! - [`avec_parquet::rle::decode_into`] — full-buffer hybrid decode,
-//! - [`avec_parquet::encode_fast::rle_encode_fast`] — run-DETECTION kernel:
+//! - [`cgap_parquet::rle::decode_into`] — full-buffer hybrid decode,
+//! - [`cgap_parquet::encode_fast::rle_encode_fast`] — run-DETECTION kernel:
 //!   data-dependent by design (the >= 3-run scan collapses sorted/constant
 //!   shapes into O(distinct runs) records and leaves random shapes as
 //!   literal groups), so it is EXPECTED to spread — this instrument reports
 //!   the measured magnitude, it does not judge it,
-//! - [`avec_parquet::rle::rle_decode`] — full-buffer decode wrapper
+//! - [`cgap_parquet::rle::rle_decode`] — full-buffer decode wrapper
 //!   (delegate of `decode_into`; the page each class produces IS the
 //!   workload),
-//! - [`avec_arrow::runend::RunEndEncoded::get`] — binary-search resolve,
+//! - [`cgap_arrow::runend::RunEndEncoded::get`] — binary-search resolve,
 //!   swept over all logical rows of a 1,048,576-row / 100-run array (the
 //!   accessors-bench REE shape); the class applies to the 100 per-run
 //!   values, run ends stay fixed so the search path is identical for every
 //!   class,
-//! - [`avec_parquet::dictionary::decode_page`] — decode + in-place gather
+//! - [`cgap_parquet::dictionary::decode_page`] — decode + in-place gather
 //!   through a 256-entry dictionary.
 //!
 //! Method laws (house): deterministic splitmix64 seeds keyed
@@ -44,7 +44,7 @@
 //! min-of-3 within each instance kills scheduling noise (concurrent-lane
 //! discipline).
 //!
-//! REE note: the public [`avec_arrow::runend::RunEndEncodedBuilder`]
+//! REE note: the public [`cgap_arrow::runend::RunEndEncodedBuilder`]
 //! collapses equal adjacent runs (Arrow shape law), so a 100-run array
 //! cannot carry one identical value in every run — ANY lawful 100-run value
 //! sequence changes value at every one of its 99 adjacent boundaries. The
@@ -55,11 +55,11 @@
 //! asserted) so a shape drift can never masquerade as a timing effect.
 //! Every other class is realized directly.
 
-use avec_arrow::bitmap::mask_words;
-use avec_arrow::runend::RunEndEncodedBuilder;
-use avec_parquet::dictionary::decode_page;
-use avec_parquet::encode_fast::rle_encode_fast;
-use avec_parquet::rle::{decode_into, rle_decode, rle_encode};
+use cgap_arrow::bitmap::mask_words;
+use cgap_arrow::runend::RunEndEncodedBuilder;
+use cgap_parquet::dictionary::decode_page;
+use cgap_parquet::encode_fast::rle_encode_fast;
+use cgap_parquet::rle::{decode_into, rle_decode, rle_encode};
 use std::hint::black_box;
 use std::time::Instant;
 
@@ -642,7 +642,7 @@ fn bench_dict_decode_page() {
 
 fn main() {
     println!(
-        "avec const-time data-independence instrument — bench v26.10.29, lane PCL8"
+        "cgap const-time data-independence instrument — bench v26.10.29, lane PCL8"
     );
     println!(
         "rows={ROWS} (identical for every kernel x class x instance), \

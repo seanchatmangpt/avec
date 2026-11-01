@@ -2,17 +2,17 @@
 name = "sovereign-e2e"
 version = "26.10.29"
 edition = "2021"
-description = "Minimal runnable demo of the avec thesis: one dataset, three planes, one receipt."
+description = "Minimal runnable demo of the cgap thesis: one dataset, three planes, one receipt."
 license = "Apache-2.0"
-repository = "https://github.com/seanchatmangpt/avec"
+repository = "https://github.com/seanchatmangpt/cgap"
 authors = ["Sean Chatman <info@chatmangpt.com>"]
 publish = false
 
 [dependencies]
-avec-arrow = { path = "../../crates/avec-arrow" }
-avec-blake3 = { path = "../../crates/avec-blake3" }
-avec-parquet = { path = "../../crates/avec-parquet", features = ["std"] }
-avec-git = { path = "../../crates/avec-git" }
+cgap-arrow = { path = "../../crates/cgap-arrow" }
+cgap-blake3 = { path = "../../crates/cgap-blake3" }
+cgap-parquet = { path = "../../crates/cgap-parquet", features = ["std"] }
+cgap-git = { path = "../../crates/cgap-git" }
 
 # Standalone manifest, deliberately NOT a member of the root workspace (the
 # coordinator owns the root Cargo.toml; same pattern as crates/wasm-footprint).

@@ -1,10 +1,10 @@
 #!/usr/bin/env escript
-%% avec-beam scheduling-regime crossover probe (lane BEAM-L4).
+%% cgap-beam scheduling-regime crossover probe (lane BEAM-L4).
 %%
-%% Question: does the dirty-CPU flag on `avec_new/2` earn its keep on call
+%% Question: does the dirty-CPU flag on `cgap_new/2` earn its keep on call
 %% latency alone, or is it a wash against the normal scheduler? The membrane
-%% exposes both regimes over the identical fn body: `avec_new/2` (dirty, flags
-%% 0x01) and `avec_new_fast/2` (normal, flags 0). Same builder loop, same
+%% exposes both regimes over the identical fn body: `cgap_new/2` (dirty, flags
+%% 0x01) and `cgap_new_fast/2` (normal, flags 0). Same builder loop, same
 %% 64-byte-aligned allocation, same registry insert — the only controlled
 %% variable is which scheduler thread runs the call.
 %%
@@ -31,28 +31,28 @@
 %% Exit codes: 0 completed run (any verdict); 1 version-law mismatch or
 %% sanity failure; 2 NIF load failure; 3 release dylib missing.
 
--module(avec_beam).
--export([main/1, avec_new/2, avec_new_fast/2, avec_len/1, avec_get/2,
-         avec_free/1, avec_version/0, avec_new_i64/2, avec_get_i64/2,
-         avec_stats/1, avec_envelope_new/1, avec_envelope_len/1,
-         avec_batch_binary/1]).
+-module(cgap_beam).
+-export([main/1, cgap_new/2, cgap_new_fast/2, cgap_len/1, cgap_get/2,
+         cgap_free/1, cgap_version/0, cgap_new_i64/2, cgap_get_i64/2,
+         cgap_stats/1, cgap_envelope_new/1, cgap_envelope_len/1,
+         cgap_batch_binary/1]).
 -on_load(init/0).
 
 -define(VERSION, <<"26.10.29">>).
--define(RELEASE_DIR, "/Users/sac/avec/target/release").
+-define(RELEASE_DIR, "/Users/sac/cgap/target/release").
 -define(NS, [1000, 4000, 16384, 65536, 262144]).
 -define(REPS, 20).
 -define(WARMUP, 3).
 
 init() ->
-    Dylib = ?RELEASE_DIR ++ "/libavec_beam.dylib",
-    NifBase = ?RELEASE_DIR ++ "/libavec_beam",
+    Dylib = ?RELEASE_DIR ++ "/libcgap_beam.dylib",
+    NifBase = ?RELEASE_DIR ++ "/libcgap_beam",
     So = NifBase ++ ".so",
     case file:read_link_info(Dylib) of
         {ok, _} ->
             ok;
         _ ->
-            io:format("RELEASE DYLIB MISSING: ~s (build it first: cargo build --release -p avec-beam)~n",
+            io:format("RELEASE DYLIB MISSING: ~s (build it first: cargo build --release -p cgap-beam)~n",
                       [Dylib]),
             erlang:halt(3)
     end,
@@ -96,31 +96,31 @@ print_env() ->
 %% --- contract sanity: the two regimes are behaviorally identical --------------
 
 sanity() ->
-    case avec_version() of
+    case cgap_version() of
         ?VERSION ->
             ok;
         Other ->
-            io:format("VERSION LAW VIOLATION: avec_version() = ~p, want ~ts~n",
+            io:format("VERSION LAW VIOLATION: cgap_version() = ~p, want ~ts~n",
                       [Other, ?VERSION]),
             erlang:halt(1)
     end,
     %% Fast variant obeys the ramp contract...
-    IdF = avec_new_fast(1000, 5),
+    IdF = cgap_new_fast(1000, 5),
     true = is_integer(IdF),
-    1000 = avec_len(IdF),
-    5 = avec_get(IdF, 0),
-    1004 = avec_get(IdF, 999),
+    1000 = cgap_len(IdF),
+    5 = cgap_get(IdF, 0),
+    1004 = cgap_get(IdF, 999),
     %% ...the dirty variant still does (unchanged surface)...
-    IdD = avec_new(1000, 5),
+    IdD = cgap_new(1000, 5),
     true = is_integer(IdD),
-    1000 = avec_len(IdD),
-    5 = avec_get(IdD, 0),
-    1004 = avec_get(IdD, 999),
+    1000 = cgap_len(IdD),
+    5 = cgap_get(IdD, 0),
+    1004 = cgap_get(IdD, 999),
     %% ...ids are independent, and both free cleanly.
     true = IdF =/= IdD,
-    ok = avec_free(IdF),
-    ok = avec_free(IdD),
-    error = avec_free(IdF),
+    ok = cgap_free(IdF),
+    ok = cgap_free(IdD),
+    error = cgap_free(IdF),
     io:format("ok   sanity: fast ramp == dirty ramp == ramp contract; ids independent; version law 26.10.29 verified~n").
 
 %% --- crossover table -----------------------------------------------------------
@@ -139,8 +139,8 @@ table() ->
     verdict(Rows).
 
 row(N) ->
-    D = fun avec_new/2,
-    F = fun avec_new_fast/2,
+    D = fun cgap_new/2,
+    F = fun cgap_new_fast/2,
     warmup(D, ?WARMUP, N),
     warmup(F, ?WARMUP, N),
     Pairs = [begin
@@ -157,14 +157,14 @@ timed_us(F, N) ->
     T0 = erlang:monotonic_time(nanosecond),
     Id = F(N, 0),
     T1 = erlang:monotonic_time(nanosecond),
-    ok = avec_free(Id),
+    ok = cgap_free(Id),
     (T1 - T0) / 1000.0.
 
 warmup(_F, 0, _N) ->
     ok;
 warmup(F, K, N) ->
     Id = F(N, 0),
-    ok = avec_free(Id),
+    ok = cgap_free(Id),
     warmup(F, K - 1, N).
 
 %% --- verdict ---------------------------------------------------------------------
@@ -209,31 +209,31 @@ below_note(Rows, Nc) ->
 
 %% --- NIF stubs (replaced at load_nif time) ----------------------------------------
 
-avec_new(_N, _Fill) ->
+cgap_new(_N, _Fill) ->
     erlang:nif_error(nif_library_not_loaded).
-avec_new_fast(_N, _Fill) ->
+cgap_new_fast(_N, _Fill) ->
     erlang:nif_error(nif_library_not_loaded).
-avec_len(_Id) ->
+cgap_len(_Id) ->
     erlang:nif_error(nif_library_not_loaded).
-avec_get(_Id, _I) ->
+cgap_get(_Id, _I) ->
     erlang:nif_error(nif_library_not_loaded).
-avec_free(_Id) ->
+cgap_free(_Id) ->
     erlang:nif_error(nif_library_not_loaded).
-avec_version() ->
+cgap_version() ->
     erlang:nif_error(nif_library_not_loaded).
 
 %% load_nif law (witnessed twice now: BEAM-L1 and this lane): EVERY NIF the
 %% library exports needs an exported stub in the loading module, called or
 %% not. Remaining exports of the 11-row table:
-avec_new_i64(_N, _Fill) ->
+cgap_new_i64(_N, _Fill) ->
     erlang:nif_error(nif_library_not_loaded).
-avec_get_i64(_Id, _I) ->
+cgap_get_i64(_Id, _I) ->
     erlang:nif_error(nif_library_not_loaded).
-avec_stats(_Id) ->
+cgap_stats(_Id) ->
     erlang:nif_error(nif_library_not_loaded).
-avec_envelope_new(_Id) ->
+cgap_envelope_new(_Id) ->
     erlang:nif_error(nif_library_not_loaded).
-avec_envelope_len(_Env) ->
+cgap_envelope_len(_Env) ->
     erlang:nif_error(nif_library_not_loaded).
-avec_batch_binary(_Id) ->
+cgap_batch_binary(_Id) ->
     erlang:nif_error(nif_library_not_loaded).

@@ -4,7 +4,7 @@
 //! scoped guard, [`with_alloc_tracking`], that reports the allocations a
 //! closure performed. Intended consumers: tests and benches asserting the
 //! zero-allocation structural invariant (decode scan, admission path).
-//! avec-blake3's zero-alloc test lane (I10) writes its own; this crate is the
+//! cgap-blake3's zero-alloc test lane (I10) writes its own; this crate is the
 //! shared primitive going forward.
 //!
 //! The wrapper is installed as the process `#[global_allocator]` in this

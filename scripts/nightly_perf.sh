@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# nightly_perf.sh — advisory nightly perf-log runner (avec v26.10.31).
+# nightly_perf.sh — advisory nightly perf-log runner (cgap v26.10.31).
 #
 # Lane provenance: wave-10 lane 14 (DX/QoL). Advisory only — never gate-wired,
 # never fails on noise:
@@ -14,7 +14,7 @@
 #   2. ctq_report         : JSON captured verbatim
 #   3. blake3_throughput  : GiB/s (report-only; no --gate)
 #   4. parquet_throughput : PAYLOAD-SUM + ACCESSOR-SCAN
-#   5. perf_baseline      : cargo test -p avec-git --release --test perf_baseline \
+#   5. perf_baseline      : cargo test -p cgap-git --release --test perf_baseline \
 #                           -- --ignored --nocapture  (pack MiB/s + lookups/s)
 #   6. log                : docs/jira/v26.10.31/perf/perf-YYYYMMDD-HHMM.md
 #   7. concurrent-lane conditions recorded (uptime start/end + observed rustc/cargo count)
@@ -49,7 +49,7 @@ while [ -e "$OUT" ]; do
 	OUT="$LOG_DIR/perf-$TS-$_n.md"
 	_n=$((_n + 1))
 done
-SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/avec-nightly-perf.XXXXXX")"
+SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/cgap-nightly-perf.XXXXXX")"
 trap 'rm -rf "$SCRATCH"' EXIT
 
 BIN_DIR="$ROOT/target/release"
@@ -164,7 +164,7 @@ PARQUET_OUT="$("$BIN_DIR/parquet_throughput" 2>"$SCRATCH/parquet.err")"
 PARQUET_RC=$?
 
 t2=$(date +%s)
-PERF_OUT="$(cd "$ROOT" && cargo test -p avec-git --release --test perf_baseline -- --ignored --nocapture 2>"$SCRATCH/perf.err")"
+PERF_OUT="$(cd "$ROOT" && cargo test -p cgap-git --release --test perf_baseline -- --ignored --nocapture 2>"$SCRATCH/perf.err")"
 PERF_RC=$?
 t3=$(date +%s)
 
@@ -335,11 +335,11 @@ fi
 	echo
 	echo "### perf_baseline"
 	echo
-	echo "Command: \`cargo test -p avec-git --release --test perf_baseline -- --ignored --nocapture\`"
+	echo "Command: \`cargo test -p cgap-git --release --test perf_baseline -- --ignored --nocapture\`"
 	echo
 	echo '```text'
 	if [ -n "$PERF_OUT" ]; then
-		printf '%s\n' "$PERF_OUT" | sed -n '/=== avec-git perf baseline/,$p'
+		printf '%s\n' "$PERF_OUT" | sed -n '/=== cgap-git perf baseline/,$p'
 	else
 		echo "(empty stdout; rc=$PERF_RC; stderr tail: $(tail -c 300 "$SCRATCH/perf.err" 2>/dev/null))"
 	fi
